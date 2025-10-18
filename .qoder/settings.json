@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "ask": [
+      "Read(!/mnt/d/javacode/k-File/**)",
+      "Edit(!/mnt/d/javacode/k-File/**)"
+    ],
+    "allow": [
+      "Read(/mnt/d/javacode/k-File/**)",
+      "Edit(/mnt/d/javacode/k-File/**)"
+    ]
+  },
+  "memoryImport": {},
+  "monitoring": {}
+}

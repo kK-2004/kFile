@@ -1,0 +1,19 @@
+oss:
+  type: ali
+  prefix: k-File
+  endpoint: oss-cn-beijing.aliyuncs.com
+  ak: ${OSS_AK}
+  sk: ${OSS_SK}
+  bucket: oss-kk
+  host: https://oss-kk.oss-cn-beijing.aliyuncs.com/
+
+spring:
+  profiles:
+    active: dev
+
+geoip:
+  enabled: ${GEOIP_ENABLED:false}
+  mmdbPath: ${GEOIP_MMDB_PATH:}
+
+env:
+  cors: ${CORS_ORIGIN:http://localhost:5173}
