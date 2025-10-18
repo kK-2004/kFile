@@ -16,9 +16,9 @@ export const useAuthStore = defineStore('auth', {
       } finally { this.loaded = true }
     },
     async login(username, password) {
-      const { data } = await api.adminLogin(username, password)
-      this.user = data
-      this.loaded = true
+      // Perform login, then fetch full profile to ensure role is present
+      await api.adminLogin(username, password)
+      await this.loadMe()
     },
     async logout() {
       // backend logout URL configured in SecurityConfig; we can hit it via fetch

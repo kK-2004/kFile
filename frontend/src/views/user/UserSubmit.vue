@@ -148,5 +148,90 @@ const submit = async () => {
 </script>
 
 <style scoped>
-.card-header{ display:flex; align-items:center; justify-content:space-between }
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background-color: var(--kf-header-bg);
+  border-bottom: 1px solid var(--kf-border-color);
+  border-radius: 8px 8px 0 0;
+}
+
+.card-header span {
+  color: var(--kf-text-primary);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+/* 表单样式优化 */
+:deep(.el-form) {
+  margin-top: 20px;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 20px;
+}
+
+:deep(.el-form-item__label) {
+  color: var(--kf-text-primary);
+  font-weight: 500;
+}
+
+/* 警告框样式 */
+:deep(.el-alert) {
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+/* 按钮样式统一 */
+:deep(.el-button) {
+  border-radius: 4px;
+}
+
+:deep(.el-button--primary) {
+  background-color: var(--kf-primary);
+  border-color: var(--kf-primary);
+}
+
+:deep(.el-button--primary:hover) {
+  background-color: var(--kf-primary-hover);
+  border-color: var(--kf-primary-hover);
+}
+
+:deep(.el-button--primary:disabled) {
+  background-color: var(--kf-disabled-bg);
+  border-color: var(--kf-disabled-bg);
+  color: var(--kf-disabled-text);
+}
+
+/* 上传组件样式 */
+:deep(.el-upload) {
+  width: 100%;
+}
+
+:deep(.el-upload-dragger) {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px dashed var(--kf-border-color);
+}
+
+:deep(.el-upload-dragger:hover) {
+  border-color: var(--kf-primary);
+}
+
+:deep(.el-upload__tip) {
+  color: var(--kf-text-secondary);
+  font-size: 12px;
+}
+
+/* 选择器样式 */
+:deep(.el-select) {
+  width: 100%;
+}
+
+/* 输入框样式 */
+:deep(.el-input__wrapper) {
+  border-radius: 4px;
+}
 </style>

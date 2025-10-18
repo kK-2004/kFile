@@ -74,5 +74,80 @@ const statusOf = (row) => {
 </script>
 
 <style scoped>
-.card-header{ display:flex; align-items:center; justify-content:space-between }
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background-color: var(--kf-header-bg);
+  border-bottom: 1px solid var(--kf-border-color);
+  border-radius: 8px 8px 0 0;
+}
+
+.card-header span {
+  color: var(--kf-text-primary);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+/* 表格样式优化 */
+:deep(.el-table) {
+  border: 1px solid var(--kf-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-table th) {
+  background-color: var(--kf-header-bg);
+  color: var(--kf-text-primary);
+  font-weight: 500;
+}
+
+:deep(.el-table td) {
+  padding: 12px 0;
+}
+
+/* 按钮样式统一 */
+:deep(.el-button) {
+  border-radius: 4px;
+}
+
+:deep(.el-button--primary) {
+  background-color: var(--kf-primary);
+  border-color: var(--kf-primary);
+}
+
+:deep(.el-button--primary:hover) {
+  background-color: var(--kf-primary-hover);
+  border-color: var(--kf-primary-hover);
+}
+
+:deep(.el-button--primary:disabled) {
+  background-color: var(--kf-disabled-bg);
+  border-color: var(--kf-disabled-bg);
+  color: var(--kf-disabled-text);
+}
+
+/* 标签样式优化 */
+:deep(.el-tag) {
+  border-radius: 4px;
+}
+
+:deep(.el-tag--success) {
+  background-color: var(--kf-success-light);
+  border-color: var(--kf-success-light);
+  color: var(--kf-success);
+}
+
+:deep(.el-tag--warning) {
+  background-color: var(--kf-warning-light);
+  border-color: var(--kf-warning-light);
+  color: var(--kf-warning);
+}
+
+:deep(.el-tag--info) {
+  background-color: var(--kf-info-light);
+  border-color: var(--kf-info-light);
+  color: var(--kf-info);
+}
 </style>

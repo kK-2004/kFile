@@ -148,7 +148,130 @@ const logout = async () => { await auth.logout(); location.href = '/admin/login'
 </script>
 
 <style scoped>
-.card-header{ display:flex; align-items:center; justify-content:space-between }
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background-color: var(--kf-header-bg);
+  border-bottom: 1px solid var(--kf-border-color);
+  border-radius: 8px 8px 0 0;
+}
+
+.card-header span {
+  color: var(--kf-text-primary);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+/* 表格样式优化 */
+:deep(.el-table) {
+  border: 1px solid var(--kf-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-table th) {
+  background-color: var(--kf-header-bg);
+  color: var(--kf-text-primary);
+  font-weight: 500;
+}
+
+:deep(.el-table td) {
+  padding: 8px 0;
+}
+
+/* 按钮样式统一 */
+:deep(.el-button) {
+  border-radius: 4px;
+}
+
+:deep(.el-button--primary) {
+  background-color: var(--kf-primary);
+  border-color: var(--kf-primary);
+}
+
+:deep(.el-button--primary:hover) {
+  background-color: var(--kf-primary-hover);
+  border-color: var(--kf-primary-hover);
+}
+
+:deep(.el-button--danger) {
+  background-color: var(--kf-danger);
+  border-color: var(--kf-danger);
+}
+
+:deep(.el-button--danger:hover) {
+  background-color: var(--kf-danger-hover);
+  border-color: var(--kf-danger-hover);
+}
+
+:deep(.el-button--warning) {
+  background-color: var(--kf-warning);
+  border-color: var(--kf-warning);
+}
+
+:deep(.el-button--warning:hover) {
+  background-color: var(--kf-warning-hover);
+  border-color: var(--kf-warning-hover);
+}
+
+:deep(.el-button--small) {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* 标签样式优化 */
+:deep(.el-tag) {
+  border-radius: 4px;
+}
+
+:deep(.el-tag--success) {
+  background-color: var(--kf-success-light);
+  border-color: var(--kf-success-light);
+  color: var(--kf-success);
+}
+
+:deep(.el-tag--info) {
+  background-color: var(--kf-info-light);
+  border-color: var(--kf-info-light);
+  color: var(--kf-info);
+}
+
+/* 抽屉样式 */
+:deep(.el-drawer) {
+  border-radius: 8px 0 0 8px;
+}
+
+:deep(.el-drawer__header) {
+  background-color: var(--kf-header-bg);
+  border-bottom: 1px solid var(--kf-border-color);
+  padding: 15px 20px;
+  margin-bottom: 0;
+}
+
+:deep(.el-drawer__title) {
+  color: var(--kf-text-primary);
+  font-weight: bold;
+  font-size: 16px;
+}
+
+:deep(.el-drawer__body) {
+  padding: 20px;
+}
+
+/* 表单项样式 */
+:deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+:deep(.el-form-item__label) {
+  color: var(--kf-text-primary);
+  font-weight: 500;
+}
+
+/* 选择器样式 */
+:deep(.el-select) {
+  width: 100%;
+}
 </style>
-const auth = useAuthStore()
-onMounted(()=>{ if (!auth.loaded) auth.loadMe() })
