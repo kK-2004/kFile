@@ -2,6 +2,7 @@ oss:
   type: ali
   prefix: k-File
   endpoint: oss-cn-beijing.aliyuncs.com
+  internalEndpoint: oss-cn-beijing-internal.aliyuncs.com
   ak: ${OSS_AK}
   sk: ${OSS_SK}
   bucket: oss-kk

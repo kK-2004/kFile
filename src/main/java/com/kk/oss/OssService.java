@@ -15,4 +15,6 @@ public interface OssService {
 
     java.io.InputStream openByUrl(String url);
     String extractObjectKey(String url);
+
+    default java.io.InputStream openByKey(String key) { throw new UnsupportedOperationException(); }
 }

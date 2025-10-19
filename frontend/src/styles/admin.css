@@ -8,8 +8,11 @@
   --kf-primary-hover: #accbea; /* Element Plus primary hover */
   /* 新增与App.vue一致的颜色变量 */
   --kf-danger: #ef4444;
+  --kf-danger-hover: #f87171;
   --kf-warning: #f59e0b;
+  --kf-warning-hover: #fbbf24;
   --kf-success: #10b981;
+  --kf-success-hover: #34d399;
   --kf-hover-bg: #fef2f2;
   --kf-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
@@ -36,7 +39,11 @@
   color: var(--kf-text);
   font-weight: 500;
 }
-.el-header .el-button.is-link:hover{ color: var(--kf-primary); }
+.el-header 
+.el-button.is-link:hover{ 
+  color: var(--kf-primary); 
+  background: #f3f4f6;
+}
 
 /* Cards */
 .el-card{
@@ -153,8 +160,44 @@ html, body, #app, .el-container{
   transition: all 0.3s ease;
 }
 
-.el-button:hover{
-  transform: translateY(-1px);
+.el-button:hover{ transform: translateY(-1px); }
+
+/* 统一默认按钮 hover，避免与白色背景混淆 */
+.el-button--default:hover,
+.el-button--default:focus{
+  background-color: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+
+/* plain / text / link 样式按钮的 hover 反馈 */
+.el-button.is-plain:hover,
+.el-button.is-plain:focus{
+  background-color: #f8fafc;
+  border-color: #d1d5db;
+  color: #374151;
+}
+.el-button.is-text:hover,
+.el-button.is-link:hover{
+  background-color: #f3f4f6;
+}
+
+/* 各语义按钮 hover 颜色（全局兜底） */
+.el-button--primary:hover{ 
+  background-color: var(--kf-primary-hover); 
+  border-color: var(--kf-primary-hover);
+}
+.el-button--success:hover{ 
+  background-color: var(--kf-success-hover); 
+  border-color: var(--kf-success-hover);
+}
+.el-button--warning:hover{ 
+  background-color: var(--kf-warning-hover); 
+  border-color: var(--kf-warning-hover);
+}
+.el-button--danger:hover{ 
+  background-color: var(--kf-danger-hover); 
+  border-color: var(--kf-danger-hover);
 }
 
 /* 新增与App.vue一致的操作按钮样式 */

@@ -269,7 +269,7 @@ public class SubmissionService {
                     for (String url : urls) {
                         String key = ossService.extractObjectKey(url);
                         String entryName = trimPrefixForZip(key);
-                        try (java.io.InputStream in = ossService.openByUrl(url)) {
+                        try (java.io.InputStream in = ossService.openByKey(key)) {
                             zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
                             in.transferTo(zos);
                             zos.closeEntry();

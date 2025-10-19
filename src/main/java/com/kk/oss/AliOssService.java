@@ -29,21 +29,40 @@ import java.util.List;
 public class AliOssService implements OssService {
 
     private final OssProperties properties;
-    private OSS ossClient;
+    private OSS ossClientPublic;
+    private OSS ossClientInternal;
 
     @PostConstruct
     public void init() {
         if (!"ali".equalsIgnoreCase(properties.getType())) {
             log.warn("OSS type is not 'ali', AliOssService will still initialize with provided config.");
         }
-        this.ossClient = new OSSClientBuilder().build(
-                properties.getEndpoint(), properties.getAk(), properties.getSk());
+        com.aliyun.oss.ClientBuilderConfiguration conf = new com.aliyun.oss.ClientBuilderConfiguration();
+        conf.setProtocol(com.aliyun.oss.common.comm.Protocol.HTTPS);
+        conf.setConnectionTimeout(8000);
+        conf.setSocketTimeout(15000);
+        conf.setMaxConnections(128);
+        conf.setRequestTimeout(20000);
+        // 公网客户端（用于上传、删除）
+        String publicEp = properties.getEndpoint();
+        this.ossClientPublic = new OSSClientBuilder().build(publicEp, properties.getAk(), properties.getSk(), conf);
+        // 内网客户端（仅读取时使用，可选）
+        String internalEp = properties.getInternalEndpoint();
+        if (org.springframework.util.StringUtils.hasText(internalEp)) {
+            this.ossClientInternal = new OSSClientBuilder().build(internalEp, properties.getAk(), properties.getSk(), conf);
+        } else {
+            this.ossClientInternal = null;
+        }
+        log.info("AliOssService initialized. publicEp={}, internalEp={}, protocol=HTTPS, bucket={}", publicEp, internalEp, properties.getBucket());
     }
 
     @PreDestroy
     public void destroy() {
-        if (ossClient != null) {
-            ossClient.shutdown();
+        if (ossClientPublic != null) {
+            ossClientPublic.shutdown();
+        }
+        if (ossClientInternal != null) {
+            ossClientInternal.shutdown();
         }
     }
 
@@ -62,14 +81,12 @@ public class AliOssService implements OssService {
             String objectKey = keyPrefix + datePath + "/" + md5 + (ext.isEmpty() ? "" : "." + ext);
             PutObjectRequest request = new PutObjectRequest(properties.getBucket(), objectKey, new ByteArrayInputStream(bytes));
             try {
-                ossClient.putObject(request);
+                ossClientPublic.putObject(request);
             } catch (Exception ex) {
                 log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), objectKey, ex.getMessage(), ex);
                 throw new IllegalStateException("文件上传失败，请联系管理员", ex);
             }
-            String host = properties.getHost();
-            if (host == null) host = "";
-            return host + objectKey;
+            return "/file/oss/" + objectKey;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
         }
@@ -92,14 +109,12 @@ public class AliOssService implements OssService {
             String key = normalizePrefix(keyPrefix) + originalName;
             PutObjectRequest request = new PutObjectRequest(properties.getBucket(), key, new ByteArrayInputStream(bytes));
             try {
-                ossClient.putObject(request);
+                ossClientPublic.putObject(request);
             } catch (Exception ex) {
                 log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), key, ex.getMessage(), ex);
                 throw new IllegalStateException("文件上传失败，请联系管理员", ex);
             }
-            String host = properties.getHost();
-            if (host == null) host = "";
-            return host + key;
+            return "/file/oss/" + key;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
         }
@@ -157,7 +172,7 @@ public class AliOssService implements OssService {
         }
         if (StringUtils.hasText(objectKey)) {
             try {
-                ossClient.deleteObject(properties.getBucket(), objectKey);
+                ossClientPublic.deleteObject(properties.getBucket(), objectKey);
             } catch (Exception e) {
                 log.warn("Failed to delete OSS object: {} - {}", objectKey, e.getMessage());
             }
@@ -175,7 +190,15 @@ public class AliOssService implements OssService {
         String key = extractObjectKey(url);
         if (!StringUtils.hasText(key)) throw new IllegalArgumentException("无效的OSS地址");
         try {
-            return ossClient.getObject(properties.getBucket(), key).getObjectContent();
+            // 优先内网读取，失败自动回退公网
+            if (ossClientInternal != null) {
+                try {
+                    return ossClientInternal.getObject(properties.getBucket(), key).getObjectContent();
+                } catch (Exception ex) {
+                    log.warn("OSS 内网读取失败，回退公网: key={}, reason={}", key, ex.getMessage());
+                }
+            }
+            return ossClientPublic.getObject(properties.getBucket(), key).getObjectContent();
         } catch (Exception e) {
             throw new IllegalStateException("读取OSS对象失败", e);
         }
@@ -185,6 +208,11 @@ public class AliOssService implements OssService {
     public String extractObjectKey(String url) {
         String host = properties.getHost();
         String objectKey;
+        // Support internal proxy path: /file/oss/{key}
+        String proxyPrefix = "/file/oss/";
+        if (url != null && url.startsWith(proxyPrefix)) {
+            return url.substring(proxyPrefix.length());
+        }
         if (StringUtils.hasText(host) && url.startsWith(host)) {
             objectKey = url.substring(host.length());
         } else {
@@ -198,6 +226,22 @@ public class AliOssService implements OssService {
             }
         }
         return objectKey;
+    }
+
+    @Override
+    public InputStream openByKey(String key) {
+        try {
+            if (ossClientInternal != null) {
+                try {
+                    return ossClientInternal.getObject(properties.getBucket(), key).getObjectContent();
+                } catch (Exception ex) {
+                    log.warn("OSS 内网读取失败，回退公网: key={}, reason={}", key, ex.getMessage());
+                }
+            }
+            return ossClientPublic.getObject(properties.getBucket(), key).getObjectContent();
+        } catch (Exception e) {
+            throw new IllegalStateException("读取OSS对象失败", e);
+        }
     }
 
     private String getExtension(String filename) {
