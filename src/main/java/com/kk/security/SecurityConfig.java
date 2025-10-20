@@ -12,7 +12,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -33,10 +32,7 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 
     @Bean
-    public UserDetailsService userDetailsService() { return new AdminUserDetailsService(); }
-
-    @Bean
-    public AuthenticationProvider authenticationProvider(UserDetailsService uds, PasswordEncoder encoder) {
+    public AuthenticationProvider authenticationProvider(AdminUserDetailsService uds, PasswordEncoder encoder) {
         DaoAuthenticationProvider p = new DaoAuthenticationProvider();
         p.setUserDetailsService(uds);
         p.setPasswordEncoder(encoder);
@@ -44,7 +40,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
         http
             .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
             .cors(c -> {})
@@ -60,13 +56,15 @@ public class SecurityConfig {
                 ).permitAll()
                 // allow public read of projects
                 .requestMatchers(HttpMethod.GET, "/api/projects", "/api/projects/*").permitAll()
+                // allow public file proxy via internal OSS
+                .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
                 // allow public submit to project
                 .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions").permitAll()
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()
             )
-            .authenticationProvider(authenticationProvider(userDetailsService(), passwordEncoder()))
+            .authenticationProvider(authenticationProvider)
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .logout(logout -> logout.logoutUrl("/api/admin/auth/logout"));

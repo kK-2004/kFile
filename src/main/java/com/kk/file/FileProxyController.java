@@ -20,7 +20,6 @@ import java.io.InputStream;
 public class FileProxyController {
 
     private final OssService ossService;
-    private final OssProperties ossProperties;
 
     @GetMapping("/file/oss/**")
     public ResponseEntity<InputStreamResource> proxy(HttpServletRequest request) {

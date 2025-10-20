@@ -12,7 +12,10 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Entity
-@Table(name = "submissions")
+@Table(name = "submissions", indexes = {
+        @Index(name = "idx_submission_valid", columnList = "valid"),
+        @Index(name = "idx_submission_proj_fpr_created", columnList = "project_id,submitterFingerprint,createdAt")
+})
 public class Submission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,6 +46,10 @@ public class Submission {
 
     // total times this submitter has submitted to this project at the time of this record
     private Integer submitCount;
+
+    // 是否有效（仅保留每个提交者最近的N条，超出则标记为无效，后续清理掉OSS文件）
+    @Column(nullable = false)
+    private Boolean valid = true;
 
     // 是否已过期（达到保留上限后被淘汰）
     private Boolean expired = false;

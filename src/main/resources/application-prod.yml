@@ -1,6 +1,6 @@
 env:
   name: prod
-  cors: http://localhost:5173
+  cors: https://ksite.xin/
 
 spring:
   datasource:
@@ -27,6 +27,7 @@ server:
   tomcat:
     max-swallow-size: -1
     max-http-form-post-size: -1
+  port: 8086
 
 geoip:
   enabled: ${GEOIP_ENABLED:false}

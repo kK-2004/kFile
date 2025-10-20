@@ -10,8 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class OssProperties {
     private String type;     // ali
     private String prefix;   // directory prefix in bucket
-    private String endpoint; // oss-cn-xxx.aliyuncs.com
-    private String internalEndpoint; // oss-cn-xxx-internal.aliyuncs.com (optional)
+    private String endpoint; // oss-cn-xxx.aliyuncs.com 用于上传
+    private String internalEndpoint; // oss-cn-xxx-internal.aliyuncs.com 用于下载
     private String ak;       // access key id
     private String sk;       // access key secret
     private String bucket;   // bucket name

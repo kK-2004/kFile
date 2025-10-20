@@ -115,13 +115,14 @@ public class SubmissionService {
         long countForSubmitter = submissionRepository.countByProjectAndSubmitterFingerprint(project, fingerprint) + 1;
         s.setSubmitCount((int) countForSubmitter);
 
+        s.setValid(true);
         Submission saved = submissionRepository.save(s);
 
         // update project's total submitters metric
         long distinctSubmitters = submissionRepository.countDistinctSubmitters(project);
         project.setTotalSubmitters((int) distinctSubmitters);
-        // 保留至多20条：删除OSS上多余文件并标记过期
-        enforceRetention(project, fingerprint);
+        // 保留至多10条：仅标记超出记录为无效（后台任务清理OSS）
+        enforceRetentionMax(project, fingerprint, 10);
 
         return saved;
     }
@@ -132,11 +133,19 @@ public class SubmissionService {
     }
 
     public Page<Submission> page(Project project, Pageable pageable) {
-        return submissionRepository.findByProject(project, pageable);
+        return submissionRepository.findVisibleByProject(project, pageable);
     }
 
     public String exportCsv(Project project) {
-        List<Submission> list = submissionRepository.findByProject(project);
+        // 仅导出每个提交者的“最新一次有效提交”
+        List<Submission> all = submissionRepository.findVisibleByProjectOrderByCreatedAtDesc(project);
+        java.util.LinkedHashMap<String, Submission> latestMap = new java.util.LinkedHashMap<>();
+        for (Submission s : all) {
+            String key = s.getSubmitterFingerprint();
+            if (key == null || key.isBlank()) key = String.valueOf(s.getId());
+            if (!latestMap.containsKey(key)) latestMap.put(key, s);
+        }
+        List<Submission> list = new java.util.ArrayList<>(latestMap.values());
         StringBuilder sb = new StringBuilder();
         // UTF-8 BOM to help Excel recognize encoding
         sb.append('\uFEFF');
@@ -154,7 +163,7 @@ public class SubmissionService {
                 }
             }
         } catch (Exception ignored) {}
-        // fallback: union of keys in submissions
+        // fallback: union of keys in submissions（仅遍历最新一次）
         if (keys.isEmpty()) {
             for (Submission s : list) {
                 try {
@@ -365,24 +374,24 @@ public class SubmissionService {
         return t;
     }
 
-    private void enforceRetention(Project project, String submitterFingerprint) {
-        List<Submission> list = submissionRepository
-                .findByProjectAndSubmitterFingerprintOrderByCreatedAtAsc(project, submitterFingerprint);
-        int toKeep = 20;
-        if (list.size() <= toKeep) return;
-        int removeCount = list.size() - toKeep;
-        for (int i = 0; i < removeCount; i++) {
-            Submission old = list.get(i);
-            if (Boolean.TRUE.equals(old.getExpired())) continue;
-            try {
-                // delete files from oss
-                List<String> urls = objectMapper.readValue(old.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
-                ossService.deleteByUrls(urls);
-            } catch (Exception e) {
-                // do not fail submission if deletion fails
+    private void enforceRetentionMax(Project project, String submitterFingerprint, int toKeep) {
+        List<Submission> listDesc = submissionRepository
+                .findByProjectAndSubmitterFingerprintOrderByCreatedAtDesc(project, submitterFingerprint);
+        if (listDesc.size() <= toKeep) return;
+        for (int i = 0; i < listDesc.size(); i++) {
+            Submission s = listDesc.get(i);
+            boolean shouldBeValid = i < toKeep;
+            if (Boolean.TRUE.equals(shouldBeValid)) {
+                if (Boolean.FALSE.equals(s.getValid())) {
+                    s.setValid(true);
+                    submissionRepository.save(s);
+                }
+            } else {
+                if (!Boolean.FALSE.equals(s.getValid())) {
+                    s.setValid(false);
+                    submissionRepository.save(s);
+                }
             }
-            old.setExpired(true);
-            submissionRepository.save(old);
         }
     }
 }
