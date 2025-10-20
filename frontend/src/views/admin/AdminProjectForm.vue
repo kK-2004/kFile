@@ -71,6 +71,30 @@
               </el-form-item>
             </el-col>
             <el-col :span="8">
+              <el-form-item label="允许多文件">
+                <div class="switch-wrapper">
+                  <el-switch
+                      v-model="form.allowMultiFiles"
+                      :active-text="form.allowMultiFiles ? '允许' : '禁止'"
+                      inline-prompt
+                  />
+                  <span class="switch-desc">{{ form.allowMultiFiles ? '一次可上传多个文件' : '一次仅允许一个文件' }}</span>
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="允许逾期提交">
+                <div class="switch-wrapper">
+                  <el-switch
+                      v-model="form.allowOverdue"
+                      :active-text="form.allowOverdue ? '允许' : '禁止'"
+                      inline-prompt
+                  />
+                  <span class="switch-desc">{{ form.allowOverdue ? '到期后仍可提交（将标记为逾期）' : '到期后不可提交' }}</span>
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
               <el-form-item label="项目状态">
                 <div class="switch-wrapper">
                   <el-switch
@@ -116,6 +140,38 @@
         </div>
 
         <!-- 用户字段配置 -->
+        <div class="form-section">
+          <div class="section-title">
+            <el-icon><InfoFilled /></el-icon>
+            <span>用户端提交状态提示</span>
+          </div>
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="提示类型">
+                <el-select v-model="form.userSubmitStatusType" placeholder="选择标签类型">
+                  <el-option label="Info" value="info" />
+                  <el-option label="Success" value="success" />
+                  <el-option label="Warning" value="warning" />
+                  <el-option label="Danger" value="danger" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="16">
+              <el-form-item label="提示文案">
+                <el-input v-model="form.userSubmitStatusText" placeholder="如：请先填写学号后再提交" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="查询字段（用户端查询状态使用）">
+                <el-select v-model="form.queryFieldKey" placeholder="请选择一个期望字段">
+                  <el-option v-for="f in expectedFields" :key="f.key" :value="f.key" :label="`${f.label} (${f.key})`" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
         <div class="form-section">
           <div class="section-title">
             <el-icon><User /></el-icon>
@@ -356,6 +412,11 @@ const saving = ref(false)
 const form = ref({
   name: '',
   allowResubmit: true,
+  allowMultiFiles: true,
+  allowOverdue: false,
+  userSubmitStatusType: 'info',
+  userSubmitStatusText: '',
+  queryFieldKey: '',
   fileSizeLimitBytes: null,
   startAt: null,
   endAt: null,
@@ -380,6 +441,11 @@ const load = async () => {
     id: data.id,
     name: data.name,
     allowResubmit: data.allowResubmit,
+    allowMultiFiles: data.allowMultiFiles != null ? data.allowMultiFiles : true,
+    allowOverdue: data.allowOverdue || false,
+    userSubmitStatusType: data.userSubmitStatusType || 'info',
+    userSubmitStatusText: data.userSubmitStatusText || '',
+    queryFieldKey: data.queryFieldKey || '',
     fileSizeLimitBytes: data.fileSizeLimitBytes,
     startAt: data.startAt,
     endAt: data.endAt,

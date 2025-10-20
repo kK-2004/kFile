@@ -3,7 +3,9 @@
     <el-card class="submissions-card">
       <template #header>
         <div class="card-header">
-          <span>提交记录 - 项目 {{ projectId }}</span>
+          <span class="header-title">
+            提交记录 - <span class="project-name-highlight">{{ projectName }}</span>
+          </span>
           <el-space>
             <el-button @click="$router.back()">返回</el-button>
             <el-button type="primary" @click="exportCsv">导出CSV</el-button>
@@ -12,7 +14,7 @@
       </template>
 
       <div class="filter-section">
-        <el-form inline>
+        <el-form inline class="filter-form">
           <el-form-item label="字段">
             <el-select v-model="filterKey" placeholder="选择字段" style="width: 200px;">
               <el-option v-for="f in expectedFields" :key="f.key" :label="f.label + ' ('+f.key+')'" :value="f.key" />
@@ -24,8 +26,23 @@
           <el-form-item>
             <el-button type="primary" @click="applyFilter">搜索</el-button>
             <el-button @click="resetFilter">重置</el-button>
-            <el-button type="success" @click="downloadZip()">打包全部</el-button>
-            <el-button type="warning" :disabled="!filterKey || !filterValue" @click="downloadZip(true)">按条件打包</el-button>
+            <el-button type="success" @click="downloadZip()">打包</el-button>
+            <el-tooltip
+              effect="dark"
+              placement="top"
+              content="仅下载每位提交者的最新一次提交。"
+            >
+              <span class="help-icon">?</span>
+            </el-tooltip>
+            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="downloadZip(true)"
+                       style="margin-left: 8px;">按条件打包</el-button>
+            <el-tooltip
+              effect="dark"
+              placement="top"
+              content="输入“字段”和“值”后，将按该字段对记录进行前缀匹配，仅下载每位提交者的最新一次提交；若无匹配内容则不可用。"
+            >
+              <span class="help-icon">?</span>
+            </el-tooltip>
           </el-form-item>
         </el-form>
       </div>
@@ -123,7 +140,7 @@
           <el-table-column label="提交者" min-width="220">
             <template #default="{row}">
               <div v-for="(v,k) in parseSubmitter(row)" :key="k" style="line-height:1.6;">
-                <strong>{{k}}:</strong> <span>{{v}}</span>
+                <strong>{{ getFieldLabel(k) }}:</strong> <span>{{v}}</span>
               </div>
             </template>
           </el-table-column>
@@ -219,6 +236,20 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', calculateTableHeight)
 })
+
+// 当前项目名称（若未加载到项目则回退为“项目 {id}”）
+const projectName = computed(() => project.value?.name || `项目 ${projectId}`)
+
+// 字段 label 映射，用于提交者信息中将 key 显示为 label
+const fieldLabelMap = computed(() => {
+  const map = {}
+  for (const f of expectedFields.value || []) {
+    if (f && f.key) map[f.key] = f.label || f.key
+  }
+  return map
+})
+
+const getFieldLabel = (key) => fieldLabelMap.value[key] || key
 
 const exportCsv = async () => {
   const { data } = await api.exportSubmissions(projectId)
@@ -316,6 +347,12 @@ const groupedContent = computed(() => {
   return groups
 })
 
+// 是否存在按条件过滤后的结果，用于控制“按条件打包”按钮可用性
+const hasFilteredResult = computed(() => {
+  if (!filterKey.value || !filterValue.value) return false
+  return groupedContent.value.length > 0
+})
+
 const isOverdue = (groupRow) => {
   try {
     const end = project.value?.endAt
@@ -367,7 +404,7 @@ const formatDateTime = (dateTimeStr) => {
 <style scoped>
 /* 全屏布局 - 考虑 header 高度 */
 .admin-submissions-fullscreen {
-  height: calc(100vh - 64px - 20px);
+  height: calc(100vh - 64px - 50px);
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;
@@ -407,6 +444,15 @@ const formatDateTime = (dateTimeStr) => {
   font-size: 20px;
   font-weight: 600;
   color: #111827;
+}
+
+/* 突出显示当前项目名称 */
+.project-tag {
+  margin-left: 6px;
+  background-color: #eef2ff; /* 柔和高亮背景 */
+  color: #3730a3;            /* 深蓝紫文字 */
+  border-color: #c7d2fe;     /* 边框与背景协调 */
+  font-weight: 600;
 }
 
 /* 筛选区域 */
@@ -521,8 +567,9 @@ const formatDateTime = (dateTimeStr) => {
 /* 时间线样式 */
 .timeline-container {
   padding: 24px 32px;
-  max-height: min(400px, calc(100vh - 520px));
-  overflow-y: auto;
+  /* 使用表格的滚动条，避免与内层滚动条重叠 */
+  max-height: unset;
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -611,4 +658,74 @@ const formatDateTime = (dateTimeStr) => {
 .action-btn-secondary:hover { color: #4b5563; background-color: #f3f4f6; }
 .action-icon { width: 14px; height: 14px; margin-right: 4px; }
 .no-files { margin-top: 8px; font-size: 14px; color: #9ca3af; font-style: italic; }
+
+/* 帮助问号图标 */
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  cursor: help;
+  user-select: none;
+}
+.help-icon:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* 过滤工具条居中 */
+.filter-form {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+.filter-form .el-form-item {
+  margin-bottom: 0;
+}
+
+/* 按条件打包按钮：改为白色风格 */
+.cond-zip-btn {
+  background-color: #ffffff;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+.cond-zip-btn:hover:not(.is-disabled) {
+  background-color: #f9fafb;
+  border-color: #d1d5db;
+  color: #111827;
+}
+/* 禁用态：置灰，禁止 hover 与位移 */
+.cond-zip-btn.is-disabled,
+.cond-zip-btn[disabled] {
+  background-color: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+  color: #9ca3af !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+  pointer-events: none; /* 阻止 hover 视觉反馈 */
+}
+.cond-zip-btn.is-disabled:hover,
+.cond-zip-btn[disabled]:hover {
+  background-color: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+  color: #9ca3af !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.project-name-highlight {
+  background: linear-gradient(180deg, transparent 60%, #fef08a 60%);
+  color: #111827;
+  font-weight: 700;
+  font-size: 21px;
+  padding: 0 4px;
+}
 </style>

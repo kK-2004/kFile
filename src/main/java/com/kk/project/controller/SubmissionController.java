@@ -43,10 +43,25 @@ public class SubmissionController {
         resp.put("id", s.getId());
         try {
             resp.put("submitter", objectMapper.readValue(s.getSubmitterInfo(), new TypeReference<Map<String,Object>>(){}));
-            resp.put("fileUrls", objectMapper.readValue(s.getFileUrls(), new TypeReference<List<String>>(){}));
         } catch (Exception e) {
             resp.put("submitter", s.getSubmitterInfo());
-            resp.put("fileUrls", s.getFileUrls());
+        }
+        // 返回解密后的文件名列表，不返回文件URL
+        try {
+            List<String> urls = objectMapper.readValue(s.getFileUrls(), new TypeReference<List<String>>(){});
+            java.util.List<String> names = new java.util.ArrayList<>();
+            if (urls != null) {
+                for (String u : urls) {
+                    String key = submissionService.getOssService().extractObjectKey(u);
+                    int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+                    String enc = slash >= 0 ? key.substring(slash + 1) : key;
+                    String name = submissionService.getFileNameCodec().decrypt(enc);
+                    names.add(name == null || name.isBlank() ? enc : name);
+                }
+            }
+            resp.put("fileNames", names);
+        } catch (Exception ignored) {
+            resp.put("fileNames", java.util.List.of());
         }
         resp.put("submitCount", s.getSubmitCount());
         resp.put("expired", s.getExpired());
@@ -60,18 +75,21 @@ public class SubmissionController {
         resp.put("ipCountry", s.getIpCountry());
         resp.put("ipProvince", s.getIpProvince());
         resp.put("ipCity", s.getIpCity());
-        resp.put("createdAt", s.getCreatedAt());
-        resp.put("updatedAt", s.getUpdatedAt());
+        resp.put("createdAt", s.getCreatedAt() == null ? null : s.getCreatedAt().toEpochMilli());
+        resp.put("updatedAt", s.getUpdatedAt() == null ? null : s.getUpdatedAt().toEpochMilli());
         return resp;
     }
 
     @GetMapping
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
-    public Page<Submission> list(@PathVariable Long projectId,
+    public Page<com.kk.project.dto.SubmissionResponse> list(@PathVariable Long projectId,
                                  @RequestParam(defaultValue = "0") int page,
                                  @RequestParam(defaultValue = "20") int size) {
         Project p = projectService.get(projectId);
-        return submissionService.page(p, PageRequest.of(page, size));
+        Page<Submission> pg = submissionService.page(p, PageRequest.of(page, size));
+        java.util.List<com.kk.project.dto.SubmissionResponse> mapped = new java.util.ArrayList<>();
+        for (Submission s : pg.getContent()) mapped.add(com.kk.project.dto.SubmissionResponse.from(s));
+        return new org.springframework.data.domain.PageImpl<>(mapped, pg.getPageable(), pg.getTotalElements());
     }
 
     @GetMapping("/export")
@@ -105,5 +123,80 @@ public class SubmissionController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded)
                 .header(HttpHeaders.CONTENT_TYPE, "application/zip")
                 .body(body);
+    }
+
+    @GetMapping("/status")
+    public Map<String, Object> latestStatus(@PathVariable Long projectId,
+                                            @RequestParam(required = false) String submitter,
+                                            @RequestParam(required = false) String fieldValue) {
+        Project p = projectService.get(projectId);
+        List<Submission> list;
+        if (submitter != null && !submitter.isBlank()) {
+            // 兼容：直接传 submitter JSON
+            list = submissionService.listLatestBySubmitter(p, submitter);
+        } else if (fieldValue != null && !fieldValue.isBlank() && p.getQueryFieldKey() != null) {
+            // 使用项目配置的查询字段，按值匹配，返回该值对应的最新记录
+            list = submissionService.listLatestByFieldValue(p, p.getQueryFieldKey(), fieldValue);
+        } else {
+            list = java.util.List.of();
+        }
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("projectId", projectId);
+        if (list.isEmpty()) {
+            resp.put("exists", false);
+            return resp;
+        }
+        Submission s = list.get(0);
+        resp.put("exists", true);
+        resp.put("id", s.getId());
+        try {
+            resp.put("submitter", objectMapper.readValue(s.getSubmitterInfo(), new TypeReference<Map<String,Object>>(){}));
+        } catch (Exception e) {
+            resp.put("submitter", s.getSubmitterInfo());
+        }
+        resp.put("submitCount", s.getSubmitCount());
+        resp.put("expired", s.getExpired());
+        resp.put("createdAt", s.getCreatedAt() == null ? null : s.getCreatedAt().toEpochMilli());
+        // 返回解密后的最新一次提交的文件名
+        resp.put("fileNames", extractDecryptedNames(s));
+
+        // 版本链（从新到旧）
+        List<Submission> versionsList;
+        if (submitter != null && !submitter.isBlank()) {
+            versionsList = submissionService.listLatestBySubmitter(p, submitter);
+        } else if (fieldValue != null && !fieldValue.isBlank() && p.getQueryFieldKey() != null) {
+            versionsList = submissionService.listAllByFieldValue(p, p.getQueryFieldKey(), fieldValue);
+        } else {
+            versionsList = java.util.List.of();
+        }
+        java.util.List<Map<String,Object>> versions = new java.util.ArrayList<>();
+        for (Submission it : versionsList) {
+            Map<String,Object> v = new java.util.HashMap<>();
+            v.put("id", it.getId());
+            v.put("createdAt", it.getCreatedAt() == null ? null : it.getCreatedAt().toEpochMilli());
+            v.put("fileNames", extractDecryptedNames(it));
+            versions.add(v);
+        }
+        resp.put("versions", versions);
+        return resp;
+    }
+
+    private java.util.List<String> extractDecryptedNames(Submission s) {
+        try {
+            List<String> urls = objectMapper.readValue(s.getFileUrls(), new TypeReference<List<String>>(){});
+            java.util.List<String> names = new java.util.ArrayList<>();
+            if (urls != null) {
+                for (String u : urls) {
+                    String key = submissionService.getOssService().extractObjectKey(u);
+                    int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+                    String enc = slash >= 0 ? key.substring(slash + 1) : key;
+                    String name = submissionService.getFileNameCodec().decrypt(enc);
+                    names.add(name == null || name.isBlank() ? enc : name);
+                }
+            }
+            return names;
+        } catch (Exception ignored) {
+            return java.util.List.of();
+        }
     }
 }

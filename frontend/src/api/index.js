@@ -45,6 +45,11 @@ export default {
     if (fieldValue) params.fieldValue = fieldValue
     return instance.get(`/api/projects/${projectId}/submissions/archive`, { params, responseType: 'blob' })
   },
+  latestStatus(projectId, params) {
+    // params can be: { submitter: string } or { fieldValue: string }
+    const p = typeof params === 'string' ? { submitter: params } : (params || {})
+    return instance.get(`/api/projects/${projectId}/submissions/status`, { params: p, responseType: 'json' })
+  },
   submit(projectId, submitter, files) {
     const fd = new FormData()
     fd.append('submitter', JSON.stringify(submitter || {}))

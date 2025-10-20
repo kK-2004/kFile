@@ -16,6 +16,11 @@ public class UpdateProjectRequest {
     private Long startAt; // epoch millis
     private Long endAt;   // epoch millis
     private Boolean allowResubmit;
+    private Boolean allowMultiFiles;
+    private Boolean allowOverdue;
+    private String userSubmitStatusType;
+    private String userSubmitStatusText;
+    private String queryFieldKey;
     private Boolean offline;
     private String pathFieldKey;
     private java.util.List<String> pathSegments;

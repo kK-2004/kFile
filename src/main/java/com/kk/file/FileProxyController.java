@@ -20,13 +20,14 @@ import java.io.InputStream;
 public class FileProxyController {
 
     private final OssService ossService;
+    private final com.kk.common.FileNameCodec fileNameCodec;
 
     @GetMapping("/file/oss/**")
     public ResponseEntity<InputStreamResource> proxy(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String prefix = "/file/oss/";
         String key = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
-        String filename = extractFilename(key);
+        String filename = decryptFilenameFromKey(key);
         MediaType mediaType = MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
         InputStream in = ossService.openByKey(key);
         return ResponseEntity.ok()
@@ -35,9 +36,11 @@ public class FileProxyController {
                 .body(new InputStreamResource(in));
     }
 
-    private String extractFilename(String key) {
+    private String decryptFilenameFromKey(String key) {
         if (key == null || key.isEmpty()) return "file";
         int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-        return slash >= 0 ? key.substring(slash + 1) : key;
+        String enc = slash >= 0 ? key.substring(slash + 1) : key;
+        String name = fileNameCodec.decrypt(enc);
+        return (name == null || name.isBlank()) ? enc : name;
     }
 }

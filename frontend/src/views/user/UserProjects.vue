@@ -6,7 +6,9 @@
       </div>
     </template>
 
-    <el-table :data="projects" v-loading="loading">
+    <el-alert v-if="!hasAdmin" type="info" show-icon title="仅管理员可查看项目列表" style="margin-bottom:12px;" />
+
+    <el-table v-else :data="projects" v-loading="loading">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="name" label="项目名称" />
       <el-table-column label="状态" width="140">
@@ -24,16 +26,21 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import api from '../../api'
+import { useAuthStore } from '../../stores/auth'
 
 const projects = ref([])
 const loading = ref(false)
+const auth = useAuthStore()
+const hasAdmin = computed(() => !!auth.user)
 
 const load = async () => {
   loading.value = true
   try {
-    const { data } = await api.listProjects()
+    if (!auth.loaded) await auth.loadMe()
+    if (!auth.user) { projects.value = []; return }
+    const { data } = await api.adminListProjects()
     projects.value = data
   } finally { loading.value = false }
 }

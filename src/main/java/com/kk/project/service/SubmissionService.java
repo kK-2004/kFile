@@ -21,7 +21,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
@@ -33,6 +32,7 @@ public class SubmissionService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GeoIpService geoIpService;
     private final OssProperties ossProperties;
+    private final com.kk.common.FileNameCodec fileNameCodec;
 
     @Transactional
     public Submission submit(Long projectId, String submitterJson, List<MultipartFile> files,
@@ -43,6 +43,9 @@ public class SubmissionService {
         // validate files before upload
         if (files == null || files.isEmpty()) {
             throw new IllegalArgumentException("请至少上传一个文件");
+        }
+        if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && files.size() > 1) {
+            throw new IllegalArgumentException("该项目不允许一次上传多个文件");
         }
         for (MultipartFile f : files) {
             if (project.getFileSizeLimitBytes() != null && f.getSize() > project.getFileSizeLimitBytes()) {
@@ -116,6 +119,13 @@ public class SubmissionService {
         s.setSubmitCount((int) countForSubmitter);
 
         s.setValid(true);
+        // 若已超过截止时间，标记该提交为逾期
+        try {
+            java.time.Instant now = java.time.Instant.now();
+            if (project.getEndAt() != null && now.isAfter(project.getEndAt())) {
+                s.setExpired(true);
+            }
+        } catch (Exception ignored) {}
         Submission saved = submissionRepository.save(s);
 
         // update project's total submitters metric
@@ -252,32 +262,88 @@ public class SubmissionService {
         return sb.toString();
     }
 
-    public org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody archive(Project project, String fieldKey, String fieldValue, String fileNameHint) {
-        List<Submission> list = submissionRepository.findByProject(project);
-        List<Submission> filtered = new ArrayList<>();
-        for (Submission s : list) {
-            if (!StringUtils.hasText(fieldKey)) { filtered.add(s); continue; }
+    // 获取某个提交者的最新一条提交（根据 canonicalized submitterJson 计算 fingerprint）
+    public java.util.List<Submission> listLatestBySubmitter(Project project, String submitterJson) {
+        String canonical = canonicalizeSubmitter(submitterJson);
+        String fingerprint = org.springframework.util.DigestUtils.md5DigestAsHex(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        java.util.List<Submission> listDesc = submissionRepository
+                .findByProjectAndSubmitterFingerprintOrderByCreatedAtDesc(project, fingerprint);
+        return listDesc == null ? java.util.List.of() : listDesc;
+    }
+
+    // 通过指定字段值查询最新一条提交（用于无需登录的状态查询）
+    public java.util.List<Submission> listLatestByFieldValue(Project project, String fieldKey, String fieldValue) {
+        // 取所有可见提交，按时间倒序逐项匹配，返回第一个匹配的提交（即最新的一条）
+        java.util.List<Submission> all = submissionRepository.findVisibleByProjectOrderByCreatedAtDesc(project);
+        for (Submission s : all) {
             try {
                 JsonNode node = objectMapper.readTree(s.getSubmitterInfo());
-                JsonNode v = node.get(fieldKey);
+                JsonNode v = node == null ? null : node.get(fieldKey);
                 String val = v == null || v.isNull() ? "" : v.asText("");
-                if (val != null && fieldValue != null && val.startsWith(fieldValue)) filtered.add(s);
+                if (val != null && val.equals(fieldValue)) {
+                    return java.util.List.of(s);
+                }
             } catch (Exception ignored) {}
         }
+        return java.util.List.of();
+    }
+
+    // 返回该字段值对应的所有提交（按时间倒序，用于版本链）
+    public java.util.List<Submission> listAllByFieldValue(Project project, String fieldKey, String fieldValue) {
+        java.util.List<Submission> out = new java.util.ArrayList<>();
+        java.util.List<Submission> all = submissionRepository.findVisibleByProjectOrderByCreatedAtDesc(project);
+        for (Submission s : all) {
+            try {
+                JsonNode node = objectMapper.readTree(s.getSubmitterInfo());
+                JsonNode v = node == null ? null : node.get(fieldKey);
+                String val = v == null || v.isNull() ? "" : v.asText("");
+                if (val != null && val.equals(fieldValue)) {
+                    out.add(s);
+                }
+            } catch (Exception ignored) {}
+        }
+        return out;
+    }
+
+    public org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody archive(Project project, String fieldKey, String fieldValue, String fileNameHint) {
+        // 统一逻辑：无论是否带筛选，均仅导出每位提交者“最新一次有效提交”的文件
+        List<Submission> all = submissionRepository.findVisibleByProjectOrderByCreatedAtDesc(project);
+        java.util.LinkedHashMap<String, Submission> latestMap = new java.util.LinkedHashMap<>();
+        boolean doFilter = StringUtils.hasText(fieldKey) && StringUtils.hasText(fieldValue);
+        for (Submission s : all) {
+            // 若需要筛选，则先根据提交者信息进行前缀匹配过滤
+            if (doFilter) {
+                try {
+                    JsonNode node = objectMapper.readTree(s.getSubmitterInfo());
+                    JsonNode v = node.get(fieldKey);
+                    String val = v == null || v.isNull() ? "" : v.asText("");
+                    if (val == null || !val.startsWith(fieldValue)) continue;
+                } catch (Exception ignored) { continue; }
+            }
+            String key = s.getSubmitterFingerprint();
+            if (key == null || key.isBlank()) key = String.valueOf(s.getId());
+            if (!latestMap.containsKey(key)) latestMap.put(key, s);
+        }
+        List<Submission> baseList = new java.util.ArrayList<>(latestMap.values());
+
         String zipName = (fileNameHint == null || fileNameHint.isBlank()) ? ("project-" + project.getId() + ".zip") : fileNameHint;
 
         return outputStream -> {
             try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(outputStream)) {
-                for (Submission s : filtered) {
+                for (Submission s : baseList) {
                     List<String> urls;
                     try {
                         urls = objectMapper.readValue(s.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
                     } catch (Exception e) {
                         continue;
                     }
-                    for (String url : urls) {
+                    java.util.List<String> toPack = urls;
+                    if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && urls != null && !urls.isEmpty()) {
+                        toPack = java.util.List.of(urls.get(urls.size() - 1));
+                    }
+                    for (String url : toPack) {
                         String key = ossService.extractObjectKey(url);
-                        String entryName = trimPrefixForZip(key);
+                        String entryName = decryptFilenameInPath(trimPrefixForZip(key));
                         try (java.io.InputStream in = ossService.openByKey(key)) {
                             zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
                             in.transferTo(zos);
@@ -301,6 +367,20 @@ public class SubmissionService {
         return objectKey;
     }
 
+    private String decryptFilenameInPath(String path) {
+        if (path == null || path.isEmpty()) return path;
+        int slash = path.lastIndexOf('/');
+        if (slash < 0) return fileNameCodec.decrypt(path);
+        String dir = path.substring(0, slash + 1);
+        String name = path.substring(slash + 1);
+        String dec = fileNameCodec.decrypt(name);
+        return dir + (dec == null || dec.isBlank() ? name : dec);
+    }
+
+    // Expose components for controllers needing filename/key operations
+    public OssService getOssService() { return ossService; }
+    public com.kk.common.FileNameCodec getFileNameCodec() { return fileNameCodec; }
+
     private String safeCsv(String json) {
         if (json == null) return "";
         String s = json.replace("\"", "\"\"");
@@ -316,7 +396,10 @@ public class SubmissionService {
             throw new IllegalStateException("提交尚未开始");
         }
         if (p.getEndAt() != null && now.isAfter(p.getEndAt())) {
-            throw new IllegalStateException("提交已截止");
+            // 若未允许逾期，则禁止提交；否则允许并在保存时标记逾期
+            if (!Boolean.TRUE.equals(p.getAllowOverdue())) {
+                throw new IllegalStateException("提交已截止");
+            }
         }
     }
 

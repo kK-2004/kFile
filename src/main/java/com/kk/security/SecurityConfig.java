@@ -60,6 +60,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
                 // allow public submit to project
                 .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions").permitAll()
+                // allow public check latest status
+                .requestMatchers(HttpMethod.GET, "/api/projects/*/submissions/status").permitAll()
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()

@@ -36,9 +36,14 @@ public class ProjectService {
         }
         p.setFileSizeLimitBytes(req.getFileSizeLimitBytes());
         p.setAllowResubmit(Boolean.TRUE.equals(req.getAllowResubmit()));
+        p.setAllowMultiFiles(req.getAllowMultiFiles() == null ? true : Boolean.TRUE.equals(req.getAllowMultiFiles()));
+        p.setAllowOverdue(Boolean.TRUE.equals(req.getAllowOverdue()));
         p.setStartAt(req.getStartAt() == null ? null : Instant.ofEpochMilli(req.getStartAt()));
         p.setEndAt(req.getEndAt() == null ? null : Instant.ofEpochMilli(req.getEndAt()));
         p.setPathFieldKey(req.getPathFieldKey());
+        p.setUserSubmitStatusType(req.getUserSubmitStatusType());
+        p.setUserSubmitStatusText(req.getUserSubmitStatusText());
+        p.setQueryFieldKey(req.getQueryFieldKey());
         p.setTotalSubmitters(0);
         return projectRepository.save(p);
     }
@@ -68,8 +73,13 @@ public class ProjectService {
         if (req.getStartAt() != null) p.setStartAt(Instant.ofEpochMilli(req.getStartAt()));
         if (req.getEndAt() != null) p.setEndAt(Instant.ofEpochMilli(req.getEndAt()));
         if (req.getAllowResubmit() != null) p.setAllowResubmit(req.getAllowResubmit());
+        if (req.getAllowMultiFiles() != null) p.setAllowMultiFiles(req.getAllowMultiFiles());
+        if (req.getAllowOverdue() != null) p.setAllowOverdue(req.getAllowOverdue());
         if (req.getOffline() != null) p.setOffline(req.getOffline());
         if (req.getPathFieldKey() != null) p.setPathFieldKey(req.getPathFieldKey());
+        if (req.getUserSubmitStatusType() != null) p.setUserSubmitStatusType(req.getUserSubmitStatusType());
+        if (req.getUserSubmitStatusText() != null) p.setUserSubmitStatusText(req.getUserSubmitStatusText());
+        if (req.getQueryFieldKey() != null) p.setQueryFieldKey(req.getQueryFieldKey());
         try {
             if (req.getAllowedFileTypes() != null) p.setAllowedFileTypes(objectMapper.writeValueAsString(req.getAllowedFileTypes()));
             if (req.getExpectedUserFields() != null) p.setExpectedUserFields(objectMapper.writeValueAsString(req.getExpectedUserFields()));

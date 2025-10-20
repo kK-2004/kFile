@@ -29,6 +29,7 @@ import java.util.List;
 public class AliOssService implements OssService {
 
     private final OssProperties properties;
+    private final com.kk.common.FileNameCodec fileNameCodec;
     private OSS ossClientPublic;
     private OSS ossClientInternal;
 
@@ -106,7 +107,8 @@ public class AliOssService implements OssService {
         try {
             byte[] bytes = file.getBytes();
             String originalName = baseName(file.getOriginalFilename());
-            String key = normalizePrefix(keyPrefix) + originalName;
+            String enc = fileNameCodec.encrypt(originalName);
+            String key = normalizePrefix(keyPrefix) + enc;
             PutObjectRequest request = new PutObjectRequest(properties.getBucket(), key, new ByteArrayInputStream(bytes));
             try {
                 ossClientPublic.putObject(request);

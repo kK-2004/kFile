@@ -36,6 +36,11 @@ public class Project {
     private Instant endAt;
 
     private Boolean allowResubmit;
+    // 是否允许一次提交多个文件
+    private Boolean allowMultiFiles = true;
+
+    // 是否允许逾期：到截止时间后仍可提交，但会标记为逾期
+    private Boolean allowOverdue = false;
 
     // 下线标记：true 表示项目已下线，禁止提交
     private Boolean offline = false;
@@ -47,4 +52,15 @@ public class Project {
     // 上传路径层级，按顺序的段（json数组）。支持特殊值"$project"表示项目名称，其它为提交者字段key
     @Column(columnDefinition = "json")
     private String pathSegments;
+
+    // 用户端提交状态提示类型与文案（如 info/warning/success/danger + 自定义文字）
+    @Column(length = 16)
+    private String userSubmitStatusType; // info, warning, success, danger
+
+    @Column(length = 255)
+    private String userSubmitStatusText;
+
+    // 用户端“查询提交状态”所使用的查询字段（期望字段 key）
+    @Column(length = 64)
+    private String queryFieldKey;
 }
