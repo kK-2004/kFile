@@ -11,61 +11,61 @@
               <h1 class="app-title">-File</h1>
             </div>
           </div>
-          
+
           <div class="header-right">
             <el-space :size="8" class="nav-space">
-              <el-button 
-                class="nav-btn" 
-                text 
+              <el-button
+                class="nav-btn"
+                text
                 @click="$router.push('/user/projects')"
               >
                 用户端
               </el-button>
-              <el-button 
-                class="nav-btn" 
-                text 
+              <el-button
+                class="nav-btn"
+                text
                 @click="$router.push('/admin')"
               >
                 管理端
               </el-button>
-              
+
               <template v-if="isAdmin">
                 <el-divider direction="vertical" class="nav-divider" />
-                <el-button 
-                  class="nav-btn" 
-                  text 
+                <el-button
+                  class="nav-btn"
+                  text
                   @click="$router.push('/admin/projects')"
                 >
                   项目
                 </el-button>
-                <el-button 
-                  class="nav-btn" 
-                  text 
-                  v-if="isSuper" 
+                <el-button
+                  class="nav-btn"
+                  text
+                  v-if="isSuper"
                   @click="$router.push('/admin/users')"
                 >
                   管理员与权限
                 </el-button>
-                
+
                 <el-divider direction="vertical" class="nav-divider" />
-                
+
                 <div class="user-info" v-if="auth && auth.user">
                   <span class="username">{{ auth.user.username }}</span>
                   <span class="user-role">{{ (auth.user.role||'').toUpperCase() }}</span>
                 </div>
-                
-                <el-button 
-                  class="action-btn" 
-                  size="small" 
-                  @click="openChangePwd" 
+
+                <el-button
+                  class="action-btn"
+                  size="small"
+                  @click="openChangePwd"
                   v-if="auth && auth.user"
                 >
                   修改密码
                 </el-button>
-                <el-button 
-                  class="action-btn logout-btn" 
-                  size="small" 
-                  @click="logout" 
+                <el-button
+                  class="action-btn logout-btn"
+                  size="small"
+                  @click="logout"
                   v-if="auth && auth.user"
                 >
                   退出
@@ -75,7 +75,7 @@
           </div>
         </div>
       </el-header>
-      
+
       <el-main class="app-main">
         <router-view />
       </el-main>
@@ -84,17 +84,17 @@
     <el-dialog v-model="pwdVisible" title="修改密码" width="420px" class="pwd-dialog">
       <el-form :model="pwdForm" label-width="100px">
         <el-form-item label="当前密码">
-          <el-input 
-            v-model="pwdForm.currentPassword" 
-            type="password" 
-            autocomplete="current-password" 
+          <el-input
+            v-model="pwdForm.currentPassword"
+            type="password"
+            autocomplete="current-password"
           />
         </el-form-item>
         <el-form-item label="新密码">
-          <el-input 
-            v-model="pwdForm.newPassword" 
-            type="password" 
-            autocomplete="new-password" 
+          <el-input
+            v-model="pwdForm.newPassword"
+            type="password"
+            autocomplete="new-password"
           />
         </el-form-item>
       </el-form>
@@ -142,8 +142,8 @@ const logout = async () => { await auth.logout(); router.push('/admin/login') }
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap');
 
-body { 
-  margin: 0; 
+body {
+  margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -339,21 +339,21 @@ body {
   .app-header {
     padding: 0 16px;
   }
-  
+
   .app-title {
     font-size: 16px;
   }
-  
+
   .logo-icon {
     width: 36px;
     height: 36px;
     font-size: 18px;
   }
-  
+
   .user-info {
     display: none;
   }
-  
+
   :deep(.nav-btn) {
     padding: 6px 12px;
     font-size: 13px;

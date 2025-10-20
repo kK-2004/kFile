@@ -1,164 +1,172 @@
 <template>
-  <el-card>
-    <template #header>
-      <div class="card-header">
-        <span>提交记录 - 项目 {{ projectId }}</span>
-        <el-space>
-          <el-button @click="$router.back()">返回</el-button>
-          <el-button type="primary" @click="exportCsv">导出CSV</el-button>
-        </el-space>
+  <div class="admin-submissions-fullscreen">
+    <el-card class="submissions-card">
+      <template #header>
+        <div class="card-header">
+          <span>提交记录 - 项目 {{ projectId }}</span>
+          <el-space>
+            <el-button @click="$router.back()">返回</el-button>
+            <el-button type="primary" @click="exportCsv">导出CSV</el-button>
+          </el-space>
+        </div>
+      </template>
+
+      <div class="filter-section">
+        <el-form inline>
+          <el-form-item label="字段">
+            <el-select v-model="filterKey" placeholder="选择字段" style="width: 200px;">
+              <el-option v-for="f in expectedFields" :key="f.key" :label="f.label + ' ('+f.key+')'" :value="f.key" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="值">
+            <el-input v-model="filterValue" placeholder="输入匹配值" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="applyFilter">搜索</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+            <el-button type="success" @click="downloadZip()">打包全部</el-button>
+            <el-button type="warning" :disabled="!filterKey || !filterValue" @click="downloadZip(true)">按条件打包</el-button>
+          </el-form-item>
+        </el-form>
       </div>
-    </template>
 
-    <el-form inline style="margin-bottom: 10px;">
-      <el-form-item label="字段">
-        <el-select v-model="filterKey" placeholder="选择字段" style="width: 200px;">
-          <el-option v-for="f in expectedFields" :key="f.key" :label="f.label + ' ('+f.key+')'" :value="f.key" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="值">
-        <el-input v-model="filterValue" placeholder="输入匹配值" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="applyFilter">搜索</el-button>
-        <el-button @click="resetFilter">重置</el-button>
-        <el-button type="success" @click="downloadZip()">打包全部</el-button>
-        <el-button type="warning" :disabled="!filterKey || !filterValue" @click="downloadZip(true)">按条件打包</el-button>
-      </el-form-item>
-    </el-form>
+      <div class="table-container">
+        <el-table
+            :data="groupedContent"
+            v-loading="loading"
+            :height="tableHeight"
+            style="width: 100%"
+        >
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <!-- 时间线风格的版本链 -->
+              <div class="timeline-container">
+                <div class="timeline-wrapper">
+                  <div v-for="(version, index) in row.versions" :key="version.id" class="timeline-item">
+                    <!-- 时间线连接线 -->
+                    <div v-if="index < row.versions.length - 1" class="timeline-line"></div>
 
-    <el-table :data="groupedContent" v-loading="loading">
-      <el-table-column type="expand">
-        <template #default="{ row }">
-          <!-- 时间线风格的版本链 -->
-          <div class="timeline-container">
-            <div class="timeline-wrapper">
-              <div v-for="(version, index) in row.versions" :key="version.id" class="timeline-item">
-                <!-- 时间线连接线 -->
-                <div v-if="index < row.versions.length - 1" class="timeline-line"></div>
-
-                <!-- 状态图标 -->
-                <div class="timeline-icon" :class="getVersionStatusClass(version, index, row.versions.length)">
-                  <!-- 最新版本 - 绿色勾号 -->
-                  <svg v-if="index === 0" class="icon-svg" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                  </svg>
-                  <!-- 历史版本 - 蓝色上传图标 -->
-                  <svg v-else-if="index < row.versions.length - 1" class="icon-svg" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                  </svg>
-                  <!-- 最早版本 - 灰色圆点 -->
-                  <div v-else class="timeline-dot"></div>
-                </div>
-
-                <!-- 版本信息 -->
-                <div class="version-content">
-                  <!-- 版本标题和时间 -->
-                  <div class="version-header">
-                    <div class="version-title-wrapper">
-                      <span class="version-title">
-                        {{ getVersionTitle(index, row.versions.length) }}
-                      </span>
-                      <span v-if="index === 0" class="latest-badge">
-                        最新
-                      </span>
+                    <!-- 状态图标 -->
+                    <div class="timeline-icon" :class="getVersionStatusClass(version, index, row.versions.length)">
+                      <!-- 最新版本 - 绿色勾号 -->
+                      <svg v-if="index === 0" class="icon-svg" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                      </svg>
+                      <!-- 历史版本 - 蓝色上传图标 -->
+                      <svg v-else-if="index < row.versions.length - 1" class="icon-svg" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                      </svg>
+                      <!-- 最早版本 - 灰色圆点 -->
+                      <div v-else class="timeline-dot"></div>
                     </div>
-                    <time class="version-time">{{ formatDateTime(version.createdAt) }}</time>
-                  </div>
 
-                  <!-- 文件列表 -->
-                  <div v-if="version.files && version.files.length > 0" class="file-list">
-                    <div v-for="(file, fileIndex) in version.files" :key="fileIndex" class="file-item">
-                      <div class="file-info">
-                        <!-- 文件图标 -->
-                        <div class="file-icon">
-                          <svg class="file-icon-svg" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
-                          </svg>
+                    <!-- 版本信息 -->
+                    <div class="version-content">
+                      <!-- 版本标题和时间 -->
+                      <div class="version-header">
+                        <div class="version-title-wrapper">
+                          <span class="version-title">
+                            {{ getVersionTitle(index, row.versions.length) }}
+                          </span>
+                          <span v-if="index === 0" class="latest-badge">
+                            最新
+                          </span>
                         </div>
-                        <!-- 文件名 -->
-                        <span class="file-name" @click="download(file)">
-                          {{ filename(file) }}
-                        </span>
+                        <time class="version-time">{{ formatDateTime(version.createdAt) }}</time>
                       </div>
-                      <!-- 操作按钮 -->
-                      <div class="file-actions">
-                        <button @click="download(file)" class="action-btn action-btn-primary">
-                          <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
-                          </svg>
-                          下载
-                        </button>
-                        <button @click="copy(file)" class="action-btn action-btn-secondary">
-                          <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                            <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-                          </svg>
-                          复制
-                        </button>
+
+                      <!-- 文件列表 -->
+                      <div v-if="version.files && version.files.length > 0" class="file-list">
+                        <div v-for="(file, fileIndex) in version.files" :key="fileIndex" class="file-item">
+                          <div class="file-info">
+                            <!-- 文件图标 -->
+                            <div class="file-icon">
+                              <svg class="file-icon-svg" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                              </svg>
+                            </div>
+                            <!-- 文件名 -->
+                            <span class="file-name" @click="download(file)">
+                              {{ filename(file) }}
+                            </span>
+                          </div>
+                          <!-- 操作按钮 -->
+                          <div class="file-actions">
+                            <button @click="download(file)" class="action-btn action-btn-primary">
+                              <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                              </svg>
+                              下载
+                            </button>
+                            <button @click="copy(file)" class="action-btn action-btn-secondary">
+                              <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                              </svg>
+                              复制
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 无文件提示 -->
+                      <div v-else class="no-files">
+                        暂无文件
                       </div>
                     </div>
-                  </div>
-
-                  <!-- 无文件提示 -->
-                  <div v-else class="no-files">
-                    暂无文件
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </template>
-      </el-table-column>
+            </template>
+          </el-table-column>
 
-      <el-table-column label="提交者" min-width="220">
-        <template #default="{row}">
-          <div v-for="(v,k) in parseSubmitter(row)" :key="k" style="line-height:1.6;">
-            <strong>{{k}}:</strong> <span>{{v}}</span>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column prop="submitCount" label="次数" width="80"/>
-      <el-table-column label="最新文件" min-width="220">
-        <template #default="{row}">
-          <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)">{{ filename(row.latestUrl) }}</a>
-        </template>
-      </el-table-column>
-      <el-table-column label="逾期" width="80">
-        <template #default="{row}"><el-tag :type="isOverdue(row)?'danger':'success'">{{ isOverdue(row)?'是':'否' }}</el-tag></template>
-      </el-table-column>
-      <el-table-column prop="ipAddress" label="IP" width="140"/>
-      <el-table-column prop="ipCountry" label="国家" width="120"/>
-      <el-table-column prop="ipProvince" label="省份" width="120"/>
-      <el-table-column prop="ipCity" label="城市" width="120"/>
-      <el-table-column prop="osName" label="系统" />
-      <el-table-column prop="browserName" label="浏览器" />
-      <el-table-column prop="deviceType" label="设备" width="100"/>
-      <el-table-column prop="createdAt" label="创建时间" width="180"/>
-    </el-table>
+          <el-table-column label="提交者" min-width="220">
+            <template #default="{row}">
+              <div v-for="(v,k) in parseSubmitter(row)" :key="k" style="line-height:1.6;">
+                <strong>{{k}}:</strong> <span>{{v}}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="submitCount" label="次数" width="80"/>
+          <el-table-column label="最新文件" min-width="220">
+            <template #default="{row}">
+              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)">{{ filename(row.latestUrl) }}</a>
+            </template>
+          </el-table-column>
+          <el-table-column label="逾期" width="80">
+            <template #default="{row}"><el-tag :type="isOverdue(row)?'danger':'success'">{{ isOverdue(row)?'是':'否' }}</el-tag></template>
+          </el-table-column>
+          <el-table-column prop="ipAddress" label="IP" width="140"/>
+          <el-table-column prop="osName" label="系统" />
+          <el-table-column prop="browserName" label="浏览器" />
+          <el-table-column prop="deviceType" label="设备" width="100"/>
+          <el-table-column prop="createdAt" label="创建时间" width="180"/>
+        </el-table>
+      </div>
 
-    <div style="margin-top: 16px; text-align: right;">
-      <el-pagination
-          background
-          layout="prev, pager, next, total"
-          :total="page.totalElements"
-          :page-size="size"
-          :current-page="pageNumber+1"
-          @current-change="onPageChange"
-      />
-    </div>
-  </el-card>
+      <div class="pagination-section">
+        <el-pagination
+            background
+            layout="prev, pager, next, total"
+            :total="page.totalElements"
+            :page-size="size"
+            :current-page="pageNumber+1"
+            @current-change="onPageChange"
+        />
+      </div>
+    </el-card>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onUnmounted } from 'vue'
 import api from '../../api'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
 const auth = useAuthStore()
-onMounted(()=>{ if (!auth.loaded) auth.loadMe() })
+
 const projectId = route.params.id
 const pageNumber = ref(0)
 const size = ref(20)
@@ -168,6 +176,15 @@ const loading = ref(false)
 const expectedFields = ref([])
 const filterKey = ref('')
 const filterValue = ref('')
+const tableHeight = ref('auto')
+
+// 动态计算表格高度
+const calculateTableHeight = () => {
+  // header(64px) + main padding(48px) + card header(约70px) + filter(约80px) + pagination(约60px) + 额外间距(40px)
+  const fixedHeight = 64 + 48 + 70 + 80 + 60 + 40
+  tableHeight.value = `calc(100vh - ${fixedHeight}px)`
+}
+
 const filteredContent = computed(()=>{
   if (!filterKey.value || !filterValue.value) return page.value.content
   const prefix = String(filterValue.value)
@@ -184,7 +201,7 @@ const load = async () => {
   try {
     const { data } = await api.pageSubmissions(projectId, pageNumber.value, size.value)
     page.value = data
-    // 尝试从项目接口读取期望字段作为筛选项
+
     const pj = await api.getProject(projectId)
     project.value = pj.data
     if (Array.isArray(project.value.expectedUserFields)) {
@@ -194,10 +211,21 @@ const load = async () => {
     } else {
       expectedFields.value = []
     }
-  } finally { loading.value = false }
+  } finally {
+    loading.value = false
+  }
 }
 
-onMounted(load)
+onMounted(() => {
+  if (!auth.loaded) auth.loadMe()
+  load()
+  calculateTableHeight()
+  window.addEventListener('resize', calculateTableHeight)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', calculateTableHeight)
+})
 
 const onPageChange = (p)=>{ pageNumber.value = p-1; load() }
 
@@ -210,8 +238,10 @@ const exportCsv = async () => {
   link.click()
   URL.revokeObjectURL(link.href)
 }
-const applyFilter = ()=>{}
-const resetFilter = ()=>{ filterKey.value=''; filterValue.value='' }
+
+const applyFilter = ()=>{ pageNumber.value = 0; load() }
+const resetFilter = ()=>{ filterKey.value=''; filterValue.value=''; pageNumber.value=0; load() }
+
 const downloadZip = async (byFilter=false) => {
   const params = byFilter ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
   const { data } = await api.exportZip(projectId, params.fieldKey, params.fieldValue)
@@ -230,6 +260,7 @@ const parseSubmitter = (row) => {
     return JSON.parse(row.submitterInfo)
   } catch { return {} }
 }
+
 const parseUrls = (row) => {
   try {
     if (!row || !row.fileUrls) return []
@@ -241,12 +272,14 @@ const parseUrls = (row) => {
     return []
   } catch { return [] }
 }
+
 const filename = (u) => {
   if (!u) return ''
   const q = u.split('?')[0]
   const i = Math.max(q.lastIndexOf('/'), q.lastIndexOf('\\'))
   return i >= 0 ? q.substring(i+1) : q
 }
+
 const download = (u) => {
   if (!u) return
   const a = document.createElement('a')
@@ -254,10 +287,10 @@ const download = (u) => {
   a.target = '_blank'
   a.click()
 }
+
 const copy = async (text) => {
   try { await navigator.clipboard.writeText(text) } catch {}
 }
-const logout = async () => { await auth.logout(); location.href = '/admin/login' }
 
 // 分组：按 submitterFingerprint 聚合为一个"版本链"
 const groupedContent = computed(() => {
@@ -282,9 +315,6 @@ const groupedContent = computed(() => {
       latestUrl: latestUrls && latestUrls.length ? latestUrls[latestUrls.length-1] : '',
       latestCreatedAt: latest.createdAt,
       ipAddress: latest.ipAddress,
-      ipCountry: latest.ipCountry,
-      ipProvince: latest.ipProvince,
-      ipCity: latest.ipCity,
       osName: latest.osName,
       browserName: latest.browserName,
       deviceType: latest.deviceType,
@@ -303,28 +333,17 @@ const isOverdue = (groupRow) => {
   } catch { return false }
 }
 
-// 新增的时间线相关方法
+// 时间线状态样式
 const getVersionStatusClass = (version, index, totalVersions) => {
-  if (index === 0) {
-    // 最新版本 - 绿色
-    return 'status-latest'
-  } else if (index < totalVersions - 1) {
-    // 中间版本 - 蓝色
-    return 'status-middle'
-  } else {
-    // 最早版本 - 灰色
-    return 'status-earliest'
-  }
+  if (index === 0) return 'status-latest'
+  if (index < totalVersions - 1) return 'status-middle'
+  return 'status-earliest'
 }
 
 const getVersionTitle = (index, totalVersions) => {
-  if (index === 0) {
-    return '最新提交'
-  } else if (index === totalVersions - 1) {
-    return '初始提交'
-  } else {
-    return `第 ${totalVersions - index} 次提交`
-  }
+  if (index === 0) return '最新提交'
+  if (index === totalVersions - 1) return '初始提交'
+  return `第 ${totalVersions - index} 次提交`
 }
 
 const formatDateTime = (dateTimeStr) => {
@@ -355,15 +374,70 @@ const formatDateTime = (dateTimeStr) => {
 </script>
 
 <style scoped>
-.card-header{
+/* 全屏布局 - 考虑 header 高度 */
+.admin-submissions-fullscreen {
+  height: calc(100vh - 64px - 48px); /* 减去 header(64px) 和 main 的 padding(24px * 2) */
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.submissions-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.submissions-card :deep(.el-card__header) {
+  padding: 15px 20px;
+  flex-shrink: 0;
+}
+
+.submissions-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px;
+}
+
+.card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
+/* 筛选区域 */
+.filter-section {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* 表格容器 */
+.table-container {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 分页区域 */
+.pagination-section {
+  flex-shrink: 0;
+  margin-top: 16px;
+  text-align: right;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
 /* 时间线样式 */
 .timeline-container {
   padding: 16px 24px;
+  max-height: min(400px, calc(100vh - 520px));
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .timeline-wrapper {
@@ -403,17 +477,9 @@ const formatDateTime = (dateTimeStr) => {
   flex-shrink: 0;
 }
 
-.timeline-icon.status-latest {
-  background-color: #10b981;
-}
-
-.timeline-icon.status-middle {
-  background-color: #3b82f6;
-}
-
-.timeline-icon.status-earliest {
-  background-color: #9ca3af;
-}
+.timeline-icon.status-latest { background-color: #10b981; }
+.timeline-icon.status-middle { background-color: #3b82f6; }
+.timeline-icon.status-earliest { background-color: #9ca3af; }
 
 .icon-svg {
   width: 16px;
@@ -428,10 +494,7 @@ const formatDateTime = (dateTimeStr) => {
   border-radius: 50%;
 }
 
-.version-content {
-  flex: 1;
-  min-width: 0;
-}
+.version-content { flex: 1; min-width: 0; }
 
 .version-header {
   display: flex;
@@ -440,136 +503,26 @@ const formatDateTime = (dateTimeStr) => {
   margin-bottom: 8px;
 }
 
-.version-title-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.version-title-wrapper { display: flex; align-items: center; gap: 8px; }
+.version-title { font-size: 14px; font-weight: 500; color: #111827; }
+.latest-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; background-color: #dcfce7; color: #166534; }
+.version-time { font-size: 14px; color: #6b7280; }
 
-.version-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #111827;
-}
-
-.latest-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 500;
-  background-color: #dcfce7;
-  color: #166534;
-}
-
-.version-time {
-  font-size: 14px;
-  color: #6b7280;
-}
-
-.file-list {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.file-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px;
-  background-color: #f9fafb;
-  border-radius: 8px;
-  transition: background-color 0.2s;
-}
-
-.file-item:hover {
-  background-color: #f3f4f6;
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-}
-
-.file-icon {
-  flex-shrink: 0;
-}
-
-.file-icon-svg {
-  width: 20px;
-  height: 20px;
-  color: #9ca3af;
-}
-
-.file-name {
-  font-size: 14px;
-  color: #111827;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  transition: color 0.2s;
-}
-
-.file-name:hover {
-  color: #2563eb;
-}
-
-.file-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s;
-  background: transparent;
-}
-
-.action-btn:focus {
-  outline: none;
-}
-
-.action-btn-primary {
-  color: #2563eb;
-}
-
-.action-btn-primary:hover {
-  color: #1d4ed8;
-}
-
-.action-btn-secondary {
-  color: #6b7280;
-}
-
-.action-btn-secondary:hover {
-  color: #4b5563;
-}
-
-.action-icon {
-  width: 12px;
-  height: 12px;
-  margin-right: 4px;
-}
-
-.no-files {
-  margin-top: 8px;
-  font-size: 14px;
-  color: #6b7280;
-  font-style: italic;
-}
+.file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.file-item { display: flex; align-items: center; justify-content: space-between; padding: 8px; background-color: #f9fafb; border-radius: 8px; transition: background-color 0.2s; }
+.file-item:hover { background-color: #f3f4f6; }
+.file-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.file-icon { flex-shrink: 0; }
+.file-icon-svg { width: 20px; height: 20px; color: #9ca3af; }
+.file-name { font-size: 14px; color: #111827; cursor: pointer; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; transition: color 0.2s; }
+.file-name:hover { color: #2563eb; }
+.file-actions { display: flex; align-items: center; gap: 8px; }
+.action-btn { display: inline-flex; align-items: center; padding: 4px 8px; border: none; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; transition: color 0.2s; background: transparent; }
+.action-btn:focus { outline: none; }
+.action-btn-primary { color: #2563eb; }
+.action-btn-primary:hover { color: #1d4ed8; }
+.action-btn-secondary { color: #6b7280; }
+.action-btn-secondary:hover { color: #4b5563; }
+.action-icon { width: 12px; height: 12px; margin-right: 4px; }
+.no-files { margin-top: 8px; font-size: 14px; color: #6b7280; font-style: italic; }
 </style>
