@@ -34,7 +34,7 @@
         <el-table
             :data="groupedContent"
             v-loading="loading"
-            :height="tableHeight"
+            :max-height="tableMaxHeight"
             style="width: 100%"
         >
           <el-table-column type="expand">
@@ -130,7 +130,7 @@
           <el-table-column prop="submitCount" label="次数" width="80"/>
           <el-table-column label="最新文件" min-width="220">
             <template #default="{row}">
-              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)">{{ filename(row.latestUrl) }}</a>
+              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)" class="file-link">{{ filename(row.latestUrl) }}</a>
             </template>
           </el-table-column>
           <el-table-column label="逾期" width="80">
@@ -144,16 +144,7 @@
         </el-table>
       </div>
 
-      <div class="pagination-section">
-        <el-pagination
-            background
-            layout="prev, pager, next, total"
-            :total="page.totalElements"
-            :page-size="size"
-            :current-page="pageNumber+1"
-            @current-change="onPageChange"
-        />
-      </div>
+
     </el-card>
   </div>
 </template>
@@ -169,20 +160,22 @@ const auth = useAuthStore()
 
 const projectId = route.params.id
 const pageNumber = ref(0)
-const size = ref(20)
+// 默认拉取更多数据以配合滚动查看
+const size = ref(100)
 const page = ref({ content: [], totalElements: 0 })
 const project = ref(null)
 const loading = ref(false)
 const expectedFields = ref([])
 const filterKey = ref('')
 const filterValue = ref('')
-const tableHeight = ref('auto')
+const tableMaxHeight = ref(400)
 
-// 动态计算表格高度
+// 动态计算表格最大高度（Element Plus 使用 max-height 时表头为 sticky）
 const calculateTableHeight = () => {
-  // header(64px) + main padding(48px) + card header(约70px) + filter(约80px) + pagination(约60px) + 额外间距(40px)
-  const fixedHeight = 64 + 48 + 70 + 80 + 60 + 40
-  tableHeight.value = `calc(100vh - ${fixedHeight}px)`
+  // header(64px) + main padding(48px) + card header(约70px) + filter(约80px) + 额外间距(40px)
+  const fixedHeight = 64 + 48 + 70 + 80 + 40
+  const h = Math.max(240, window.innerHeight - fixedHeight)
+  tableMaxHeight.value = h
 }
 
 const filteredContent = computed(()=>{
@@ -226,8 +219,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', calculateTableHeight)
 })
-
-const onPageChange = (p)=>{ pageNumber.value = p-1; load() }
 
 const exportCsv = async () => {
   const { data } = await api.exportSubmissions(projectId)
@@ -376,22 +367,27 @@ const formatDateTime = (dateTimeStr) => {
 <style scoped>
 /* 全屏布局 - 考虑 header 高度 */
 .admin-submissions-fullscreen {
-  height: calc(100vh - 64px - 48px); /* 减去 header(64px) 和 main 的 padding(24px * 2) */
+  height: calc(100vh - 64px - 20px);
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;
 }
 
 .submissions-card {
-  height: 100%;
+  height: 99.6%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 .submissions-card :deep(.el-card__header) {
-  padding: 15px 20px;
+  padding: 20px 0;
   flex-shrink: 0;
+  border: none;
+  background: transparent;
 }
 
 .submissions-card :deep(.el-card__body) {
@@ -399,21 +395,27 @@ const formatDateTime = (dateTimeStr) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 20px;
+  padding: 0;
+  background: #ffffff;
+  border-radius: 8px;
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
 }
 
 /* 筛选区域 */
 .filter-section {
   flex-shrink: 0;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  margin-bottom: 0;
+  padding: 24px 24px 20px;
   border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 
 /* 表格容器 */
@@ -421,20 +423,104 @@ const formatDateTime = (dateTimeStr) => {
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  background: #ffffff;
 }
 
-/* 分页区域 */
-.pagination-section {
-  flex-shrink: 0;
-  margin-top: 16px;
-  text-align: right;
-  padding-top: 16px;
-  border-top: 1px solid #e5e7eb;
+/* 表格样式优化 - 参考图片风格 */
+.table-container :deep(.el-table) {
+  background: transparent;
+  font-size: 14px;
+}
+
+/* 移除外边框 */
+.table-container :deep(.el-table::before),
+.table-container :deep(.el-table::after) {
+  display: none;
+}
+
+.table-container :deep(.el-table td.el-table__cell),
+.table-container :deep(.el-table th.el-table__cell.is-leaf) {
+  border: none;
+}
+
+/* 表头样式 */
+.table-container :deep(.el-table__header-wrapper) {
+  background: #ffffff;
+}
+
+.table-container :deep(.el-table th.el-table__cell) {
+  background: #ffffff;
+  color: #111827;
+  font-weight: 500;
+  font-size: 13px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* 表格行样式 */
+.table-container :deep(.el-table__row) {
+  background: #ffffff;
+}
+
+.table-container :deep(.el-table tbody tr:hover > td) {
+  background-color: #f9fafb !important;
+}
+
+.table-container :deep(.el-table td.el-table__cell) {
+  padding: 20px 0;
+  color: #6b7280;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+/* 展开行样式 */
+.table-container :deep(.el-table__expanded-cell) {
+  padding: 0;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* 展开图标样式 */
+.table-container :deep(.el-table__expand-icon) {
+  color: #6b7280;
+}
+
+.table-container :deep(.el-table__expand-icon .el-icon) {
+  font-size: 14px;
+}
+
+/* 链接样式 */
+.file-link {
+  color: #6366f1;
+  text-decoration: none;
+  transition: color 0.2s;
+  font-weight: 500;
+}
+
+.file-link:hover {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+/* 按钮样式优化 */
+:deep(.el-button) {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 8px 16px;
+}
+
+:deep(.el-button--primary) {
+  background-color: #6366f1;
+  border-color: #6366f1;
+}
+
+:deep(.el-button--primary:hover) {
+  background-color: #4f46e5;
+  border-color: #4f46e5;
 }
 
 /* 时间线样式 */
 .timeline-container {
-  padding: 16px 24px;
+  padding: 24px 32px;
   max-height: min(400px, calc(100vh - 520px));
   overflow-y: auto;
   box-sizing: border-box;
@@ -509,20 +595,20 @@ const formatDateTime = (dateTimeStr) => {
 .version-time { font-size: 14px; color: #6b7280; }
 
 .file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-.file-item { display: flex; align-items: center; justify-content: space-between; padding: 8px; background-color: #f9fafb; border-radius: 8px; transition: background-color 0.2s; }
-.file-item:hover { background-color: #f3f4f6; }
+.file-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; transition: all 0.2s; }
+.file-item:hover { background-color: #f9fafb; border-color: #d1d5db; }
 .file-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .file-icon { flex-shrink: 0; }
 .file-icon-svg { width: 20px; height: 20px; color: #9ca3af; }
 .file-name { font-size: 14px; color: #111827; cursor: pointer; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; transition: color 0.2s; }
-.file-name:hover { color: #2563eb; }
+.file-name:hover { color: #6366f1; }
 .file-actions { display: flex; align-items: center; gap: 8px; }
-.action-btn { display: inline-flex; align-items: center; padding: 4px 8px; border: none; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; transition: color 0.2s; background: transparent; }
+.action-btn { display: inline-flex; align-items: center; padding: 6px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; background: transparent; }
 .action-btn:focus { outline: none; }
-.action-btn-primary { color: #2563eb; }
-.action-btn-primary:hover { color: #1d4ed8; }
+.action-btn-primary { color: #6366f1; }
+.action-btn-primary:hover { color: #4f46e5; background-color: #eef2ff; }
 .action-btn-secondary { color: #6b7280; }
-.action-btn-secondary:hover { color: #4b5563; }
-.action-icon { width: 12px; height: 12px; margin-right: 4px; }
-.no-files { margin-top: 8px; font-size: 14px; color: #6b7280; font-style: italic; }
+.action-btn-secondary:hover { color: #4b5563; background-color: #f3f4f6; }
+.action-icon { width: 14px; height: 14px; margin-right: 4px; }
+.no-files { margin-top: 8px; font-size: 14px; color: #9ca3af; font-style: italic; }
 </style>
