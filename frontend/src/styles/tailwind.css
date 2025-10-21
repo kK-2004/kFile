@@ -1,0 +1,4 @@
+/* 仅引入 Tailwind v4 的 theme + utilities，避免预设样式(preflight)与 Element 冲突 */
+@import "tailwindcss/theme";
+@import "tailwindcss/utilities";
+

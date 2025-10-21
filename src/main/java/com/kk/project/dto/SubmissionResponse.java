@@ -12,6 +12,7 @@ public class SubmissionResponse {
     private Long id;
     private Object submitterInfo; // keep as raw JSON decoded if possible
     private Object fileUrls;      // raw JSON array or string
+    private java.util.List<String> fileNames; // decoded names aligned with fileUrls
     private Integer submitCount;
     private Boolean expired;
     private String ipAddress;
@@ -62,4 +63,3 @@ public class SubmissionResponse {
         return r;
     }
 }
-

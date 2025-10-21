@@ -88,7 +88,12 @@ public class SubmissionController {
         Project p = projectService.get(projectId);
         Page<Submission> pg = submissionService.page(p, PageRequest.of(page, size));
         java.util.List<com.kk.project.dto.SubmissionResponse> mapped = new java.util.ArrayList<>();
-        for (Submission s : pg.getContent()) mapped.add(com.kk.project.dto.SubmissionResponse.from(s));
+        for (Submission s : pg.getContent()) {
+            com.kk.project.dto.SubmissionResponse r = com.kk.project.dto.SubmissionResponse.from(s);
+            // add decoded file names aligned with fileUrls for admin display
+            r.setFileNames(extractDecryptedNames(s));
+            mapped.add(r);
+        }
         return new org.springframework.data.domain.PageImpl<>(mapped, pg.getPageable(), pg.getTotalElements());
     }
 

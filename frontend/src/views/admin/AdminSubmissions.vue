@@ -103,19 +103,19 @@
                               </svg>
                             </div>
                             <!-- 文件名 -->
-                            <span class="file-name" @click="download(file)">
-                              {{ filename(file) }}
+                            <span class="file-name" @click="download(file.url)">
+                              {{ file.name || filename(file.url) }}
                             </span>
                           </div>
                           <!-- 操作按钮 -->
                           <div class="file-actions">
-                            <button @click="download(file)" class="action-btn action-btn-primary">
+                            <button @click="download(file.url)" class="action-btn action-btn-primary">
                               <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
                               </svg>
                               下载
                             </button>
-                            <button @click="copy(file)" class="action-btn action-btn-secondary">
+                            <button @click="copy(file.url)" class="action-btn action-btn-secondary">
                               <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
                                 <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
@@ -147,7 +147,7 @@
           <el-table-column prop="submitCount" label="次数" width="80"/>
           <el-table-column label="最新文件" min-width="220">
             <template #default="{row}">
-              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)" class="file-link">{{ filename(row.latestUrl) }}</a>
+              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)" class="file-link">{{ row.latestName || filename(row.latestUrl) }}</a>
             </template>
           </el-table-column>
           <el-table-column label="逾期" width="80">
@@ -295,6 +295,18 @@ const parseUrls = (row) => {
   } catch { return [] }
 }
 
+const parseNames = (row) => {
+  try {
+    if (!row || !row.fileNames) return []
+    if (Array.isArray(row.fileNames)) return row.fileNames
+    if (typeof row.fileNames === 'string') {
+      const s = row.fileNames.trim()
+      if (s.startsWith('[')) return JSON.parse(s)
+    }
+    return []
+  } catch { return [] }
+}
+
 const filename = (u) => {
   if (!u) return ''
   const q = u.split('?')[0]
@@ -329,19 +341,29 @@ const groupedContent = computed(() => {
     list.sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt))
     const latest = list[0]
     const latestUrls = parseUrls(latest)
+    const latestNames = parseNames(latest)
+    const latestIdx = latestUrls && latestUrls.length ? (latestUrls.length - 1) : -1
+    const latestUrl = latestIdx >= 0 ? latestUrls[latestIdx] : ''
+    const latestName = latestIdx >= 0 ? (latestNames[latestIdx] || filename(latestUrl)) : ''
     groups.push({
       id: latest.id,
       submitCount: latest.submitCount,
       submitterInfo: latest.submitterInfo,
       submitterFingerprint: k,
-      latestUrl: latestUrls && latestUrls.length ? latestUrls[latestUrls.length-1] : '',
+      latestUrl,
+      latestName,
       latestCreatedAt: latest.createdAt,
       ipAddress: latest.ipAddress,
       osName: latest.osName,
       browserName: latest.browserName,
       deviceType: latest.deviceType,
       createdAt: latest.createdAt,
-      versions: list.map(s => ({ id: s.id, createdAt: s.createdAt, files: parseUrls(s) }))
+      versions: list.map(s => {
+        const urls = parseUrls(s)
+        const names = parseNames(s)
+        const files = urls.map((u, i) => ({ url: u, name: names[i] || filename(u) }))
+        return { id: s.id, createdAt: s.createdAt, files }
+      })
     })
   }
   return groups
