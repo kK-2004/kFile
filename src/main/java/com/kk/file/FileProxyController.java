@@ -34,11 +34,25 @@ public class FileProxyController {
         } catch (Exception ignored) {}
         String filename = decryptFilenameFromKey(key);
         MediaType mediaType = MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
+        boolean forceDownload = "1".equals(request.getParameter("download"));
         InputStream in = ossService.openByKey(key);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
-                .contentType(mediaType)
-                .body(new InputStreamResource(in));
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+        if (forceDownload) {
+            // Set Content-Disposition as attachment with UTF-8 filename* fallback
+            String ascii = filename.replaceAll("[^\\x20-\\x7E]", "_");
+            String encoded;
+            try {
+                encoded = java.net.URLEncoder.encode(filename, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+            } catch (Exception e) {
+                encoded = filename;
+            }
+            builder.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded);
+            builder.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        } else {
+            builder.header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"");
+            builder.contentType(mediaType);
+        }
+        return builder.body(new InputStreamResource(in));
     }
 
     private String decryptFilenameFromKey(String key) {

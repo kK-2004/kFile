@@ -20,9 +20,20 @@ instance.interceptors.response.use(
   (error) => {
     try {
       const status = error?.response?.status
-      const redirect = error?.response?.headers?.['x-redirect']
+      let redirect = error?.response?.headers?.['x-redirect']
       if (status === 401 && redirect) {
-        const to = redirect + '?redirect=' + encodeURIComponent(window.location.pathname + window.location.search)
+        // 兼容后端未带子路径前缀的场景：自动补上 BASE_URL
+        if (!/^https?:/i.test(redirect)) {
+          const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+          if (redirect.startsWith('/')) {
+            if (!redirect.startsWith(base + '/')) {
+              redirect = base + redirect
+            }
+          } else {
+            redirect = base + '/' + redirect
+          }
+        }
+        const to = redirect + (redirect.includes('?') ? '&' : '?') + 'redirect=' + encodeURIComponent(window.location.pathname + window.location.search)
         window.location.href = to
         return
       }

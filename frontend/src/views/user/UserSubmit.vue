@@ -1,5 +1,5 @@
 <template>
-  <el-card v-loading="loading">
+  <el-card v-loading="loading || submitting" :element-loading-text="submitting ? '正在提交，请稍候…' : '正在加载…'">
     <template #header>
       <div class="card-header">
         <span>{{ headerTitle }}</span>
@@ -116,7 +116,7 @@
 
         <el-form-item>
           <el-space>
-            <el-button type="primary" :disabled="project.offline || (isPastDeadline && !project.allowOverdue)" @click="submit">提交</el-button>
+            <el-button type="primary" :disabled="submitting || project.offline || (isPastDeadline && !project.allowOverdue)" @click="submit">提交</el-button>
             <el-button @click="$router.back()">返回</el-button>
           </el-space>
         </el-form-item>
@@ -143,6 +143,7 @@ const files = ref([])
 const fileList = ref([])
 const latest = ref({ exists: false })
 const querying = ref(false)
+const submitting = ref(false)
 const auth = useAuthStore()
 const isAdmin = computed(() => !!auth.user)
 const mode = ref('submit') // 'submit' | 'status'
@@ -222,6 +223,7 @@ const validateFiles = () => {
 
 const submit = async () => {
   if (!validateFiles()) return
+  submitting.value = true
   try {
     const { data } = await api.submit(id, submitter.value, files.value)
     ElMessage.success('提交成功')
@@ -232,6 +234,8 @@ const submit = async () => {
   } catch (e) {
     const msg = e?.response?.data?.message || '提交失败'
     ElMessage.error(msg)
+  } finally {
+    submitting.value = false
   }
 }
 

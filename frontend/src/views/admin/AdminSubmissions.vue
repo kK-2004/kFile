@@ -103,13 +103,13 @@
                               </svg>
                             </div>
                             <!-- 文件名 -->
-                            <span class="file-name" @click="download(file.url)">
+                            <span class="file-name" @click="download(file.url, file.name)">
                               {{ file.name || filename(file.url) }}
                             </span>
                           </div>
                           <!-- 操作按钮 -->
                           <div class="file-actions">
-                            <button @click="download(file.url)" class="action-btn action-btn-primary">
+                            <button @click="download(file.url, file.name)" class="action-btn action-btn-primary">
                               <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
                               </svg>
@@ -147,7 +147,7 @@
           <el-table-column prop="submitCount" label="次数" width="80"/>
           <el-table-column label="最新文件" min-width="220">
             <template #default="{row}">
-              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl)" class="file-link">{{ row.latestName || filename(row.latestUrl) }}</a>
+              <a v-if="row.latestUrl" href="javascript:void(0)" @click="download(row.latestUrl, row.latestName)" class="file-link">{{ row.latestName || filename(row.latestUrl) }}</a>
             </template>
           </el-table-column>
           <el-table-column label="逾期" width="80">
@@ -314,16 +314,26 @@ const filename = (u) => {
   return i >= 0 ? q.substring(i+1) : q
 }
 
-const download = (u) => {
+const download = (u, name) => {
   if (!u) return
-  let href = u
-  // 兼容历史数据：若为绝对根路径 /file/oss/...，需要补上子路径前缀
-  if (href.startsWith('/file/oss/')) {
-    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-    href = base + href
-  }
+  // 将任何 OSS URL 统一转换为站内代理，附带 download=1 以触发附件下载与解密后的文件名
+  const proxyPrefix = '/file/oss/'
+  let key = ''
+  try {
+    const idx = u.indexOf(proxyPrefix)
+    if (idx >= 0) {
+      key = u.substring(idx + proxyPrefix.length)
+    } else {
+      // 从阿里云地址或任意路径中提取 key（首个域名后的路径）
+      const pos = u.indexOf('/', 8)
+      key = pos > 0 ? u.substring(pos + 1) : u
+    }
+  } catch { key = u }
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const href = `${base}${proxyPrefix}${encodeURI(key)}?download=1`
   const a = document.createElement('a')
   a.href = href
+  if (name) a.download = name
   a.target = '_blank'
   a.click()
 }
