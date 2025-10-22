@@ -56,8 +56,9 @@ public class SecurityConfig {
                 ).permitAll()
                 // allow public read of projects
                 .requestMatchers(HttpMethod.GET, "/api/projects", "/api/projects/*").permitAll()
-                // allow public file proxy via internal OSS
+                // allow public file proxy via internal OSS (GET/HEAD)
                 .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/file/oss/**").permitAll()
                 // allow public submit to project
                 .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions").permitAll()
                 // allow public check latest status
