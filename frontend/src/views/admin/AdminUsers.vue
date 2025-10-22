@@ -144,7 +144,7 @@ const delUser = async (row) => {
     ElMessage.error(msg)
   }
 }
-const logout = async () => { await auth.logout(); location.href = '/admin/login' }
+const logout = async () => { await auth.logout(); location.href = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/admin/login' }
 </script>
 
 <style scoped>

@@ -30,6 +30,8 @@ public class AliOssService implements OssService {
 
     private final OssProperties properties;
     private final com.kk.common.FileNameCodec fileNameCodec;
+    @org.springframework.beans.factory.annotation.Value("${app.base-path:}")
+    private String appBasePath;
     private OSS ossClientPublic;
     private OSS ossClientInternal;
 
@@ -87,7 +89,7 @@ public class AliOssService implements OssService {
                 log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), objectKey, ex.getMessage(), ex);
                 throw new IllegalStateException("文件上传失败，请联系管理员", ex);
             }
-            return "/file/oss/" + objectKey;
+            return normalizeBase(appBasePath) + "/file/oss/" + objectKey;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
         }
@@ -116,7 +118,7 @@ public class AliOssService implements OssService {
                 log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), key, ex.getMessage(), ex);
                 throw new IllegalStateException("文件上传失败，请联系管理员", ex);
             }
-            return "/file/oss/" + key;
+            return normalizeBase(appBasePath) + "/file/oss/" + key;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
         }
@@ -210,10 +212,13 @@ public class AliOssService implements OssService {
     public String extractObjectKey(String url) {
         String host = properties.getHost();
         String objectKey;
-        // Support internal proxy path: /file/oss/{key}
+        // Support internal proxy path anywhere in URL: .../file/oss/{key}
         String proxyPrefix = "/file/oss/";
-        if (url != null && url.startsWith(proxyPrefix)) {
-            return url.substring(proxyPrefix.length());
+        if (url != null) {
+            int pos = url.indexOf(proxyPrefix);
+            if (pos >= 0) {
+                return url.substring(pos + proxyPrefix.length());
+            }
         }
         if (StringUtils.hasText(host) && url.startsWith(host)) {
             objectKey = url.substring(host.length());
@@ -252,5 +257,15 @@ public class AliOssService implements OssService {
                 ;
         if (idx < 0 || idx == filename.length() - 1) return "";
         return filename.substring(idx + 1).toLowerCase();
+    }
+
+    private String normalizeBase(String base) {
+        if (base == null || base.isBlank()) return "";
+        String b = base.trim();
+        if (!b.startsWith("/")) b = "/" + b;
+        if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
+        // root path should be empty string
+        if ("/".equals(b)) return "";
+        return b;
     }
 }

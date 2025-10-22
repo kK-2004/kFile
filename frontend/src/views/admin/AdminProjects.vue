@@ -79,9 +79,10 @@ const load = async () => {
   try {
     const { data } = await api.adminListProjects()
     const origin = window.location.origin
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
     projects.value = data.map(p => ({
       ...p,
-      _userLink: `${origin}/user/projects/${p.id}`
+      _userLink: `${origin}${base}/user/projects/${p.id}`
     }))
   } finally { loading.value = false }
 }
@@ -92,12 +93,14 @@ const edit = (row) => {
   const id = row.id
   if (!id) return
   // 强制从详情页读取完整字段
-  window.location.href = `/admin/projects/${id}/edit`
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  window.location.href = `${base}/admin/projects/${id}/edit`
 }
 
 const viewSubmissions = (row) => {
   const id = row.id
-  window.location.href = `/admin/projects/${id}/submissions`
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  window.location.href = `${base}/admin/projects/${id}/submissions`
 }
 
   const exportCsv = async (row) => {
@@ -126,7 +129,7 @@ const copy = async (text) => {
   catch { ElMessage.error('复制失败') }
 }
 
-const logout = async () => { await auth.logout(); location.href = '/admin/login' }
+const logout = async () => { await auth.logout(); location.href = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/admin/login' }
 
 const parseMs = (v) => {
   if (v === null || v === undefined) return null

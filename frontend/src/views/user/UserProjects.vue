@@ -47,7 +47,10 @@ const load = async () => {
 
 onMounted(load)
 
-const open = (row)=>{ window.location.href = `/user/projects/${row.id}` }
+const open = (row)=>{
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  window.location.href = `${base}/user/projects/${row.id}`
+}
 
 const parseMs = (v) => {
   if (v === null || v === undefined) return null

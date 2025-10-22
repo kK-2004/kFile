@@ -1,6 +1,12 @@
 import axios from 'axios'
 
-const apiBase = import.meta.env.VITE_API_BASE || '' // use vite proxy if empty
+// 1) 由 Vite 的 BASE_URL 推导出子路径（vite.config.js 已设 base: '/kfile/'）
+const baseFromVite = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+
+// 2) 允许通过 VITE_API_BASE 覆盖；未提供时回退到 baseFromVite
+//    注意用 ??（空值合并），这样 dev 环境可将其设为 '' 以使用代理
+const apiBase = (import.meta.env.VITE_API_BASE ?? baseFromVite)
+
 
 const instance = axios.create({
   baseURL: apiBase,

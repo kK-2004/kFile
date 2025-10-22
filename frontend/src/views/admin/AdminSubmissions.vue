@@ -316,8 +316,14 @@ const filename = (u) => {
 
 const download = (u) => {
   if (!u) return
+  let href = u
+  // 兼容历史数据：若为绝对根路径 /file/oss/...，需要补上子路径前缀
+  if (href.startsWith('/file/oss/')) {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+    href = base + href
+  }
   const a = document.createElement('a')
-  a.href = u
+  a.href = href
   a.target = '_blank'
   a.click()
 }
