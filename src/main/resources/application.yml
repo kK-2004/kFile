@@ -11,10 +11,9 @@ oss:
 spring:
   profiles:
     active: dev
+  config:
+    import: application-${spring.profiles.active}.yml
 
 geoip:
   enabled: ${GEOIP_ENABLED:false}
   mmdbPath: ${GEOIP_MMDB_PATH:}
-
-env:
-  cors: ${CORS_ORIGIN:http://localhost:5173}
