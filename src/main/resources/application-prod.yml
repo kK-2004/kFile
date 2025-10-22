@@ -4,7 +4,7 @@ env:
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
     username: kfile
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
