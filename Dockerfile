@@ -85,7 +85,7 @@ COPY --from=builder --chown=spring:spring /app.jar /app/app.jar
 USER spring:spring
 
 # 运行参数与环境
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200" \
+ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200" \
     PARAMS="" \
     SPRING_PROFILES_ACTIVE="prod" \
     TZ="Asia/Shanghai"

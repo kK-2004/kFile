@@ -24,8 +24,6 @@ spring:
       max-request-size: 100MB
 
 server:
-  servlet:
-    context-path: /kfile
   tomcat:
     max-swallow-size: -1
     max-http-form-post-size: -1
