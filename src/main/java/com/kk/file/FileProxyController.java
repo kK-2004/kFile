@@ -25,8 +25,13 @@ public class FileProxyController {
     @GetMapping("/file/oss/**")
     public ResponseEntity<InputStreamResource> proxy(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        String prefix = "/file/oss/";
-        String key = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
+        String marker = "/file/oss/";
+        int pos = uri.indexOf(marker);
+        String key = pos >= 0 ? uri.substring(pos + marker.length()) : uri;
+        // decode percent-encoded path segments (e.g., %E7%BA%BF...)
+        try {
+            key = java.net.URLDecoder.decode(key, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
         String filename = decryptFilenameFromKey(key);
         MediaType mediaType = MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
         InputStream in = ossService.openByKey(key);
