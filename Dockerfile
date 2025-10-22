@@ -33,9 +33,10 @@ ENV MAVEN_OPTS="-Xmx2048m -Xms1024m \
 
 # 1) 复制 POM（利用缓存）
 COPY pom.xml ./
+RUN mvn dependency:go-offline -B || true
 
-# 2) 复制源码
-COPY . .
+# 2) 复制源码和配置
+COPY src ./src
 
 # 3) 构建打包
 RUN mvn -B -q -T 1C clean package \
@@ -74,10 +75,12 @@ RUN sed -ri 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g'
 
 # 非 root 用户运行
 RUN groupadd -r spring && useradd -r -g spring spring && \
-    mkdir -p /app/logs && chown -R spring:spring /app
+    mkdir -p /app/logs /app/config && chown -R spring:spring /app
 
-# 复制 JAR
+# 复制 JAR 和配置文件（如果需要外部配置）
 COPY --from=builder --chown=spring:spring /app.jar /app/app.jar
+# 如果配置文件不在 JAR 中，取消下面这行的注释
+# COPY --from=builder --chown=spring:spring /build/src/main/resources/application-prod.yml /app/config/
 
 USER spring:spring
 
@@ -87,11 +90,11 @@ ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200" \
     SPRING_PROFILES_ACTIVE="prod" \
     TZ="Asia/Shanghai"
 
-# 应用端口（可根据需要调整）
+# 应用端口
 EXPOSE 8086
 
-# 健康检查
+# 健康检查（修正端口）
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8084/ || exit 1
+  CMD curl -f http://localhost:8086/actuator/health || exit 1
 
 ENTRYPOINT ["sh", "-c", "java -Djava.security.egd=file:/dev/./urandom $JAVA_OPTS -jar /app/app.jar $PARAMS"]
