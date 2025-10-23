@@ -92,7 +92,8 @@ export default {
   directPut(putUrl, file, onUploadProgress) {
     return axios.put(putUrl, file, {
       headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      timeout: 120000,
+      // 大文件上传时间不可预估，禁用超时由浏览器网络栈控制
+      timeout: 0,
       onUploadProgress
     })
   },

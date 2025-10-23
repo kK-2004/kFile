@@ -59,8 +59,10 @@ public class SecurityConfig {
                 // allow public file proxy via internal OSS (GET/HEAD)
                 .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/file/oss/**").permitAll()
-                // allow public submit to project
+                // allow public submit to project + 直传初始化/完成
                 .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions/direct-init").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions/direct-complete").permitAll()
                 // allow public check latest status
                 .requestMatchers(HttpMethod.GET, "/api/projects/*/submissions/status").permitAll()
                 // CORS preflight

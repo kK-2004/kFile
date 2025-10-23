@@ -91,7 +91,11 @@ public class SubmissionController {
             String originalName = fm.getName();
             String enc = submissionService.getFileNameCodec().encrypt(originalName);
             String key = submissionService.normalizeFullKey(keyPrefix, enc);
-            String putUrl = submissionService.getOssService().generatePresignedPutUrlByKey(key, 300, fm.getContentType());
+            long size = Math.max(0L, fm.getSize() == null ? 0L : fm.getSize());
+            // 过期时间按文件大小动态设置：至少10分钟，至多2小时；估算速率 64KB/s + 额外 5 分钟冗余
+            long estimate = size <= 0 ? 600 : (size / 65536) + 300;
+            long expireSeconds = Math.max(600, Math.min(7200, estimate));
+            String putUrl = submissionService.getOssService().generatePresignedPutUrlByKey(key, expireSeconds, fm.getContentType());
             Map<String,Object> e = new java.util.HashMap<>();
             e.put("name", originalName);
             e.put("key", key);
@@ -132,7 +136,7 @@ public class SubmissionController {
         private Object submitter;
         private java.util.List<FileMeta> files = java.util.List.of();
         @lombok.Data
-        public static class FileMeta { private String name; private String contentType; }
+        public static class FileMeta { private String name; private String contentType; private Long size; }
     }
 
     @lombok.Data
