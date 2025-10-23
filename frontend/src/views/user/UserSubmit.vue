@@ -74,6 +74,8 @@
         <el-alert v-if="project.offline" type="warning" show-icon title="项目已下线，无法提交" />
         <el-alert v-else-if="isPastDeadline && !project.allowOverdue" type="warning" show-icon :title="`项目已过期，无法提交（截止时间：${endAtText}）`" />
         <el-alert v-else-if="isPastDeadline && project.allowOverdue" type="warning" show-icon :title="`当前为逾期提交（截止时间：${endAtText}），该提交将标记为逾期`" />
+        <el-alert v-else-if="project && project.allowResubmit === false" type="info" show-icon title="本项目每个提交者仅可提交一次，如需修改请联系管理员" />
+        <el-alert v-if="!project.allowResubmit && latest.exists" type="warning" show-icon title="已存在您的提交记录，重复提交已被禁止" />
         <div v-else style="margin-bottom: 10px; color: var(--el-text-color-secondary);">截止时间：{{ endAtText }}</div>
 
         <el-form :model="submitter" label-width="120px" style="max-width: 800px; margin-top: 12px;">
@@ -102,6 +104,7 @@
             :on-change="onFileChange"
             :file-list="fileList"
             :limit="project.allowMultiFiles ? 10 : 1"
+            :disabled="!project.allowResubmit && latest.exists"
             drag>
             <i class="el-icon-upload"></i>
             <div class="el-upload__text">拖拽或 <em>点击上传</em></div>
@@ -116,7 +119,7 @@
 
         <el-form-item>
           <el-space>
-            <el-button type="primary" :disabled="submitting || project.offline || (isPastDeadline && !project.allowOverdue)" @click="submit">提交</el-button>
+            <el-button type="primary" :disabled="disableSubmit" @click="submit">提交</el-button>
             <el-button @click="$router.back()">返回</el-button>
           </el-space>
         </el-form-item>
@@ -222,10 +225,17 @@ function formatTimestamp(ms) {
   return `${y}-${M}-${day} ${h}:${m}:${s}`
 }
 
-const endAtText = computed(() => {
-  if (!project.value || !project.value.endAt) return '无'
-  try { return formatTimestamp(project.value.endAt) } catch { return '无' }
-})
+  const endAtText = computed(() => {
+    if (!project.value || !project.value.endAt) return '无'
+    try { return formatTimestamp(project.value.endAt) } catch { return '无' }
+  })
+
+  const disableSubmit = computed(() => {
+    const p = project.value || {}
+    const baseBlocked = submitting.value || p.offline || (isPastDeadline.value && !p.allowOverdue)
+    const repeatBlocked = (p.allowResubmit === false) && !!latest.value?.exists
+    return baseBlocked || repeatBlocked
+  })
 
 const load = async () => {
   loading.value = true
@@ -262,6 +272,18 @@ const validateFiles = () => {
 
 const submit = async () => {
   if (!validateFiles()) return
+  // 若不允许重复提交，先检查是否已有记录，避免用户在同一页面连续提交导致上传后失败
+  try {
+    if (!project.value?.allowResubmit) {
+      const { data } = await api.latestStatus(id, JSON.stringify(submitter.value||{}))
+      if (data?.exists) {
+        ElMessage.error('该项目不允许重复提交，已存在您的最新记录')
+        return
+      }
+    }
+  } catch (e) {
+    // 忽略查询失败，按原流程继续（后端仍会二次校验）
+  }
   submitting.value = true
   try {
     showUploadDialog.value = true
@@ -312,6 +334,8 @@ const submit = async () => {
 
     // 3) 通知后端完成并落库
     const keys = entries.map(e => e.key)
+    // 上传结束后进入“保存中”阶段，避免 100% 时用户误解已完成
+    currentFileName.value = '正在保存...'
     await api.directComplete(id, submitter.value, keys)
 
     ElMessage.success('提交成功')

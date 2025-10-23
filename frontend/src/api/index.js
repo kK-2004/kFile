@@ -68,12 +68,32 @@ export default {
     return instance.get(`/api/projects/${projectId}/submissions/status`, { params: p, responseType: 'json' })
   },
   submit(projectId, submitter, files, config = {}) {
+    const totalSize = (files || []).reduce((s, f) => s + (f?.size || 0), 0)
+    const threshold = 50 * 1024 * 1024 // 50MB
+
+    // 若总大小超过阈值，自动走直传 OSS 流程
+    if (totalSize > threshold) {
+      const filesMeta = Array.from(files || []).map(f => ({ name: f.name, contentType: f.type || 'application/octet-stream', size: f.size || 0 }))
+      return this.directInit(projectId, submitter, filesMeta).then(res => {
+        const entries = res?.data?.entries || res?.entries || []
+        if (!entries.length) throw new Error('直传初始化失败：未返回任何条目')
+        // 顺序上传每个文件（如需并发可后续优化）
+        return entries.reduce((p, entry, idx) => {
+          const file = files[idx]
+          return p.then(() => this.directPut(entry.putUrl, file, config.onUploadProgress))
+        }, Promise.resolve()).then(() => {
+          const keys = entries.map(e => e.key)
+          return this.directComplete(projectId, submitter, keys)
+        })
+      })
+    }
+
+    // 否则继续走表单上传，并将超时设为 0（不限时）
     const fd = new FormData()
     fd.append('submitter', JSON.stringify(submitter || {}))
     for (const f of files) fd.append('files', f)
-    // 取消手动设置 Content-Type，让浏览器自动带 boundary；延长超时以适配大文件
     return instance.post(`/api/projects/${projectId}/submissions`, fd, {
-      timeout: 120000,
+      timeout: 0,
       ...config
     })
   },

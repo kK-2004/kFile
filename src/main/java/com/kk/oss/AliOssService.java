@@ -306,13 +306,7 @@ public class AliOssService implements OssService {
     @Override
     public InputStream openByKey(String key) {
         try {
-            if (ossClientInternal != null) {
-                try {
-                    return ossClientInternal.getObject(properties.getBucket(), key).getObjectContent();
-                } catch (Exception ex) {
-                    log.warn("OSS 内网读取失败，回退公网: key={}, reason={}", key, ex.getMessage());
-                }
-            }
+            // 统一走公网下载，便于在多环境/代理/CDN 下行为一致
             return ossClientPublic.getObject(properties.getBucket(), key).getObjectContent();
         } catch (Exception e) {
             throw new IllegalStateException("读取OSS对象失败", e);

@@ -86,6 +86,12 @@ public class SubmissionController {
         Project p = projectService.get(projectId);
         String submitterJson = toJson(body.getSubmitter());
         String keyPrefix = submissionService.buildUploadPrefix(p, submitterJson);
+        // 为每次直传增加一次性子目录，避免同名文件覆盖
+        String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
+                .format(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))
+                + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        if (!keyPrefix.endsWith("/")) keyPrefix += "/";
+        keyPrefix = keyPrefix + uniq + "/";
         java.util.List<Map<String,Object>> entries = new java.util.ArrayList<>();
         for (DirectInitRequest.FileMeta fm : body.getFiles()) {
             String originalName = fm.getName();
