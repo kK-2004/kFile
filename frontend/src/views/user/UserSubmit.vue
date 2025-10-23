@@ -120,6 +120,9 @@
             <el-button @click="$router.back()">返回</el-button>
           </el-space>
         </el-form-item>
+        <div v-if="submitting && uploadProgress > 0" class="progress-wrap">
+          <el-progress :percentage="uploadProgress" :text-inside="true" :stroke-width="18" status="success" />
+        </div>
         </el-form>
       </template>
     </div>
@@ -144,6 +147,7 @@ const fileList = ref([])
 const latest = ref({ exists: false })
 const querying = ref(false)
 const submitting = ref(false)
+const uploadProgress = ref(0)
 const auth = useAuthStore()
 const isAdmin = computed(() => !!auth.user)
 const mode = ref('submit') // 'submit' | 'status'
@@ -225,7 +229,14 @@ const submit = async () => {
   if (!validateFiles()) return
   submitting.value = true
   try {
-    const { data } = await api.submit(id, submitter.value, files.value)
+    uploadProgress.value = 0
+    const { data } = await api.submit(id, submitter.value, files.value, {
+      onUploadProgress: (evt) => {
+        if (evt && typeof evt.loaded === 'number' && typeof evt.total === 'number' && evt.total > 0) {
+          uploadProgress.value = Math.floor((evt.loaded / evt.total) * 100)
+        }
+      }
+    })
     ElMessage.success('提交成功')
     fileList.value = []
     files.value = []
@@ -236,6 +247,7 @@ const submit = async () => {
     ElMessage.error(msg)
   } finally {
     submitting.value = false
+    uploadProgress.value = 0
   }
 }
 
@@ -360,6 +372,9 @@ const filename = (u) => { if (!u) return ''; const q = u.split('?')[0]; const i 
 :deep(.el-input__wrapper) {
   border-radius: 4px;
 }
+</style>
+<style scoped>
+.progress-wrap { margin: 8px 0; }
 </style>
 <style scoped>
 /* 时间线样式（与后台一致的视觉） */

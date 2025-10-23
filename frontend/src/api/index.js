@@ -67,13 +67,14 @@ export default {
     const p = typeof params === 'string' ? { submitter: params } : (params || {})
     return instance.get(`/api/projects/${projectId}/submissions/status`, { params: p, responseType: 'json' })
   },
-  submit(projectId, submitter, files) {
+  submit(projectId, submitter, files, config = {}) {
     const fd = new FormData()
     fd.append('submitter', JSON.stringify(submitter || {}))
     for (const f of files) fd.append('files', f)
     // 取消手动设置 Content-Type，让浏览器自动带 boundary；延长超时以适配大文件
     return instance.post(`/api/projects/${projectId}/submissions`, fd, {
-      timeout: 120000
+      timeout: 120000,
+      ...config
     })
   },
 

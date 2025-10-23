@@ -195,10 +195,16 @@ public class AliOssService implements OssService {
     @Override
     public List<String> uploadWithPrefix(List<MultipartFile> files, String keyPrefix) {
         List<String> urls = new ArrayList<>();
-        for (MultipartFile f : files) {
-            urls.add(uploadWithPrefix(f, keyPrefix));
+        try {
+            for (MultipartFile f : files) {
+                urls.add(uploadWithPrefix(f, keyPrefix));
+            }
+            return urls;
+        } catch (RuntimeException ex) {
+            // 发生异常时回滚已上传的对象，避免产生孤儿文件
+            try { deleteByUrls(urls); } catch (Exception ignore) {}
+            throw ex;
         }
-        return urls;
     }
 
     private String baseName(String filename) {
@@ -316,6 +322,46 @@ public class AliOssService implements OssService {
             return ossClientPublic.getObject(properties.getBucket(), key).getObjectContent();
         } catch (Exception e) {
             throw new IllegalStateException("读取OSS对象失败", e);
+        }
+    }
+
+    @Override
+    public ObjectStat statByKey(String key) {
+        try {
+            com.aliyun.oss.model.ObjectMetadata meta;
+            if (ossClientInternal != null) {
+                try {
+                    meta = ossClientInternal.getObjectMetadata(properties.getBucket(), key);
+                } catch (Exception ex) {
+                    log.warn("OSS 内网元数据失败，回退公网: key={}, reason={}", key, ex.getMessage());
+                    meta = ossClientPublic.getObjectMetadata(properties.getBucket(), key);
+                }
+            } else {
+                meta = ossClientPublic.getObjectMetadata(properties.getBucket(), key);
+            }
+            return new ObjectStat(meta.getContentLength(), meta.getETag(), meta.getLastModified(), meta.getContentType());
+        } catch (Exception e) {
+            throw new IllegalStateException("获取OSS对象元数据失败", e);
+        }
+    }
+
+    @Override
+    public InputStream openByKeyRange(String key, long startInclusive, long endInclusive) {
+        try {
+            com.aliyun.oss.model.GetObjectRequest req = new com.aliyun.oss.model.GetObjectRequest(properties.getBucket(), key);
+            req.setRange(startInclusive, endInclusive);
+            if (ossClientInternal != null) {
+                try {
+                    return ossClientInternal.getObject(req).getObjectContent();
+                } catch (Exception ex) {
+                    log.warn("OSS 内网分段读取失败，回退公网: key={}, reason={}", key, ex.getMessage());
+                    return ossClientPublic.getObject(req).getObjectContent();
+                }
+            } else {
+                return ossClientPublic.getObject(req).getObjectContent();
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("读取OSS对象分段失败", e);
         }
     }
 
