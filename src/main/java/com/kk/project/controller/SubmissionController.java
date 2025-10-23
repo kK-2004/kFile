@@ -270,6 +270,27 @@ public class SubmissionController {
                 .body(body);
     }
 
+    // 预生成ZIP：返回带 Content-Length 的下载
+    @GetMapping("/archive-prepared")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
+    public ResponseEntity<org.springframework.core.io.Resource> downloadPrepared(@PathVariable Long projectId,
+                                                                                @RequestParam(required = false) String fieldKey,
+                                                                                @RequestParam(required = false) String fieldValue) {
+        Project p = projectService.get(projectId);
+        String name = "project-" + projectId + (fieldKey != null && fieldValue != null ? ("-"+fieldKey+"-"+fieldValue): "") + ".zip";
+        java.io.File file = submissionService.prepareArchiveFile(p, fieldKey, fieldValue, name);
+        org.springframework.core.io.FileSystemResource res = new org.springframework.core.io.FileSystemResource(file);
+        String ascii = name.replaceAll("[^\\x20-\\x7E]", "_");
+        String encoded;
+        try { encoded = java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8).replaceAll("\\+", "%20"); }
+        catch (Exception e) { encoded = ascii; }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded)
+                .header(HttpHeaders.CONTENT_TYPE, "application/zip")
+                .contentLength(res.getFile().length())
+                .body(res);
+    }
+
     @GetMapping("/status")
     public Map<String, Object> latestStatus(@PathVariable Long projectId,
                                             @RequestParam(required = false) String submitter,

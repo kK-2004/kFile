@@ -72,10 +72,23 @@
       <el-button type="danger" :disabled="delInput.trim() !== delPhrase" @click="doDelete">删除</el-button>
     </template>
   </el-dialog>
+
+  <el-dialog v-model="progressVisible" title="正在删除项目" width="480px" :close-on-click-modal="false" :close-on-press-escape="false">
+    <div v-if="task">
+      <div style="margin-bottom:8px;">{{ delTarget?.name || '' }}</div>
+      <el-progress :percentage="progressPct" :text-inside="true" :stroke-width="18" />
+      <div style="margin-top:8px; color: var(--el-text-color-secondary);">
+        已删除文件：{{ task.deletedFiles || 0 }} / {{ task.totalFiles || 0 }}；状态：{{ task.status }}
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="progressVisible=false" :disabled="task && task.status==='RUNNING'">关闭</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
@@ -188,21 +201,42 @@ const delProject = async (row) => {
 }
 
 // 删除确认对话框逻辑
-import { computed, ref } from 'vue'
 const delVisible = ref(false)
 const delTarget = ref(null)
 const delInput = ref('')
 const delPhrase = computed(() => `我确认删除${delTarget.value?.name || ''}`)
 const openDelete = (row) => { delTarget.value = row; delInput.value = ''; delVisible.value = true }
+// 异步删除 + 进度查看
+const task = ref(null)
+let pollTimer = null
+const progressVisible = ref(false)
+const progressPct = computed(()=>{
+  const t = task.value
+  if (!t || !t.totalFiles) return 0
+  return Math.floor((t.deletedFiles / t.totalFiles) * 100)
+})
 const doDelete = async () => {
   if (delInput.value.trim() !== delPhrase.value) return
   try {
-    await api.deleteProject(delTarget.value.id)
-    ElMessage.success('已删除')
+    const { data } = await api.adminStartDeleteProject(delTarget.value.id)
     delVisible.value = false
-    load()
+    progressVisible.value = true
+    task.value = { taskId: data.taskId, status: data.status, totalFiles: 0, deletedFiles: 0 }
+    pollTimer && clearInterval(pollTimer)
+    pollTimer = setInterval(async () => {
+      try {
+        const { data: st } = await api.adminGetTask(task.value.taskId)
+        task.value = st
+        if (st.status === 'COMPLETED' || st.status === 'FAILED') {
+          clearInterval(pollTimer)
+          pollTimer = null
+          if (st.status === 'COMPLETED') { ElMessage.success('删除完成'); progressVisible.value = false; load() }
+          else { ElMessage.error('删除失败：' + (st.message||'')) }
+        }
+      } catch (e) {}
+    }, 1200)
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '删除失败')
+    ElMessage.error(e?.response?.data?.message || '删除任务创建失败')
   }
 }
 </script>

@@ -149,4 +149,14 @@ export default {
   ,adminResetPassword(userId) { return instance.post(`/api/admin/users/${userId}/reset-password`) }
   ,adminDeleteUser(userId) { return instance.delete(`/api/admin/users/${userId}`) }
   ,deleteProject(id) { return instance.delete(`/api/projects/${id}`) }
+  ,adminStartDeleteProject(id) { return instance.post(`/api/admin/projects/${id}/delete-task`) }
+  ,adminGetTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}`) }
+
+  // Prepared ZIP（带 Content-Length）
+  ,exportZipPrepared(projectId, fieldKey, fieldValue) {
+    const params = {}
+    if (fieldKey) params.fieldKey = fieldKey
+    if (fieldValue) params.fieldValue = fieldValue
+    return instance.get(`/api/projects/${projectId}/submissions/archive-prepared`, { params, responseType: 'blob' })
+  }
 }

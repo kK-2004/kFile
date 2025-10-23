@@ -26,7 +26,7 @@
           <el-form-item>
             <el-button type="primary" @click="applyFilter">搜索</el-button>
             <el-button @click="resetFilter">重置</el-button>
-            <el-button type="success" @click="downloadZip()">打包</el-button>
+            <el-button type="success" @click="openZipDialog(false)">打包</el-button>
             <el-tooltip
               effect="dark"
               placement="top"
@@ -34,7 +34,7 @@
             >
               <span class="help-icon">?</span>
             </el-tooltip>
-            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="downloadZip(true)"
+            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="openZipDialog(true)"
                        style="margin-left: 8px;">按条件打包</el-button>
             <el-tooltip
               effect="dark"
@@ -163,6 +163,17 @@
 
 
     </el-card>
+    <!-- 打包保存方式对话框 -->
+    <el-dialog v-model="zipDialog" title="打包下载" width="420px">
+      <p>选择保存方式：</p>
+      <el-space>
+        <el-button type="primary" @click="confirmZip('prepared')">预生成并保存（可选目录）</el-button>
+        <el-button @click="confirmZip('stream')">直接下载（流式）</el-button>
+      </el-space>
+      <template #footer>
+        <el-button @click="zipDialog=false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -264,15 +275,48 @@ const exportCsv = async () => {
 const applyFilter = ()=>{ pageNumber.value = 0; load() }
 const resetFilter = ()=>{ filterKey.value=''; filterValue.value=''; pageNumber.value=0; load() }
 
-const downloadZip = async (byFilter=false) => {
-  const params = byFilter ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
-  const { data } = await api.exportZip(projectId, params.fieldKey, params.fieldValue)
-  const blob = new Blob([data], { type: 'application/zip' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = byFilter && params.fieldKey && params.fieldValue ? `project-${projectId}-${params.fieldKey}-${params.fieldValue}.zip` : `project-${projectId}.zip`
-  link.click()
-  URL.revokeObjectURL(link.href)
+// 打包对话框：选择保存方式
+const zipDialog = ref(false)
+const zipByFilter = ref(false)
+const openZipDialog = (byFilter) => { zipByFilter.value = !!byFilter; zipDialog.value = true }
+const confirmZip = async (mode) => {
+  const params = zipByFilter.value ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
+  const filename = zipByFilter.value && params.fieldKey && params.fieldValue ? `project-${projectId}-${params.fieldKey}-${params.fieldValue}.zip` : `project-${projectId}.zip`
+  if (mode === 'prepared') {
+    // 预生成ZIP，带Content-Length；支持可选保存到目录
+    const res = await api.exportZipPrepared(projectId, params.fieldKey, params.fieldValue)
+    const blob = new Blob([res.data], { type: 'application/zip' })
+    // 优先使用本地目录保存（File System Access API）
+    if ('showDirectoryPicker' in window) {
+      try {
+        const dir = await window.showDirectoryPicker()
+        const fileHandle = await dir.getFileHandle(filename, { create: true })
+        const writable = await fileHandle.createWritable()
+        await writable.write(blob)
+        await writable.close()
+        zipDialog.value = false
+        return
+      } catch (e) {
+        // 用户取消或失败，回退为普通下载
+      }
+    }
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(link.href)
+    zipDialog.value = false
+  } else {
+    // 流式下载（原有行为）
+    const res = await api.exportZip(projectId, params.fieldKey, params.fieldValue)
+    const blob = new Blob([res.data], { type: 'application/zip' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(link.href)
+    zipDialog.value = false
+  }
 }
 
 const parseSubmitter = (row) => {

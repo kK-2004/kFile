@@ -444,6 +444,57 @@ import java.util.*;
         };
     }
 
+    public java.io.File prepareArchiveFile(Project project, String fieldKey, String fieldValue, String fileNameHint) {
+        try {
+            java.io.File tmp = java.io.File.createTempFile("kfile-archive-", ".zip");
+            tmp.deleteOnExit();
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp);
+                 java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(fos)) {
+                // 仅导出每位提交者的最新一次有效提交（与 archive 保持一致）
+                java.util.List<Submission> all = submissionRepository.findVisibleByProjectOrderByCreatedAtDesc(project);
+                java.util.LinkedHashMap<String, Submission> latestMap = new java.util.LinkedHashMap<>();
+                boolean doFilter = org.springframework.util.StringUtils.hasText(fieldKey) && org.springframework.util.StringUtils.hasText(fieldValue);
+                for (Submission s : all) {
+                    if (doFilter) {
+                        try {
+                            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(s.getSubmitterInfo());
+                            com.fasterxml.jackson.databind.JsonNode v = node.get(fieldKey);
+                            String val = v == null || v.isNull() ? "" : v.asText("");
+                            if (val == null || !val.startsWith(fieldValue)) continue;
+                        } catch (Exception ignored) { continue; }
+                    }
+                    String key = s.getSubmitterFingerprint();
+                    if (key == null || key.isBlank()) key = String.valueOf(s.getId());
+                    if (!latestMap.containsKey(key)) latestMap.put(key, s);
+                }
+                java.util.List<Submission> baseList = new java.util.ArrayList<>(latestMap.values());
+                for (Submission s : baseList) {
+                    java.util.List<String> urls;
+                    try {
+                        urls = objectMapper.readValue(s.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+                    } catch (Exception e) { continue; }
+                    java.util.List<String> toPack = urls;
+                    if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && urls != null && !urls.isEmpty()) {
+                        toPack = java.util.List.of(urls.get(urls.size() - 1));
+                    }
+                    for (String url : toPack) {
+                        String key = ossService.extractObjectKey(url);
+                        String entryName = decryptFilenameInPath(trimPrefixForZip(key));
+                        try (java.io.InputStream in = ossService.openByKey(key)) {
+                            zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
+                            in.transferTo(zos);
+                            zos.closeEntry();
+                        } catch (Exception e) { /* skip */ }
+                    }
+                }
+                zos.finish();
+            }
+            return tmp;
+        } catch (Exception e) {
+            throw new IllegalStateException("生成ZIP失败", e);
+        }
+    }
+
     private String trimPrefixForZip(String objectKey) {
         String pre = ossProperties.getPrefix();
         if (pre != null && !pre.isEmpty()) {
