@@ -87,7 +87,8 @@ public class ProjectService {
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid JSON for project fields", e);
         }
-        return p;
+        // 确保立刻持久化（避免某些环境下的延迟刷新导致前端看到旧值）
+        return projectRepository.save(p);
     }
 
     public List<String> parsePathSegments(Project p) {

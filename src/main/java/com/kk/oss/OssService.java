@@ -46,4 +46,10 @@ public interface OssService {
 
     // 根据对象 key 构造站点代理访问路径（/file/oss/{key}，带上 app.base-path 如有）
     default String proxyUrlByKey(String key) { throw new UnsupportedOperationException(); }
+
+    // ===== Direct multipart (browser) support =====
+    default String initiateMultipartUpload(String key) { throw new UnsupportedOperationException(); }
+    default String generatePresignedUploadPartUrl(String key, String uploadId, int partNumber, long expireSeconds, String contentType) { throw new UnsupportedOperationException(); }
+    default void completeMultipartUpload(String key, String uploadId, List<com.aliyun.oss.model.PartETag> parts) { throw new UnsupportedOperationException(); }
+    default void abortMultipartUpload(String key, String uploadId) { throw new UnsupportedOperationException(); }
 }

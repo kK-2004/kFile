@@ -287,13 +287,7 @@ const submit = async () => {
   submitting.value = true
   try {
     showUploadDialog.value = true
-    // 1) 直传初始化：向后端申请每个文件的 PUT 签名与 key
     const metas = files.value.map(f => ({ name: f.name, type: f.type, size: f.size }))
-    const { data } = await api.directInit(id, submitter.value, metas)
-    const entries = Array.isArray(data?.entries) ? data.entries : []
-    if (entries.length !== files.value.length) throw new Error('直传初始化失败')
-
-    // 2) 顺序上传并更新总体进度
     const total = files.value.reduce((s, f) => s + (f.size || 0), 0) || 1
     let uploadedAll = 0
     totalFilesCount.value = files.value.length
@@ -302,38 +296,87 @@ const submit = async () => {
     speedBps.value = 0
     let lastTickBytes = 0
     let lastTickTime = Date.now()
-    for (let i = 0; i < files.value.length; i++) {
-      const f = files.value[i]
-      const putUrl = entries[i].putUrl
-      currentFileIndex.value = i + 1
-      currentFileName.value = f.name
-      let lastLoaded = 0
-      await api.directPut(putUrl, f, (evt) => {
-        const loaded = (evt?.loaded || 0)
-        // 修正为增量
-        const delta = Math.max(0, loaded - lastLoaded)
-        lastLoaded = loaded
-        const overall = uploadedAll + loaded
-        uploadProgress.value = Math.floor((overall / total) * 100)
-        uploadedBytes.value = overall
-        const now = Date.now()
-        const dt = now - lastTickTime
-        if (dt >= 200) {
-          const dBytes = overall - lastTickBytes
-          const inst = dBytes / (dt / 1000)
-          // 简单 EMA 平滑
-          speedBps.value = speedBps.value > 0 ? (0.8 * speedBps.value + 0.2 * inst) : inst
-          lastTickTime = now
-          lastTickBytes = overall
+    const LARGE_THRESHOLD = 100 * 1024 * 1024 // 100MB 以上走分片
+    const useMultipart = files.value.some(f => (f.size||0) >= LARGE_THRESHOLD)
+    const keys = []
+
+    if (!useMultipart) {
+      // 单次 PUT 直传
+      const { data } = await api.directInit(id, submitter.value, metas)
+      const entries = Array.isArray(data?.entries) ? data.entries : []
+      if (entries.length !== files.value.length) throw new Error('直传初始化失败')
+      for (let i = 0; i < files.value.length; i++) {
+        const f = files.value[i]
+        const putUrl = entries[i].putUrl
+        currentFileIndex.value = i + 1
+        currentFileName.value = f.name
+        let lastLoaded = 0
+        await api.directPut(putUrl, f, (evt) => {
+          const loaded = (evt?.loaded || 0)
+          const overall = uploadedAll + loaded
+          uploadProgress.value = Math.floor((overall / total) * 100)
+          uploadedBytes.value = overall
+          const now = Date.now()
+          const dt = now - lastTickTime
+          if (dt >= 200) {
+            const dBytes = overall - lastTickBytes
+            const inst = dBytes / (dt / 1000)
+            speedBps.value = speedBps.value > 0 ? (0.8 * speedBps.value + 0.2 * inst) : inst
+            lastTickTime = now
+            lastTickBytes = overall
+          }
+        })
+        uploadedAll += f.size || 0
+        uploadProgress.value = Math.floor((uploadedAll / total) * 100)
+        uploadedBytes.value = uploadedAll
+      }
+      keys.push(...(data.entries.map(e=>e.key)))
+    } else {
+      // 分片直传（稳定性更好）
+      const { data } = await api.directMultipartInit(id, submitter.value, metas)
+      const entries = Array.isArray(data?.entries) ? data.entries : []
+      if (entries.length !== files.value.length) throw new Error('直传分片初始化失败')
+      for (let i = 0; i < files.value.length; i++) {
+        const f = files.value[i]
+        const entry = entries[i]
+        const partSize = entry.partSize || (10 * 1024 * 1024)
+        currentFileIndex.value = i + 1
+        currentFileName.value = f.name
+        const parts = []
+        let sent = 0
+        const totalParts = Math.ceil((f.size||0)/partSize)
+        for (let p = 0; p < totalParts; p++) {
+          const start = p * partSize
+          const end = Math.min(f.size, start + partSize)
+          const blob = f.slice(start, end)
+          const partNumber = p + 1
+          const { data: sign } = await api.directMultipartSign(id, entry.key, entry.uploadId, partNumber, blob.size, f.type)
+          const res = await axios.put(sign.url, blob, { headers: { 'Content-Type': f.type || 'application/octet-stream' }, timeout: 0 })
+          const etag = (res.headers && (res.headers['etag'] || res.headers['ETag'])) || ''
+          parts.push({ partNumber, eTag: etag.replaceAll('"','') })
+          sent += blob.size
+          const overall = uploadedAll + sent
+          uploadProgress.value = Math.floor((overall / total) * 100)
+          uploadedBytes.value = overall
+          const now = Date.now()
+          const dt = now - lastTickTime
+          if (dt >= 200) {
+            const dBytes = overall - lastTickBytes
+            const inst = dBytes / (dt / 1000)
+            speedBps.value = speedBps.value > 0 ? (0.8 * speedBps.value + 0.2 * inst) : inst
+            lastTickTime = now
+            lastTickBytes = overall
+          }
         }
-      })
-      uploadedAll += f.size || 0
-      uploadProgress.value = Math.floor((uploadedAll / total) * 100)
-      uploadedBytes.value = uploadedAll
+        await api.directMultipartComplete(id, entry.key, entry.uploadId, parts)
+        uploadedAll += f.size || 0
+        uploadProgress.value = Math.floor((uploadedAll / total) * 100)
+        uploadedBytes.value = uploadedAll
+        keys.push(entry.key)
+      }
     }
 
-    // 3) 通知后端完成并落库
-    const keys = entries.map(e => e.key)
+    // 完成入库
     // 上传结束后进入“保存中”阶段，避免 100% 时用户误解已完成
     currentFileName.value = '正在保存...'
     await api.directComplete(id, submitter.value, keys)

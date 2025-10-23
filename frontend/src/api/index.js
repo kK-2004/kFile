@@ -118,6 +118,24 @@ export default {
     })
   },
 
+  // 分片直传：初始化、签名分片、完成合并
+  directMultipartInit(projectId, submitter, filesMeta) {
+    return instance.post(`/api/projects/${projectId}/submissions/direct-multipart-init`, {
+      submitter,
+      files: filesMeta.map(f => ({ name: f.name, contentType: f.type || 'application/octet-stream', size: f.size || 0 }))
+    })
+  },
+  directMultipartSign(projectId, key, uploadId, partNumber, size, contentType) {
+    return instance.post(`/api/projects/${projectId}/submissions/direct-multipart-sign`, {
+      key, uploadId, partNumber, size, contentType
+    })
+  },
+  directMultipartComplete(projectId, key, uploadId, parts) {
+    return instance.post(`/api/projects/${projectId}/submissions/direct-multipart-complete`, {
+      key, uploadId, parts
+    })
+  },
+
   // Admin auth
   adminLogin(username, password) { return instance.post('/api/admin/auth/login', { username, password }) },
   adminMe() { return instance.get('/api/admin/auth/me') }

@@ -80,6 +80,57 @@ public class SubmissionController {
         return resp;
     }
 
+    // 直传（分片）初始化：为每个文件创建 uploadId
+    @PostMapping(path = "/direct-multipart-init", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> directMultipartInit(@PathVariable Long projectId, @RequestBody DirectInitRequest body) {
+        Project p = projectService.get(projectId);
+        String submitterJson = toJson(body.getSubmitter());
+        String keyPrefix = submissionService.buildUploadPrefix(p, submitterJson);
+        // 一次性子目录，避免覆盖
+        String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
+                .format(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))
+                + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        if (!keyPrefix.endsWith("/")) keyPrefix += "/";
+        keyPrefix = keyPrefix + uniq + "/";
+
+        java.util.List<java.util.Map<String,Object>> entries = new java.util.ArrayList<>();
+        final int partSize = 10 * 1024 * 1024; // 10MB 建议分片大小
+        for (DirectInitRequest.FileMeta fm : body.getFiles()) {
+            String enc = submissionService.getFileNameCodec().encrypt(fm.getName());
+            String key = submissionService.normalizeFullKey(keyPrefix, enc);
+            String uploadId = submissionService.getOssService().initiateMultipartUpload(key);
+            java.util.Map<String,Object> e = new java.util.HashMap<>();
+            e.put("name", fm.getName());
+            e.put("key", key);
+            e.put("uploadId", uploadId);
+            e.put("partSize", partSize);
+            e.put("url", submissionService.getOssService().proxyUrlByKey(key));
+            entries.add(e);
+        }
+        return java.util.Map.of("entries", entries);
+    }
+
+    // 直传（分片）签名某个分片的 PUT URL
+    @PostMapping(path = "/direct-multipart-sign", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String,Object> directMultipartSign(@PathVariable Long projectId, @RequestBody DirectMultipartSignRequest body) {
+        long size = Math.max(0L, body.getSize() == null ? 0L : body.getSize());
+        long estimate = size <= 0 ? 600 : (size / 65536) + 300;
+        long expireSeconds = Math.max(600, Math.min(7200, estimate));
+        String url = submissionService.getOssService().generatePresignedUploadPartUrl(body.getKey(), body.getUploadId(), body.getPartNumber(), expireSeconds, body.getContentType());
+        return java.util.Map.of("url", url);
+    }
+
+    // 直传（分片）完成合并
+    @PostMapping(path = "/direct-multipart-complete", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String,Object> directMultipartComplete(@PathVariable Long projectId, @RequestBody DirectMultipartCompleteRequest body) {
+        java.util.List<com.aliyun.oss.model.PartETag> parts = new java.util.ArrayList<>();
+        for (DirectMultipartCompleteRequest.Part p : body.getParts()) {
+            parts.add(new com.aliyun.oss.model.PartETag(p.getPartNumber(), p.getETag()));
+        }
+        submissionService.getOssService().completeMultipartUpload(body.getKey(), body.getUploadId(), parts);
+        return java.util.Map.of("ok", true);
+    }
+
     // 直传初始化：返回每个文件的 PUT 签名 URL 与对象 key
     @PostMapping(path = "/direct-init", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> directInit(@PathVariable Long projectId, @RequestBody DirectInitRequest body) {
@@ -149,6 +200,24 @@ public class SubmissionController {
     public static class DirectCompleteRequest {
         private Object submitter;
         private java.util.List<String> keys = java.util.List.of();
+    }
+
+    @lombok.Data
+    public static class DirectMultipartSignRequest {
+        private String key;
+        private String uploadId;
+        private int partNumber;
+        private Long size;
+        private String contentType;
+    }
+
+    @lombok.Data
+    public static class DirectMultipartCompleteRequest {
+        private String key;
+        private String uploadId;
+        private java.util.List<Part> parts = java.util.List.of();
+        @lombok.Data
+        public static class Part { private int partNumber; private String eTag; }
     }
 
     @GetMapping

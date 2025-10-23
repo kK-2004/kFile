@@ -368,6 +368,42 @@ public class AliOssService implements OssService {
         return url.toString();
     }
 
+    // ===== Direct multipart (browser) support =====
+    @Override
+    public String initiateMultipartUpload(String key) {
+        InitiateMultipartUploadRequest initReq = new InitiateMultipartUploadRequest(properties.getBucket(), key);
+        InitiateMultipartUploadResult res = ossClientPublic.initiateMultipartUpload(initReq);
+        return res.getUploadId();
+    }
+
+    @Override
+    public String generatePresignedUploadPartUrl(String key, String uploadId, int partNumber, long expireSeconds, String contentType) {
+        java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), key, HttpMethod.PUT);
+        req.setExpiration(expiration);
+        req.addQueryParameter("partNumber", String.valueOf(partNumber));
+        req.addQueryParameter("uploadId", uploadId);
+        if (contentType != null && !contentType.isBlank()) {
+            req.setContentType(contentType);
+        }
+        java.net.URL url = ossClientPublic.generatePresignedUrl(req);
+        return url.toString();
+    }
+
+    @Override
+    public void completeMultipartUpload(String key, String uploadId, List<PartETag> parts) {
+        parts.sort(java.util.Comparator.comparingInt(PartETag::getPartNumber));
+        CompleteMultipartUploadRequest completeReq = new CompleteMultipartUploadRequest(properties.getBucket(), key, uploadId, parts);
+        ossClientPublic.completeMultipartUpload(completeReq);
+    }
+
+    @Override
+    public void abortMultipartUpload(String key, String uploadId) {
+        try {
+            ossClientPublic.abortMultipartUpload(new AbortMultipartUploadRequest(properties.getBucket(), key, uploadId));
+        } catch (Exception ignore) {}
+    }
+
     @Override
     public String proxyUrlByKey(String key) {
         return normalizeBase(appBasePath) + "/file/oss/" + key;
