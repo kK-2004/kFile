@@ -33,17 +33,13 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="380">
+      <el-table-column label="操作" width="420">
         <template #default="{row}">
           <el-space>
             <el-button size="small" @click="edit(row)">编辑</el-button>
             <el-button size="small" @click="viewSubmissions(row)">提交记录</el-button>
             <el-button size="small" @click="exportCsv(row)">导出CSV</el-button>
-            <el-popconfirm title="确定删除该项目？此操作不可恢复" @confirm="delProject(row)">
-              <template #reference>
-                <el-button size="small" type="danger" v-if="auth.user && (auth.user.role||'').toUpperCase()==='SUPER'">删除</el-button>
-              </template>
-            </el-popconfirm>
+            <el-button size="small" type="danger" v-if="auth.user && (auth.user.role||'').toUpperCase()==='SUPER'" @click="openDelete(row)">删除</el-button>
           </el-space>
         </template>
       </el-table-column>
@@ -58,6 +54,22 @@
     <template #footer>
       <el-button @click="pwdVisible=false">取消</el-button>
       <el-button type="primary" @click="changePwd">提交</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="delVisible" :title="`删除项目：${delTarget?.name||''}`" width="520px">
+    <div style="line-height:1.8; margin-bottom: 8px;">
+      此操作将永久删除该项目、所有提交记录，以及 OSS 上已上传的文件。请谨慎操作。
+    </div>
+    <el-alert type="warning" :closable="false" show-icon title="删除后不可恢复" style="margin-bottom: 10px;" />
+    <div>为确认，请输入如下文字：</div>
+    <div style="margin: 6px 0; color: var(--el-text-color-primary); font-weight: 500;">
+      我确认删除{{ delTarget?.name || '' }}
+    </div>
+    <el-input v-model="delInput" placeholder="请输入上面的完整文字" />
+    <template #footer>
+      <el-button @click="delVisible = false">取消</el-button>
+      <el-button type="danger" :disabled="delInput.trim() !== delPhrase" @click="doDelete">删除</el-button>
     </template>
   </el-dialog>
 </template>
@@ -169,6 +181,25 @@ const delProject = async (row) => {
   try {
     await api.deleteProject(row.id)
     ElMessage.success('已删除')
+    load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '删除失败')
+  }
+}
+
+// 删除确认对话框逻辑
+import { computed, ref } from 'vue'
+const delVisible = ref(false)
+const delTarget = ref(null)
+const delInput = ref('')
+const delPhrase = computed(() => `我确认删除${delTarget.value?.name || ''}`)
+const openDelete = (row) => { delTarget.value = row; delInput.value = ''; delVisible.value = true }
+const doDelete = async () => {
+  if (delInput.value.trim() !== delPhrase.value) return
+  try {
+    await api.deleteProject(delTarget.value.id)
+    ElMessage.success('已删除')
+    delVisible.value = false
     load()
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || '删除失败')

@@ -20,6 +20,7 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SubmissionRepository submissionRepository;
+    private final com.kk.oss.OssService ossService;
 
     @Transactional
     public Project create(CreateProjectRequest req) {
@@ -108,7 +109,20 @@ public class ProjectService {
     @Transactional
     public void delete(Long id) {
         Project p = get(id);
-        // 删除关联提交记录，再删除项目
+        // 先收集并删除 OSS 对象，再删除关联提交记录与项目
+        try {
+            java.util.List<com.kk.project.entity.Submission> list = submissionRepository.findByProject(p);
+            java.util.List<String> urls = new java.util.ArrayList<>();
+            for (com.kk.project.entity.Submission s : list) {
+                try {
+                    java.util.List<String> u = objectMapper.readValue(s.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+                    if (u != null) urls.addAll(u);
+                } catch (Exception ignored) {}
+            }
+            if (!urls.isEmpty()) {
+                try { ossService.deleteByUrls(urls); } catch (Exception e) { /* 忽略OSS删除失败，继续删除DB */ }
+            }
+        } catch (Exception ignore) {}
         submissionRepository.deleteByProject(p);
         projectRepository.delete(p);
     }

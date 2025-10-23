@@ -382,9 +382,19 @@ const submit = async () => {
     await api.directComplete(id, submitter.value, keys)
 
     ElMessage.success('提交成功')
+    // 成功后跳转到“查询状态”页，并自动按当前条件查询
+    if (project.value && project.value.queryFieldKey) {
+      const key = project.value.queryFieldKey
+      const val = submitter.value?.[key] || ''
+      mode.value = 'status'
+      if (val) { queryValue.value = val; await queryStatusByField() } else { await queryStatus() }
+    } else {
+      mode.value = 'status'
+      await queryStatus()
+    }
+    // 清空本地文件选择
     fileList.value = []
     files.value = []
-    await queryStatus()
   } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '提交失败'
     ElMessage.error(msg)
