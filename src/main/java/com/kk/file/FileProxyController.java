@@ -34,7 +34,15 @@ public class FileProxyController {
         } catch (Exception ignored) {}
         String filename = decryptFilenameFromKey(key);
         boolean forceDownload = "1".equals(request.getParameter("download"));
-        // 默认走代理，以避免 OSS 公网下行计费
+        boolean forceProxy = "1".equals(request.getParameter("proxy"));
+
+        if (!forceProxy) {
+            // 改为默认 302 到 OSS 公网签名直链（浏览器直接下载）
+            String signed = ossService.generatePresignedUrlByKey(key, forceDownload, 300, false);
+            return ResponseEntity.status(302).header(HttpHeaders.LOCATION, signed).build();
+        }
+
+        // 兼容：强制通过本站代理（会占用本站带宽）
         com.kk.oss.OssService.ObjectStat stat = ossService.statByKey(key);
         MediaType mediaType;
         if (stat.contentType != null && !stat.contentType.isBlank()) {

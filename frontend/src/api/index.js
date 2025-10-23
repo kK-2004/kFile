@@ -78,6 +78,25 @@ export default {
     })
   },
 
+  // 直传初始化/完成
+  directInit(projectId, submitter, filesMeta) {
+    return instance.post(`/api/projects/${projectId}/submissions/direct-init`, {
+      submitter,
+      files: filesMeta.map(f => ({ name: f.name, contentType: f.type || 'application/octet-stream' }))
+    })
+  },
+  directComplete(projectId, submitter, keys) {
+    return instance.post(`/api/projects/${projectId}/submissions/direct-complete`, { submitter, keys })
+  },
+  // 直传 PUT（签名 URL 为绝对地址）
+  directPut(putUrl, file, onUploadProgress) {
+    return axios.put(putUrl, file, {
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      timeout: 120000,
+      onUploadProgress
+    })
+  },
+
   // Admin auth
   adminLogin(username, password) { return instance.post('/api/admin/auth/login', { username, password }) },
   adminMe() { return instance.get('/api/admin/auth/me') }

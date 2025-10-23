@@ -25,7 +25,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-public class SubmissionService {
+    public class SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final ProjectService projectService;
     private final OssService ossService;
@@ -69,25 +69,7 @@ public class SubmissionService {
             }
         }
 
-        // 构造多级目录
-        java.util.List<String> segKeys = projectService.parsePathSegments(project);
-        java.util.List<String> segValues = new java.util.ArrayList<>();
-        if (segKeys == null || segKeys.isEmpty()) {
-            // 兼容：默认 ["$project"]
-            segKeys = java.util.List.of("$project");
-        }
-        for (String k : segKeys) {
-            String v;
-            if ("$project".equals(k)) {
-                v = project.getName();
-            } else {
-                v = extractFieldValue(submitterJson, k);
-            }
-            v = safeSegment(v);
-            if (v == null || v.isEmpty()) v = "unknown";
-            segValues.add(v);
-        }
-        String keyPrefix = String.join("/", segValues) + "/";
+        String keyPrefix = buildUploadPrefix(project, submitterJson);
 
         List<String> urls = ossService.uploadWithPrefix(files, keyPrefix);
 
@@ -135,6 +117,110 @@ public class SubmissionService {
         enforceRetentionMax(project, fingerprint, 10);
 
         return saved;
+    }
+
+    // 直传：返回的 key 已经上传成功，这里校验并入库
+    @Transactional
+    public Submission submitDirectCompleted(Project project, String submitterJson, java.util.List<String> keys,
+                                            String ipAddress, String userAgent) {
+        validateWindow(project);
+        if (keys == null || keys.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
+        if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && keys.size() > 1) {
+            throw new IllegalArgumentException("该项目不允许一次上传多个文件");
+        }
+
+        // 校验大小与类型
+        java.util.List<String> types = projectService.parseTypes(project);
+        java.util.List<String> normalizedKeys = new java.util.ArrayList<>();
+        for (String key : keys) {
+            if (!org.springframework.util.StringUtils.hasText(key)) continue;
+            // stat for size
+            com.kk.oss.OssService.ObjectStat stat = ossService.statByKey(key);
+            if (project.getFileSizeLimitBytes() != null && stat.length > project.getFileSizeLimitBytes()) {
+                throw new IllegalArgumentException("文件超出大小限制: " + key);
+            }
+            // type by decrypting name
+            int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+            String enc = slash >= 0 ? key.substring(slash + 1) : key;
+            String name = fileNameCodec.decrypt(enc);
+            String ext = getExtension(name);
+            if (types != null && !types.isEmpty()) {
+                if (!org.springframework.util.StringUtils.hasText(ext) || types.stream().noneMatch(t -> t.equalsIgnoreCase(ext))) {
+                    throw new IllegalArgumentException("文件类型不允许: " + name);
+                }
+            }
+            normalizedKeys.add(key);
+        }
+
+        String canonicalSubmitter = canonicalizeSubmitter(submitterJson);
+        String fingerprint = DigestUtils.md5DigestAsHex(canonicalSubmitter.getBytes(StandardCharsets.UTF_8));
+
+        if (!Boolean.TRUE.equals(project.getAllowResubmit())) {
+            long exist = submissionRepository.countByProjectAndSubmitterFingerprint(project, fingerprint);
+            if (exist > 0) throw new IllegalStateException("该项目不允许重复提交");
+        }
+
+        java.util.List<String> urls = normalizedKeys.stream().map(ossService::proxyUrlByKey).toList();
+
+        Submission s = new Submission();
+        s.setProject(project);
+        s.setSubmitterInfo(canonicalSubmitter);
+        s.setSubmitterFingerprint(fingerprint);
+        s.setIpAddress(ipAddress);
+        s.setUserAgent(userAgent);
+        // parse UA
+        com.kk.common.UserAgentUtil.ParsedUA parsedUA = com.kk.common.UserAgentUtil.parse(userAgent);
+        s.setOsName(parsedUA.osName());
+        s.setOsVersion(parsedUA.osVersion());
+        s.setBrowserName(parsedUA.browserName());
+        s.setBrowserVersion(parsedUA.browserVersion());
+        s.setDeviceType(parsedUA.deviceType());
+        // geoip
+        GeoInfo geo = geoIpService.lookup(ipAddress);
+        s.setIpCountry(geo.getCountry());
+        s.setIpProvince(geo.getProvince());
+        s.setIpCity(geo.getCity());
+        try { s.setFileUrls(objectMapper.writeValueAsString(urls)); }
+        catch (JsonProcessingException e) { throw new RuntimeException("Failed to serialize file urls", e); }
+
+        long countForSubmitter = submissionRepository.countByProjectAndSubmitterFingerprint(project, fingerprint) + 1;
+        s.setSubmitCount((int) countForSubmitter);
+        s.setValid(true);
+        try {
+            java.time.Instant now = java.time.Instant.now();
+            if (project.getEndAt() != null && now.isAfter(project.getEndAt())) s.setExpired(true);
+        } catch (Exception ignored) {}
+        Submission saved = submissionRepository.save(s);
+        long distinctSubmitters = submissionRepository.countDistinctSubmitters(project);
+        project.setTotalSubmitters((int) distinctSubmitters);
+        enforceRetentionMax(project, fingerprint, 10);
+        return saved;
+    }
+
+    // 构造上传前缀（含项目/提交者字段），末尾带 '/'
+    public String buildUploadPrefix(Project project, String submitterJson) {
+        java.util.List<String> segKeys = projectService.parsePathSegments(project);
+        java.util.List<String> segValues = new java.util.ArrayList<>();
+        if (segKeys == null || segKeys.isEmpty()) segKeys = java.util.List.of("$project");
+        for (String k : segKeys) {
+            String v = "$project".equals(k) ? project.getName() : extractFieldValue(submitterJson, k);
+            v = safeSegment(v);
+            if (v == null || v.isEmpty()) v = "unknown";
+            segValues.add(v);
+        }
+        return String.join("/", segValues) + "/";
+    }
+
+    // 组合为完整 key（包含 oss.prefix 与调用方传入的业务前缀）
+    public String normalizeFullKey(String keyPrefix, String encName) {
+        String p = keyPrefix == null ? "" : keyPrefix;
+        if (org.springframework.util.StringUtils.hasText(ossProperties.getPrefix())) {
+            String pre = ossProperties.getPrefix();
+            if (!pre.endsWith("/")) pre += "/";
+            p = pre + p;
+        }
+        if (org.springframework.util.StringUtils.hasText(p) && !p.endsWith("/")) p += "/";
+        return p + encName;
     }
 
     public List<Submission> list(Long projectId) {

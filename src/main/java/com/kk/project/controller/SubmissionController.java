@@ -80,6 +80,67 @@ public class SubmissionController {
         return resp;
     }
 
+    // 直传初始化：返回每个文件的 PUT 签名 URL 与对象 key
+    @PostMapping(path = "/direct-init", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> directInit(@PathVariable Long projectId, @RequestBody DirectInitRequest body) {
+        Project p = projectService.get(projectId);
+        String submitterJson = toJson(body.getSubmitter());
+        String keyPrefix = submissionService.buildUploadPrefix(p, submitterJson);
+        java.util.List<Map<String,Object>> entries = new java.util.ArrayList<>();
+        for (DirectInitRequest.FileMeta fm : body.getFiles()) {
+            String originalName = fm.getName();
+            String enc = submissionService.getFileNameCodec().encrypt(originalName);
+            String key = submissionService.normalizeFullKey(keyPrefix, enc);
+            String putUrl = submissionService.getOssService().generatePresignedPutUrlByKey(key, 300, fm.getContentType());
+            Map<String,Object> e = new java.util.HashMap<>();
+            e.put("name", originalName);
+            e.put("key", key);
+            e.put("putUrl", putUrl);
+            e.put("url", submissionService.getOssService().proxyUrlByKey(key));
+            entries.add(e);
+        }
+        return java.util.Map.of("entries", entries);
+    }
+
+    // 直传完成：校验并入库
+    @PostMapping(path = "/direct-complete", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String,Object> directComplete(@PathVariable Long projectId,
+                                             @RequestBody DirectCompleteRequest body,
+                                             HttpServletRequest request) {
+        Project p = projectService.get(projectId);
+        String submitterJson = toJson(body.getSubmitter());
+        String ip = WebClientInfoUtil.getClientIp(request);
+        String ua = request.getHeader("User-Agent");
+        Submission s = submissionService.submitDirectCompleted(p, submitterJson, body.getKeys(), ip, ua);
+        Map<String,Object> resp = new java.util.HashMap<>();
+        resp.put("id", s.getId());
+        resp.put("submitCount", s.getSubmitCount());
+        resp.put("expired", s.getExpired());
+        resp.put("createdAt", s.getCreatedAt() == null ? null : s.getCreatedAt().toEpochMilli());
+        resp.put("fileNames", extractDecryptedNames(s));
+        return resp;
+    }
+
+    private String toJson(Object obj) {
+        try { return objectMapper.writeValueAsString(obj == null ? java.util.Map.of() : obj); }
+        catch (Exception e) { throw new IllegalArgumentException("提交者信息JSON无效", e); }
+    }
+
+    // ===== DTOs for direct upload =====
+    @lombok.Data
+    public static class DirectInitRequest {
+        private Object submitter;
+        private java.util.List<FileMeta> files = java.util.List.of();
+        @lombok.Data
+        public static class FileMeta { private String name; private String contentType; }
+    }
+
+    @lombok.Data
+    public static class DirectCompleteRequest {
+        private Object submitter;
+        private java.util.List<String> keys = java.util.List.of();
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
     public Page<com.kk.project.dto.SubmissionResponse> list(@PathVariable Long projectId,

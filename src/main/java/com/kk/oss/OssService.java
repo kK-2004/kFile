@@ -38,4 +38,12 @@ public interface OssService {
     default java.io.InputStream openByKeyRange(String key, long startInclusive, long endInclusive) {
         throw new UnsupportedOperationException();
     }
+
+    // 生成用于直传的 PUT 签名 URL（浏览器直传）
+    default String generatePresignedPutUrlByKey(String key, long expireSeconds, String contentType) {
+        throw new UnsupportedOperationException();
+    }
+
+    // 根据对象 key 构造站点代理访问路径（/file/oss/{key}，带上 app.base-path 如有）
+    default String proxyUrlByKey(String key) { throw new UnsupportedOperationException(); }
 }

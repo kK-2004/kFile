@@ -269,13 +269,7 @@ public class AliOssService implements OssService {
         if (!StringUtils.hasText(key)) throw new IllegalArgumentException("无效的OSS地址");
         try {
             // 优先内网读取，失败自动回退公网
-            if (ossClientInternal != null) {
-                try {
-                    return ossClientInternal.getObject(properties.getBucket(), key).getObjectContent();
-                } catch (Exception ex) {
-                    log.warn("OSS 内网读取失败，回退公网: key={}, reason={}", key, ex.getMessage());
-                }
-            }
+            // 按要求：不再使用内网，全部走公网客户端
             return ossClientPublic.getObject(properties.getBucket(), key).getObjectContent();
         } catch (Exception e) {
             throw new IllegalStateException("读取OSS对象失败", e);
@@ -328,17 +322,7 @@ public class AliOssService implements OssService {
     @Override
     public ObjectStat statByKey(String key) {
         try {
-            com.aliyun.oss.model.ObjectMetadata meta;
-            if (ossClientInternal != null) {
-                try {
-                    meta = ossClientInternal.getObjectMetadata(properties.getBucket(), key);
-                } catch (Exception ex) {
-                    log.warn("OSS 内网元数据失败，回退公网: key={}, reason={}", key, ex.getMessage());
-                    meta = ossClientPublic.getObjectMetadata(properties.getBucket(), key);
-                }
-            } else {
-                meta = ossClientPublic.getObjectMetadata(properties.getBucket(), key);
-            }
+            com.aliyun.oss.model.ObjectMetadata meta = ossClientPublic.getObjectMetadata(properties.getBucket(), key);
             return new ObjectStat(meta.getContentLength(), meta.getETag(), meta.getLastModified(), meta.getContentType());
         } catch (Exception e) {
             throw new IllegalStateException("获取OSS对象元数据失败", e);
@@ -350,16 +334,7 @@ public class AliOssService implements OssService {
         try {
             com.aliyun.oss.model.GetObjectRequest req = new com.aliyun.oss.model.GetObjectRequest(properties.getBucket(), key);
             req.setRange(startInclusive, endInclusive);
-            if (ossClientInternal != null) {
-                try {
-                    return ossClientInternal.getObject(req).getObjectContent();
-                } catch (Exception ex) {
-                    log.warn("OSS 内网分段读取失败，回退公网: key={}, reason={}", key, ex.getMessage());
-                    return ossClientPublic.getObject(req).getObjectContent();
-                }
-            } else {
-                return ossClientPublic.getObject(req).getObjectContent();
-            }
+            return ossClientPublic.getObject(req).getObjectContent();
         } catch (Exception e) {
             throw new IllegalStateException("读取OSS对象分段失败", e);
         }
@@ -368,7 +343,8 @@ public class AliOssService implements OssService {
     @Override
     public String generatePresignedUrlByKey(String key, boolean forceDownload, long expireSeconds, boolean preferInternal) {
         java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
-        OSS client = (preferInternal && ossClientInternal != null) ? ossClientInternal : ossClientPublic;
+        // 不再使用内网
+        OSS client = ossClientPublic;
         GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), key, HttpMethod.GET);
         req.setExpiration(expiration);
         if (forceDownload) {
@@ -383,6 +359,23 @@ public class AliOssService implements OssService {
         }
         java.net.URL url = client.generatePresignedUrl(req);
         return url.toString();
+    }
+
+    @Override
+    public String generatePresignedPutUrlByKey(String key, long expireSeconds, String contentType) {
+        java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), key, HttpMethod.PUT);
+        req.setExpiration(expiration);
+        if (contentType != null && !contentType.isBlank()) {
+            req.addQueryParameter("Content-Type", contentType);
+        }
+        java.net.URL url = ossClientPublic.generatePresignedUrl(req);
+        return url.toString();
+    }
+
+    @Override
+    public String proxyUrlByKey(String key) {
+        return normalizeBase(appBasePath) + "/file/oss/" + key;
     }
 
     private String getExtension(String filename) {

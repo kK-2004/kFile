@@ -120,13 +120,33 @@
             <el-button @click="$router.back()">返回</el-button>
           </el-space>
         </el-form-item>
-        <div v-if="submitting && uploadProgress > 0" class="progress-wrap">
-          <el-progress :percentage="uploadProgress" :text-inside="true" :stroke-width="18" status="success" />
-        </div>
         </el-form>
       </template>
     </div>
   </el-card>
+
+  <!-- 上传中弹窗（置于页面中上） -->
+  <el-dialog
+    v-model="showUploadDialog"
+    title="正在上传"
+    width="420px"
+    :show-close="false"
+    :close-on-click-modal="false"
+    align-center
+    :top="'15vh'"
+  >
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="color: var(--el-text-color-regular); font-size: 14px;">
+        {{ currentFileName ? `正在上传第 ${currentFileIndex}/${totalFilesCount} 个：` + currentFileName : '准备上传...' }}
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; color: var(--el-text-color-secondary);">
+        <span>速度：{{ speedBps ? (formatBytes(speedBps) + '/s') : '—' }}</span>
+        <span>{{ formatBytes(uploadedBytes) }} / {{ formatBytes(totalBytes) }}</span>
+      </div>
+      <el-progress :percentage="uploadProgress" :stroke-width="16" :text-inside="true"/>
+      <div style="color: var(--el-text-color-secondary); font-size: 12px;">请勿关闭页面，上传完成后将自动关闭本窗口。</div>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -148,6 +168,21 @@ const latest = ref({ exists: false })
 const querying = ref(false)
 const submitting = ref(false)
 const uploadProgress = ref(0)
+const showUploadDialog = ref(false)
+const currentFileName = ref('')
+const currentFileIndex = ref(0)
+const totalFilesCount = ref(0)
+const uploadedBytes = ref(0)
+const totalBytes = ref(0)
+const speedBps = ref(0)
+
+function formatBytes(n) {
+  const num = Number(n||0)
+  if (num < 1024) return num + ' B'
+  if (num < 1024*1024) return (num/1024).toFixed(1) + ' KB'
+  if (num < 1024*1024*1024) return (num/1024/1024).toFixed(1) + ' MB'
+  return (num/1024/1024/1024).toFixed(2) + ' GB'
+}
 const auth = useAuthStore()
 const isAdmin = computed(() => !!auth.user)
 const mode = ref('submit') // 'submit' | 'status'
@@ -229,25 +264,73 @@ const submit = async () => {
   if (!validateFiles()) return
   submitting.value = true
   try {
-    uploadProgress.value = 0
-    const { data } = await api.submit(id, submitter.value, files.value, {
-      onUploadProgress: (evt) => {
-        if (evt && typeof evt.loaded === 'number' && typeof evt.total === 'number' && evt.total > 0) {
-          uploadProgress.value = Math.floor((evt.loaded / evt.total) * 100)
+    showUploadDialog.value = true
+    // 1) 直传初始化：向后端申请每个文件的 PUT 签名与 key
+    const metas = files.value.map(f => ({ name: f.name, type: f.type, size: f.size }))
+    const { data } = await api.directInit(id, submitter.value, metas)
+    const entries = Array.isArray(data?.entries) ? data.entries : []
+    if (entries.length !== files.value.length) throw new Error('直传初始化失败')
+
+    // 2) 顺序上传并更新总体进度
+    const total = files.value.reduce((s, f) => s + (f.size || 0), 0) || 1
+    let uploadedAll = 0
+    totalFilesCount.value = files.value.length
+    totalBytes.value = total
+    uploadedBytes.value = 0
+    speedBps.value = 0
+    let lastTickBytes = 0
+    let lastTickTime = Date.now()
+    for (let i = 0; i < files.value.length; i++) {
+      const f = files.value[i]
+      const putUrl = entries[i].putUrl
+      currentFileIndex.value = i + 1
+      currentFileName.value = f.name
+      let lastLoaded = 0
+      await api.directPut(putUrl, f, (evt) => {
+        const loaded = (evt?.loaded || 0)
+        // 修正为增量
+        const delta = Math.max(0, loaded - lastLoaded)
+        lastLoaded = loaded
+        const overall = uploadedAll + loaded
+        uploadProgress.value = Math.floor((overall / total) * 100)
+        uploadedBytes.value = overall
+        const now = Date.now()
+        const dt = now - lastTickTime
+        if (dt >= 200) {
+          const dBytes = overall - lastTickBytes
+          const inst = dBytes / (dt / 1000)
+          // 简单 EMA 平滑
+          speedBps.value = speedBps.value > 0 ? (0.8 * speedBps.value + 0.2 * inst) : inst
+          lastTickTime = now
+          lastTickBytes = overall
         }
-      }
-    })
+      })
+      uploadedAll += f.size || 0
+      uploadProgress.value = Math.floor((uploadedAll / total) * 100)
+      uploadedBytes.value = uploadedAll
+    }
+
+    // 3) 通知后端完成并落库
+    const keys = entries.map(e => e.key)
+    await api.directComplete(id, submitter.value, keys)
+
     ElMessage.success('提交成功')
     fileList.value = []
     files.value = []
-    // 刷新最近提交状态
     await queryStatus()
   } catch (e) {
-    const msg = e?.response?.data?.message || '提交失败'
+    const msg = e?.response?.data?.message || e?.message || '提交失败'
     ElMessage.error(msg)
   } finally {
     submitting.value = false
     uploadProgress.value = 0
+    showUploadDialog.value = false
+    currentFileName.value = ''
+    currentFileIndex.value = 0
+    totalFilesCount.value = 0
+    uploadedBytes.value = 0
+    totalBytes.value = 0
+    speedBps.value = 0
   }
 }
 
