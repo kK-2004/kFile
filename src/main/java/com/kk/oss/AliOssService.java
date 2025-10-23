@@ -367,7 +367,8 @@ public class AliOssService implements OssService {
         GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), key, HttpMethod.PUT);
         req.setExpiration(expiration);
         if (contentType != null && !contentType.isBlank()) {
-            req.addQueryParameter("Content-Type", contentType);
+            // 将 Content-Type 加入签名的请求头中（而不是作为查询参数）
+            req.setContentType(contentType);
         }
         java.net.URL url = ossClientPublic.generatePresignedUrl(req);
         return url.toString();
