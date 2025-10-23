@@ -3,6 +3,16 @@ package com.kk.oss;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.model.PutObjectRequest;
+import com.aliyun.oss.model.ObjectMetadata;
+import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.aliyun.oss.HttpMethod;
+import com.aliyun.oss.model.InitiateMultipartUploadRequest;
+import com.aliyun.oss.model.InitiateMultipartUploadResult;
+import com.aliyun.oss.model.UploadPartRequest;
+import com.aliyun.oss.model.UploadPartResult;
+import com.aliyun.oss.model.CompleteMultipartUploadRequest;
+import com.aliyun.oss.model.AbortMultipartUploadRequest;
+import com.aliyun.oss.model.PartETag;
 import com.kk.config.OssProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,10 +52,11 @@ public class AliOssService implements OssService {
         }
         com.aliyun.oss.ClientBuilderConfiguration conf = new com.aliyun.oss.ClientBuilderConfiguration();
         conf.setProtocol(com.aliyun.oss.common.comm.Protocol.HTTPS);
-        conf.setConnectionTimeout(8000);
-        conf.setSocketTimeout(15000);
+        conf.setConnectionTimeout(10000);
+        // 放宽超时以适配大文件/慢网
+        conf.setSocketTimeout(120000);
         conf.setMaxConnections(128);
-        conf.setRequestTimeout(20000);
+        conf.setRequestTimeout(120000);
         // 公网客户端（用于上传、删除）
         String publicEp = properties.getEndpoint();
         this.ossClientPublic = new OSSClientBuilder().build(publicEp, properties.getAk(), properties.getSk(), conf);
@@ -72,9 +83,27 @@ public class AliOssService implements OssService {
     @Override
     public String upload(MultipartFile file) {
         try {
-            byte[] bytes = file.getBytes();
             String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            String md5 = DigestUtils.md5DigestAsHex(bytes);
+            String md5;
+            try {
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+                byte[] buf = new byte[8192];
+                int n;
+                try (InputStream is = file.getInputStream()) {
+                    while ((n = is.read(buf)) > 0) {
+                        md.update(buf, 0, n);
+                    }
+                }
+                byte[] dig = md.digest();
+                StringBuilder sb = new StringBuilder(dig.length * 2);
+                for (byte b : dig) {
+                    sb.append(String.format("%02x", b));
+                }
+                md5 = sb.toString();
+            } catch (Exception e) {
+                // 退回使用原始文件名的 MD5（低概率路径）
+                md5 = DigestUtils.md5DigestAsHex((file.getOriginalFilename() + System.nanoTime()).getBytes());
+            }
             String ext = getExtension(file.getOriginalFilename());
             String keyPrefix = properties.getPrefix();
             if (keyPrefix == null) keyPrefix = "";
@@ -82,13 +111,7 @@ public class AliOssService implements OssService {
                 keyPrefix = keyPrefix + "/";
             }
             String objectKey = keyPrefix + datePath + "/" + md5 + (ext.isEmpty() ? "" : "." + ext);
-            PutObjectRequest request = new PutObjectRequest(properties.getBucket(), objectKey, new ByteArrayInputStream(bytes));
-            try {
-                ossClientPublic.putObject(request);
-            } catch (Exception ex) {
-                log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), objectKey, ex.getMessage(), ex);
-                throw new IllegalStateException("文件上传失败，请联系管理员", ex);
-            }
+            putStreamOrMultipart(file, objectKey);
             return normalizeBase(appBasePath) + "/file/oss/" + objectKey;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
@@ -107,20 +130,65 @@ public class AliOssService implements OssService {
     @Override
     public String uploadWithPrefix(MultipartFile file, String keyPrefix) {
         try {
-            byte[] bytes = file.getBytes();
             String originalName = baseName(file.getOriginalFilename());
             String enc = fileNameCodec.encrypt(originalName);
             String key = normalizePrefix(keyPrefix) + enc;
-            PutObjectRequest request = new PutObjectRequest(properties.getBucket(), key, new ByteArrayInputStream(bytes));
-            try {
-                ossClientPublic.putObject(request);
+            putStreamOrMultipart(file, key);
+            return normalizeBase(appBasePath) + "/file/oss/" + key;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read upload file", e);
+        }
+    }
+
+    private void putStreamOrMultipart(MultipartFile file, String key) throws IOException {
+        final long size = file.getSize();
+        final long threshold = 5L * 1024 * 1024; // 5MB
+        if (size >= threshold) {
+            multipartUpload(file, key);
+        } else {
+            try (InputStream in = file.getInputStream()) {
+                ObjectMetadata meta = new ObjectMetadata();
+                if (size >= 0) meta.setContentLength(size);
+                if (file.getContentType() != null) meta.setContentType(file.getContentType());
+                PutObjectRequest req = new PutObjectRequest(properties.getBucket(), key, in, meta);
+                ossClientPublic.putObject(req);
             } catch (Exception ex) {
                 log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), key, ex.getMessage(), ex);
                 throw new IllegalStateException("文件上传失败，请联系管理员", ex);
             }
-            return normalizeBase(appBasePath) + "/file/oss/" + key;
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read upload file", e);
+        }
+    }
+
+    private void multipartUpload(MultipartFile file, String key) throws IOException {
+        String bucket = properties.getBucket();
+        InitiateMultipartUploadRequest initReq = new InitiateMultipartUploadRequest(bucket, key);
+        InitiateMultipartUploadResult initRes = ossClientPublic.initiateMultipartUpload(initReq);
+        String uploadId = initRes.getUploadId();
+        java.util.List<PartETag> partETags = new java.util.ArrayList<>();
+        final int partSize = 5 * 1024 * 1024; // 5MB
+        byte[] buffer = new byte[partSize];
+        int partNumber = 1;
+        long uploaded = 0;
+        try (InputStream in = file.getInputStream()) {
+            int read;
+            while ((read = in.readNBytes(buffer, 0, partSize)) > 0) {
+                UploadPartRequest up = new UploadPartRequest();
+                up.setBucketName(bucket);
+                up.setKey(key);
+                up.setUploadId(uploadId);
+                up.setInputStream(new java.io.ByteArrayInputStream(buffer, 0, read));
+                up.setPartSize(read);
+                up.setPartNumber(partNumber++);
+                UploadPartResult upRes = ossClientPublic.uploadPart(up);
+                partETags.add(upRes.getPartETag());
+                uploaded += read;
+            }
+            CompleteMultipartUploadRequest completeReq = new CompleteMultipartUploadRequest(bucket, key, uploadId, partETags);
+            ossClientPublic.completeMultipartUpload(completeReq);
+        } catch (Exception ex) {
+            try { ossClientPublic.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId)); } catch (Exception ignore) {}
+            log.error("OSS分片上传失败: bucket={}, key={}, uploaded={}, msg={}", bucket, key, uploaded, ex.getMessage(), ex);
+            throw new IllegalStateException("文件上传失败，请联系管理员", ex);
         }
     }
 
@@ -251,6 +319,26 @@ public class AliOssService implements OssService {
         }
     }
 
+    @Override
+    public String generatePresignedUrlByKey(String key, boolean forceDownload, long expireSeconds, boolean preferInternal) {
+        java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
+        OSS client = (preferInternal && ossClientInternal != null) ? ossClientInternal : ossClientPublic;
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), key, HttpMethod.GET);
+        req.setExpiration(expiration);
+        if (forceDownload) {
+            // Content-Disposition 通过响应头参数传递
+            String filename = decryptFilenameFromKey(key);
+            String ascii = filename.replaceAll("[^\\x20-\\x7E]", "_");
+            String encoded;
+            try {
+                encoded = java.net.URLEncoder.encode(filename, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+            } catch (Exception e) { encoded = ascii; }
+            req.addQueryParameter("response-content-disposition", "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded);
+        }
+        java.net.URL url = client.generatePresignedUrl(req);
+        return url.toString();
+    }
+
     private String getExtension(String filename) {
         if (!StringUtils.hasText(filename)) return "";
         int idx = filename.lastIndexOf('.')
@@ -267,5 +355,13 @@ public class AliOssService implements OssService {
         // root path should be empty string
         if ("/".equals(b)) return "";
         return b;
+    }
+
+    private String decryptFilenameFromKey(String key) {
+        if (key == null || key.isEmpty()) return "file";
+        int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+        String enc = slash >= 0 ? key.substring(slash + 1) : key;
+        String name = fileNameCodec.decrypt(enc);
+        return (name == null || name.isBlank()) ? enc : name;
     }
 }

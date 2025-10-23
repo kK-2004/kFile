@@ -17,4 +17,9 @@ public interface OssService {
     String extractObjectKey(String url);
 
     default java.io.InputStream openByKey(String key) { throw new UnsupportedOperationException(); }
+
+    // 生成带有效期的下载直链；若实现不支持请抛出 UnsupportedOperationException
+    default String generatePresignedUrlByKey(String key, boolean forceDownload, long expireSeconds, boolean preferInternal) {
+        throw new UnsupportedOperationException();
+    }
 }

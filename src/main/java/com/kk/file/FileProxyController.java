@@ -23,7 +23,7 @@ public class FileProxyController {
     private final com.kk.common.FileNameCodec fileNameCodec;
 
     @GetMapping("/file/oss/**")
-    public ResponseEntity<InputStreamResource> proxy(HttpServletRequest request) {
+    public ResponseEntity<?> proxy(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String marker = "/file/oss/";
         int pos = uri.indexOf(marker);
@@ -35,10 +35,20 @@ public class FileProxyController {
         String filename = decryptFilenameFromKey(key);
         MediaType mediaType = MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
         boolean forceDownload = "1".equals(request.getParameter("download"));
+        boolean forceProxy = "1".equals(request.getParameter("proxy"));
+        boolean preferInternal = "1".equals(request.getParameter("internal"));
+
+        if (!forceProxy) {
+            // 优先返回带有效期的直链（浏览器可获取 Content-Length，速度更快）
+            String signed = ((com.kk.oss.OssService) ossService)
+                    .generatePresignedUrlByKey(key, forceDownload, 300, preferInternal);
+            return ResponseEntity.status(302).header(HttpHeaders.LOCATION, signed).build();
+        }
+
+        // 兼容：强制代理回传（不建议对公网使用）
         InputStream in = ossService.openByKey(key);
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
         if (forceDownload) {
-            // Set Content-Disposition as attachment with UTF-8 filename* fallback
             String ascii = filename.replaceAll("[^\\x20-\\x7E]", "_");
             String encoded;
             try {
