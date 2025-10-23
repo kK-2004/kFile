@@ -1,5 +1,6 @@
 <template>
-  <el-card v-loading="loading || submitting" :element-loading-text="submitting ? '正在提交，请稍候…' : '正在加载…'">
+  <div class="admin-submissions-fullscreen">
+  <el-card class="submissions-card" v-loading="loading || submitting" :element-loading-text="submitting ? '正在提交，请稍候…' : '正在加载…'">
     <template #header>
       <div class="card-header">
         <span>{{ headerTitle }}</span>
@@ -7,10 +8,7 @@
     </template>
 
     <div v-if="project">
-      <div style="margin-bottom: 10px; display:flex; gap:8px; align-items:center;">
-        <el-button v-if="mode==='submit'" size="small" @click="switchToStatus">查询提交状态</el-button>
-        <el-button v-else size="small" @click="switchToSubmit">返回提交</el-button>
-      </div>
+      <!-- 顶部导航按钮移除，避免与上传操作重复 -->
 
       <div v-if="mode==='status'" style="margin-bottom: 16px;">
         <el-form label-width="120px" style="max-width: 800px;">
@@ -98,31 +96,36 @@
         </template>
 
         <el-form-item label="选择文件">
-          <el-upload
-            :multiple="!!project.allowMultiFiles"
-            :auto-upload="false"
-            :on-change="onFileChange"
-            :file-list="fileList"
-            :limit="project.allowMultiFiles ? 10 : 1"
-            :disabled="!project.allowResubmit && latest.exists"
-            drag>
-            <i class="el-icon-upload"></i>
-            <div class="el-upload__text">拖拽或 <em>点击上传</em></div>
-            <template #tip>
-              <div class="el-upload__tip">
-                <div>允许的类型：{{ (project.allowedFileTypes||[]).join(', ') || '不限' }}</div>
-                <div>大小上限：{{ sizeLimitText }}</div>
-              </div>
-            </template>
-          </el-upload>
+          <div class="upload-box">
+            <el-upload
+              class="upload-area"
+              drag
+              :multiple="!!project.allowMultiFiles"
+              :auto-upload="false"
+              :on-change="onFileChange"
+              :on-remove="onFileRemove"
+              :file-list="fileList"
+              :limit="uploadLimit"
+              :disabled="!project.allowResubmit && latest.exists"
+              :accept="acceptAttr"
+            >
+              <i class="el-icon-upload upload-icon"></i>
+              <div class="upload-text">将文件拖拽到此处，或 <em>点击上传</em></div>
+              <template #tip>
+                <div class="upload-tip">
+                  <div>允许类型：{{ (project.allowedFileTypes||[]).join(', ') || '不限' }}</div>
+                  <div>大小上限：{{ sizeLimitText }}</div>
+                </div>
+              </template>
+            </el-upload>
+            <div class="actions">
+              <el-button type="primary" :disabled="disableSubmit" @click="submit">开始上传</el-button>
+              <el-button :disabled="!fileList.length" @click="clearFiles">清空</el-button>
+            </div>
+          </div>
         </el-form-item>
 
-        <el-form-item>
-          <el-space>
-            <el-button type="primary" :disabled="disableSubmit" @click="submit">提交</el-button>
-            <el-button @click="$router.back()">返回</el-button>
-          </el-space>
-        </el-form-item>
+        <!-- 移除重复的提交/返回按钮，统一在上传区域下方操作 -->
         </el-form>
       </template>
     </div>
@@ -150,6 +153,7 @@
       <div style="color: var(--el-text-color-secondary); font-size: 12px;">请勿关闭页面，上传完成后将自动关闭本窗口。</div>
     </div>
   </el-dialog>
+  </div>
 </template>
 
 <script setup>
@@ -207,6 +211,16 @@ const sizeLimitText = computed(()=>{
   return n + ' B'
 })
 
+// 上传 UI 辅助
+const uploadLimit = computed(() => project.value?.allowMultiFiles ? 10 : 1)
+const acceptAttr = computed(() => {
+  const list = project.value?.allowedFileTypes || []
+  if (!Array.isArray(list) || list.length === 0) return ''
+  // 转成 .ext,.ext2 形式
+  const items = list.map(x => String(x||'').trim().toLowerCase()).filter(Boolean).map(x => x.startsWith('.') ? x : ('.' + x))
+  return items.join(',')
+})
+
 const isPastDeadline = computed(() => {
   if (!project.value) return false
   if (project.value.endAt) return Date.now() > Number(project.value.endAt)
@@ -254,6 +268,18 @@ const switchToSubmit = () => { mode.value = 'submit' }
 const onFileChange = (file, list) => {
   fileList.value = list
   files.value = list.map(x => x.raw).filter(Boolean)
+}
+const onFileRemove = (file, list) => {
+  fileList.value = list
+  files.value = list.map(x => x.raw).filter(Boolean)
+}
+const removeAt = (idx) => {
+  fileList.value.splice(idx, 1)
+  files.value = fileList.value.map(x => x.raw).filter(Boolean)
+}
+const clearFiles = () => {
+  fileList.value = []
+  files.value = []
 }
 
 const validateFiles = () => {
@@ -456,6 +482,8 @@ const filename = (u) => { if (!u) return ''; const q = u.split('?')[0]; const i 
 </script>
 
 <style scoped>
+.admin-submissions-fullscreen { padding: 24px; background: #f5f7fb; min-height: calc(100vh - 64px); box-sizing: border-box; }
+.submissions-card { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
 .card-header {
   display: flex;
   align-items: center;
@@ -522,6 +550,28 @@ const filename = (u) => { if (!u) return ''; const q = u.split('?')[0]; const i 
 :deep(.el-upload__tip) {
   font-size: 12px;
 }
+
+/* 新增：更现代的上传布局和列表样式 */
+.upload-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; align-items: start; width: 100%; }
+@media (max-width: 960px) { .upload-layout { grid-template-columns: 1fr; } }
+.upload-left, .upload-right { background: #ffffff; border: 1px solid #eef0f4; border-radius: 10px; padding: 14px; }
+.upload-box { background: #ffffff; border: 1px solid #eef0f4; border-radius: 10px; padding: 14px; }
+.upload-area { width: 100%; border: 2px dashed #e5e7eb; border-radius: 10px; padding: 30px 16px; text-align: center; transition: all .2s; }
+.upload-area:hover { border-color: #6366f1; background: #fafbff; }
+.upload-icon { font-size: 32px; color: #6366f1; margin-bottom: 8px; }
+.upload-text { font-size: 14px; color: #6b7280; }
+.upload-text em { color: #6366f1; font-style: normal; }
+.upload-tip { margin-top: 8px; font-size: 12px; color: #9ca3af; }
+.file-list-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #111827; margin-bottom: 8px; }
+.file-list { display: flex; flex-direction: column; gap: 8px; }
+.file-item { display: flex; align-items: center; justify-content: space-between; border: 1px solid #eef0f4; border-radius: 8px; padding: 8px 10px; background: #fff; }
+.file-meta { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.file-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #111827; }
+.file-extra { font-size: 12px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18px; border: 1px dashed #e5e7eb; border-radius: 10px; background: #fafafa; color: #6b7280; }
+.empty-title { font-size: 14px; color: #374151; }
+.empty-sub { font-size: 12px; }
+.actions { display: flex; gap: 10px; margin-top: 10px; }
 
 /* 选择器样式 */
 :deep(.el-select) {

@@ -151,12 +151,9 @@ export default {
   ,deleteProject(id) { return instance.delete(`/api/projects/${id}`) }
   ,adminStartDeleteProject(id) { return instance.post(`/api/admin/projects/${id}/delete-task`) }
   ,adminGetTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}`) }
+  ,adminStartArchiveTask(id, fieldKey, fieldValue) { return instance.post(`/api/admin/projects/${id}/archive-task`, { fieldKey, fieldValue }) }
+  ,adminDownloadTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}/download`, { responseType: 'blob' }) }
 
   // Prepared ZIP（带 Content-Length）
-  ,exportZipPrepared(projectId, fieldKey, fieldValue) {
-    const params = {}
-    if (fieldKey) params.fieldKey = fieldKey
-    if (fieldValue) params.fieldValue = fieldValue
-    return instance.get(`/api/projects/${projectId}/submissions/archive-prepared`, { params, responseType: 'blob' })
-  }
+  
 }

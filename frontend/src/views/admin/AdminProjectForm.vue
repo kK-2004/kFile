@@ -338,31 +338,14 @@
                   </el-select>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="260" align="center">
+              <el-table-column label="操作" width="120" align="center">
                 <template #default="{ $index }">
-                  <el-button-group size="small">
-                    <el-button
-                        @click="moveUp($index)"
-                        :disabled="$index===0"
-                        :icon="ArrowUp"
-                    >
-                      上移
-                    </el-button>
-                    <el-button
-                        @click="moveDown($index)"
-                        :disabled="$index===pathSegments.length-1"
-                        :icon="ArrowDown"
-                    >
-                      下移
-                    </el-button>
-                    <el-button
-                        type="danger"
-                        @click="removeSeg($index)"
-                        :icon="Delete"
-                    >
-                      删除
-                    </el-button>
-                  </el-button-group>
+                  <el-button
+                      type="danger"
+                      size="small"
+                      @click="removeSeg($index)"
+                      :icon="Delete"
+                  >删除</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -399,10 +382,7 @@ import api from '../../api'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
-import {
-  Document, Setting, User, FolderOpened,
-  Plus, Delete, ArrowUp, ArrowDown, InfoFilled, Check, Back
-} from '@element-plus/icons-vue'
+import { Document, Setting, User, FolderOpened, Plus, Delete, InfoFilled, Check, Back } from '@element-plus/icons-vue'
 
 const route = useRoute();
 const router = useRouter();
@@ -555,8 +535,7 @@ const addField = () => {
 const removeField = (idx) => { expectedFields.value.splice(idx, 1); bindRowDrag() }
 const addSeg = () => { pathSegments.value.push({ value: '$project' }); bindSegDrag() }
 const removeSeg = (idx) => { pathSegments.value.splice(idx, 1); bindSegDrag() }
-const moveUp = (idx) => { if (idx>0) { const t = pathSegments.value[idx]; pathSegments.value.splice(idx,1); pathSegments.value.splice(idx-1,0,t) } }
-const moveDown = (idx) => { if (idx<pathSegments.value.length-1) { const t = pathSegments.value[idx]; pathSegments.value.splice(idx,1); pathSegments.value.splice(idx+1,0,t) } }
+// 上移/下移由拖拽排序代替
 const auth = useAuthStore()
 onMounted(()=>{ if (!auth.loaded) auth.loadMe() })
 

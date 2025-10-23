@@ -26,7 +26,7 @@
           <el-form-item>
             <el-button type="primary" @click="applyFilter">搜索</el-button>
             <el-button @click="resetFilter">重置</el-button>
-            <el-button type="success" @click="openZipDialog(false)">打包</el-button>
+            <el-button type="success" @click="startArchive(false)">打包</el-button>
             <el-tooltip
               effect="dark"
               placement="top"
@@ -34,7 +34,7 @@
             >
               <span class="help-icon">?</span>
             </el-tooltip>
-            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="openZipDialog(true)"
+            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="startArchive(true)"
                        style="margin-left: 8px;">按条件打包</el-button>
             <el-tooltip
               effect="dark"
@@ -157,21 +157,25 @@
           <el-table-column prop="osName" label="系统" />
           <el-table-column prop="browserName" label="浏览器" />
           <el-table-column prop="deviceType" label="设备" width="100"/>
-          <el-table-column prop="createdAt" label="创建时间" width="180"/>
+          <el-table-column label="创建时间" width="200">
+            <template #default="{row}">{{ formatDateTimeLocal(row.createdAt) }}</template>
+          </el-table-column>
         </el-table>
       </div>
 
 
     </el-card>
-    <!-- 打包保存方式对话框 -->
-    <el-dialog v-model="zipDialog" title="打包下载" width="420px">
-      <p>选择保存方式：</p>
-      <el-space>
-        <el-button type="primary" @click="confirmZip('prepared')">预生成并保存（可选目录）</el-button>
-        <el-button @click="confirmZip('stream')">直接下载（流式）</el-button>
-      </el-space>
+    <!-- 打包进度窗口 -->
+    <el-dialog v-model="archProgressVisible" title="正在打包" width="480px" :close-on-click-modal="false" :close-on-press-escape="false">
+      <div v-if="archTask">
+        <div style="margin-bottom:8px;">{{ projectName }}</div>
+        <el-progress :percentage="archPct" :text-inside="true" :stroke-width="18" />
+        <div style="margin-top:8px; color: var(--el-text-color-secondary);">
+          进度：{{ archTask.processedEntries || 0 }} / {{ archTask.totalEntries || 0 }}
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="zipDialog=false">关闭</el-button>
+        <el-button @click="archProgressVisible=false" :disabled="archTask && archTask.status==='RUNNING'">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -275,47 +279,48 @@ const exportCsv = async () => {
 const applyFilter = ()=>{ pageNumber.value = 0; load() }
 const resetFilter = ()=>{ filterKey.value=''; filterValue.value=''; pageNumber.value=0; load() }
 
-// 打包对话框：选择保存方式
-const zipDialog = ref(false)
-const zipByFilter = ref(false)
-const openZipDialog = (byFilter) => { zipByFilter.value = !!byFilter; zipDialog.value = true }
-const confirmZip = async (mode) => {
-  const params = zipByFilter.value ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
-  const filename = zipByFilter.value && params.fieldKey && params.fieldValue ? `project-${projectId}-${params.fieldKey}-${params.fieldValue}.zip` : `project-${projectId}.zip`
-  if (mode === 'prepared') {
-    // 预生成ZIP，带Content-Length；支持可选保存到目录
-    const res = await api.exportZipPrepared(projectId, params.fieldKey, params.fieldValue)
-    const blob = new Blob([res.data], { type: 'application/zip' })
-    // 优先使用本地目录保存（File System Access API）
-    if ('showDirectoryPicker' in window) {
+// 异步打包（选择目录 + 进度）
+const archProgressVisible = ref(false)
+const archTask = ref(null)
+let archTimer = null
+const archPct = computed(()=>{
+  const t = archTask.value
+  if (!t || !t.totalEntries) return 0
+  return Math.floor((t.processedEntries / t.totalEntries) * 100)
+})
+const startArchive = async (byFilter=false) => {
+  if (!('showDirectoryPicker' in window)) {
+    return ElMessage.error('当前浏览器不支持目录保存，请使用Chrome/Edge并确保HTTPS')
+  }
+  let dirHandle
+  try { dirHandle = await window.showDirectoryPicker() } catch { return }
+  const params = byFilter ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
+  try {
+    const { data } = await api.adminStartArchiveTask(projectId, params.fieldKey, params.fieldValue)
+    archTask.value = { taskId: data.taskId, status: data.status, totalEntries: 0, processedEntries: 0, filename: data.filename }
+    archProgressVisible.value = true
+    archTimer && clearInterval(archTimer)
+    archTimer = setInterval(async () => {
       try {
-        const dir = await window.showDirectoryPicker()
-        const fileHandle = await dir.getFileHandle(filename, { create: true })
-        const writable = await fileHandle.createWritable()
-        await writable.write(blob)
-        await writable.close()
-        zipDialog.value = false
-        return
-      } catch (e) {
-        // 用户取消或失败，回退为普通下载
-      }
-    }
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(link.href)
-    zipDialog.value = false
-  } else {
-    // 流式下载（原有行为）
-    const res = await api.exportZip(projectId, params.fieldKey, params.fieldValue)
-    const blob = new Blob([res.data], { type: 'application/zip' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(link.href)
-    zipDialog.value = false
+        const { data: st } = await api.adminGetTask(archTask.value.taskId)
+        archTask.value = st
+        if (st.status === 'COMPLETED') {
+          clearInterval(archTimer); archTimer = null
+          const res = await api.adminDownloadTask(st.id || archTask.value.taskId)
+          const blob = new Blob([res.data], { type: 'application/zip' })
+          const fileHandle = await dirHandle.getFileHandle(st.filename || `project-${projectId}.zip`, { create: true })
+          const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close()
+          ElMessage.success('打包完成，已保存到所选目录')
+          archProgressVisible.value = false
+        } else if (st.status === 'FAILED') {
+          clearInterval(archTimer); archTimer = null
+          ElMessage.error('打包失败：' + (st.message||''))
+          archProgressVisible.value = false
+        }
+      } catch {}
+    }, 1200)
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '打包任务创建失败')
   }
 }
 
@@ -356,6 +361,20 @@ const filename = (u) => {
   const q = u.split('?')[0]
   const i = Math.max(q.lastIndexOf('/'), q.lastIndexOf('\\'))
   return i >= 0 ? q.substring(i+1) : q
+}
+
+// 精确本地时间（YYYY-MM-DD HH:mm:ss，本地时区）
+const formatDateTimeLocal = (ms) => {
+  if (ms == null) return ''
+  const d = new Date(Number(ms))
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const M = String(d.getMonth()+1).padStart(2,'0')
+  const D = String(d.getDate()).padStart(2,'0')
+  const h = String(d.getHours()).padStart(2,'0')
+  const m = String(d.getMinutes()).padStart(2,'0')
+  const s = String(d.getSeconds()).padStart(2,'0')
+  return `${y}-${M}-${D} ${h}:${m}:${s}`
 }
 
 const download = (u, name) => {
