@@ -3,6 +3,7 @@ package com.kk.admin.task;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kk.oss.OssService;
+import com.kk.config.OssProperties;
 import com.kk.project.entity.Project;
 import com.kk.project.entity.Submission;
 import com.kk.project.repo.ProjectRepository;
@@ -27,6 +28,8 @@ public class ArchiveTaskService {
     private final ProjectRepository projectRepository;
     private final OssService ossService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final com.kk.common.FileNameCodec fileNameCodec;
+    private final OssProperties ossProperties;
 
     private final Map<String, Task> tasks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -106,19 +109,23 @@ public class ArchiveTaskService {
             try (FileOutputStream fos = new FileOutputStream(tmp);
                  java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(fos)) {
                 int processed = 0;
+                java.util.Set<String> usedNames = new java.util.HashSet<>();
                 for (Submission s : list) {
+                    // 提前更新已处理条目，避免首条耗时较长时前端一直显示 0%
+                    processed++;
+                    t.setProcessedEntries(processed);
                     List<String> urls;
                     try {
                         urls = objectMapper.readValue(s.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
                     } catch (Exception e) { urls = null; }
-                    if (urls == null) { processed++; t.setProcessedEntries(processed); continue; }
+                    if (urls == null) { continue; }
                     List<String> toPack = urls;
                     if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && !urls.isEmpty()) {
                         toPack = List.of(urls.get(urls.size() - 1));
                     }
                     for (String url : toPack) {
                         String key = ossService.extractObjectKey(url);
-                        String entryName = trimPrefixForZip(project, key);
+                        String entryName = buildEntryName(key, usedNames);
                         try (java.io.InputStream in = ossService.openByKey(key)) {
                             zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
                             long written = in.transferTo(zos);
@@ -128,8 +135,6 @@ public class ArchiveTaskService {
                             log.warn("archive pack entry failed: {} - {}", key, e.getMessage());
                         }
                     }
-                    processed++;
-                    t.setProcessedEntries(processed);
                 }
                 zos.finish();
             }
@@ -143,13 +148,32 @@ public class ArchiveTaskService {
         }
     }
 
-    private String trimPrefixForZip(Project project, String objectKey) {
-        // 保留 SubmissionService 的前缀处理逻辑等价实现（不依赖其 bean）
-        try {
-            java.lang.reflect.Field f = project.getClass().getDeclaredField("pathSegments");
-            // do nothing; this is placeholder to avoid unused warnings
-        } catch (Exception ignore) {}
-        return objectKey;
+    private String buildEntryName(String objectKey, java.util.Set<String> used) {
+        // 1) 去掉 oss.prefix
+        String key = objectKey == null ? "" : objectKey;
+        String pre = ossProperties.getPrefix();
+        if (pre != null && !pre.isEmpty()) {
+            String p = pre.endsWith("/") ? pre : pre + "/";
+            if (key.startsWith(p)) key = key.substring(p.length());
+        }
+        // 2) 只取文件名部分并解密
+        int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+        String enc = slash >= 0 ? key.substring(slash + 1) : key;
+        String name = fileNameCodec.decrypt(enc);
+        if (name == null || name.isBlank()) name = enc;
+        // 3) 去除路径穿越
+        name = name.replace("..", "");
+        // 4) 重名去重
+        String base = name;
+        int dot = name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        int i = 2;
+        while (used.contains(name)) {
+            name = stem + " (" + i + ")" + ext;
+            i++;
+        }
+        used.add(name);
+        return name;
     }
 }
-

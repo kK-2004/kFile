@@ -1,6 +1,10 @@
 package com.kk.admin.controller;
 
 import com.kk.admin.task.DeleteProjectTaskService;
+import com.kk.security.service.AdminPermissionService;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +17,7 @@ import java.util.Map;
 public class AdminTaskController {
     private final DeleteProjectTaskService deleteTaskService;
     private final com.kk.admin.task.ArchiveTaskService archiveTaskService;
+    private final AdminPermissionService adminPermissionService;
 
     @PostMapping("/projects/{projectId}/delete-task")
     @PreAuthorize("hasRole('SUPER')")
@@ -22,10 +27,14 @@ public class AdminTaskController {
     }
 
     @GetMapping("/tasks/{taskId}")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("isAuthenticated()")
     public java.util.Map<String,Object> get(@PathVariable String taskId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         var d = deleteTaskService.get(taskId);
         if (d != null) {
+            if (!adminPermissionService.canManageProject(auth.getName(), d.getProjectId())) {
+                throw new AccessDeniedException("Access denied");
+            }
             return java.util.Map.of(
                     "id", d.getId(),
                     "type", "DELETE",
@@ -41,6 +50,9 @@ public class AdminTaskController {
         }
         var a = archiveTaskService.get(taskId);
         if (a == null) throw new IllegalArgumentException("Task not found: " + taskId);
+        if (!adminPermissionService.canManageProject(auth.getName(), a.getProjectId())) {
+            throw new AccessDeniedException("Access denied");
+        }
         java.util.Map<String,Object> map = new java.util.HashMap<>();
         map.put("id", a.getId());
         map.put("type", "ARCHIVE");
@@ -58,7 +70,7 @@ public class AdminTaskController {
     }
 
     @PostMapping("/projects/{projectId}/archive-task")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
     public java.util.Map<String,Object> startArchive(@PathVariable Long projectId,
                                                      @RequestBody(required = false) java.util.Map<String,Object> body) {
         String fieldKey = body == null ? null : String.valueOf(body.getOrDefault("fieldKey", "")).trim();
@@ -70,11 +82,15 @@ public class AdminTaskController {
     }
 
     @GetMapping("/tasks/{taskId}/download")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("isAuthenticated()")
     public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> download(@PathVariable String taskId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         var t = archiveTaskService.get(taskId);
         if (t == null || t.getFilePath() == null || !"COMPLETED".equalsIgnoreCase(t.getStatus())) {
             throw new IllegalStateException("Task not completed or not found");
+        }
+        if (!adminPermissionService.canManageProject(auth.getName(), t.getProjectId())) {
+            throw new AccessDeniedException("Access denied");
         }
         var res = archiveTaskService.file(taskId);
         String name = t.getFilename() == null ? ("archive-" + taskId + ".zip") : t.getFilename();

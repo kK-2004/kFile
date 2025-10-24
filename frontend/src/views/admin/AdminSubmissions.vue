@@ -289,18 +289,28 @@ const archPct = computed(()=>{
   return Math.floor((t.processedEntries / t.totalEntries) * 100)
 })
 const startArchive = async (byFilter=false) => {
-  if (!('showDirectoryPicker' in window)) {
-    return ElMessage.error('当前浏览器不支持目录保存，请使用Chrome/Edge并确保HTTPS')
+  // 优先使用目录句柄，若不支持则走保存文件/浏览器下载兜底
+  const supportsDir = 'showDirectoryPicker' in window
+  let dirHandle = null
+  if (supportsDir) {
+    try { dirHandle = await window.showDirectoryPicker() } catch { /* 用户取消 */ return }
   }
-  let dirHandle
-  try { dirHandle = await window.showDirectoryPicker() } catch { return }
   const params = byFilter ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
   try {
     const { data } = await api.adminStartArchiveTask(projectId, params.fieldKey, params.fieldValue)
-    archTask.value = { taskId: data.taskId, status: data.status, totalEntries: 0, processedEntries: 0, filename: data.filename }
+    const tid = data && data.taskId
+    if (!tid) {
+      ElMessage.error('打包任务创建失败：未返回任务ID')
+      return
+    }
+    archTask.value = { taskId: tid, status: data.status, totalEntries: 0, processedEntries: 0, filename: data.filename }
     archProgressVisible.value = true
     archTimer && clearInterval(archTimer)
     archTimer = setInterval(async () => {
+      if (!archTask.value || !archTask.value.taskId) {
+        clearInterval(archTimer); archTimer = null
+        return
+      }
       try {
         const { data: st } = await api.adminGetTask(archTask.value.taskId)
         archTask.value = st
@@ -308,19 +318,85 @@ const startArchive = async (byFilter=false) => {
           clearInterval(archTimer); archTimer = null
           const res = await api.adminDownloadTask(st.id || archTask.value.taskId)
           const blob = new Blob([res.data], { type: 'application/zip' })
-          const fileHandle = await dirHandle.getFileHandle(st.filename || `project-${projectId}.zip`, { create: true })
-          const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close()
-          ElMessage.success('打包完成，已保存到所选目录')
+          const ok = await saveBlobToTarget(blob, st.filename || `project-${projectId}.zip`, dirHandle)
+          if (ok) {
+            ElMessage.success('打包完成，文件已保存')
+          } else {
+            ElMessage.error('打包完成，但保存文件失败')
+          }
           archProgressVisible.value = false
         } else if (st.status === 'FAILED') {
           clearInterval(archTimer); archTimer = null
           ElMessage.error('打包失败：' + (st.message||''))
           archProgressVisible.value = false
         }
-      } catch {}
+      } catch (e) {
+        const code = e?.response?.status
+        if (code === 401 || code === 403) {
+          clearInterval(archTimer); archTimer = null
+          archProgressVisible.value = false
+          ElMessage.error('无权限查询打包进度，请联系管理员')
+        }
+        // 其他错误忽略，等待下次轮询
+      }
     }, 1200)
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || '打包任务创建失败')
+  }
+}
+
+// 将 blob 保存到目标位置：优先目录句柄，其次保存文件对话框，最后触发浏览器下载
+async function saveBlobToTarget(blob, filename, dirHandle) {
+  // 1) 目录句柄
+  if (dirHandle && dirHandle.getFileHandle) {
+    try {
+      // 某些浏览器需要显式申请权限
+      if (dirHandle.requestPermission && dirHandle.queryPermission) {
+        const st = await dirHandle.queryPermission({ mode: 'readwrite' })
+        if (st !== 'granted') {
+          const r = await dirHandle.requestPermission({ mode: 'readwrite' })
+          if (r !== 'granted') throw new Error('permission denied')
+        }
+      }
+      const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+      const writable = await fileHandle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      return true
+    } catch (e) {
+      // 继续尝试其他方式
+      console.warn('save via directory handle failed:', e)
+    }
+  }
+  // 2) 保存文件对话框（更通用）
+  if ('showSaveFilePicker' in window) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
+      })
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      return true
+    } catch (e) {
+      console.warn('save via showSaveFilePicker failed:', e)
+    }
+  }
+  // 3) 退化为浏览器下载
+  try {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    return true
+  } catch (e) {
+    console.warn('fallback download failed:', e)
+    return false
   }
 }
 
