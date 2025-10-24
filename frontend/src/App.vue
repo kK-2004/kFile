@@ -17,7 +17,7 @@
           <svg viewBox="0 0 2 2" class="mx-2 inline size-0.5 fill-current" aria-hidden="true"><circle cx="1" cy="1" r="1" /></svg>
           Join the beta now!
         </p>
-        <a href="https://ksite.xin" class="flex-none rounded-full bg-gray-900 px-3.5 py-1 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 dark:bg-white/10 dark:ring-white/20 dark:hover:bg-white/15 dark:focus-visible:outline-white">
+        <a href="https://ksite.xin" target="_blank" rel="noopener noreferrer" class="flex-none rounded-full bg-gray-900 px-3.5 py-1 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 dark:bg-white/10 dark:ring-white/20 dark:hover:bg-white/15 dark:focus-visible:outline-white">
           Have a Look <span aria-hidden="true">&rarr;</span>
         </a>
       </div>
