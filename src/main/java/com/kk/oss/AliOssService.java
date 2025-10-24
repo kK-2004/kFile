@@ -232,28 +232,12 @@ public class AliOssService implements OssService {
     @Override
     public void deleteByUrl(String url) {
         if (!StringUtils.hasText(url)) return;
-        String host = properties.getHost();
-        String objectKey;
-        if (StringUtils.hasText(host) && url.startsWith(host)) {
-            objectKey = url.substring(host.length());
-        } else {
-            // try best effort: remove protocol and bucket host, keep path
-            int idx = url.indexOf(".aliyuncs.com/");
-            if (idx > 0) {
-                int slash = url.indexOf('/', idx + ".aliyuncs.com".length() + 1);
-                objectKey = slash > 0 ? url.substring(slash + 1) : "";
-            } else {
-                // fallback: try after first single slash after domain
-                int pos = url.indexOf('/', 8); // skip protocol
-                objectKey = pos > 0 ? url.substring(pos + 1) : url;
-            }
-        }
-        if (StringUtils.hasText(objectKey)) {
-            try {
-                ossClientPublic.deleteObject(properties.getBucket(), objectKey);
-            } catch (Exception e) {
-                log.warn("Failed to delete OSS object: {} - {}", objectKey, e.getMessage());
-            }
+        String objectKey = extractObjectKey(url);
+        if (!StringUtils.hasText(objectKey)) return;
+        try {
+            ossClientPublic.deleteObject(properties.getBucket(), objectKey);
+        } catch (Exception e) {
+            log.warn("Failed to delete OSS object: {} - {}", objectKey, e.getMessage());
         }
     }
 
