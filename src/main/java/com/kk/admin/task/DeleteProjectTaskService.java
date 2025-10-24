@@ -10,6 +10,8 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.*;
@@ -23,6 +25,7 @@ public class DeleteProjectTaskService {
     private final ProjectRepository projectRepository;
     private final OssService ossService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final PlatformTransactionManager transactionManager;
 
     private final Map<String, Task> tasks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -87,9 +90,16 @@ public class DeleteProjectTaskService {
                 deleted += slice.size();
                 t.setDeletedFiles(deleted);
             }
-            // 删除提交与项目
-            submissionRepository.deleteByProject(p);
-            projectRepository.delete(p);
+            // 删除提交与项目（事务内执行，解决 No EntityManager/transaction 问题）
+            TransactionTemplate tx = new TransactionTemplate(transactionManager);
+            tx.execute(status -> {
+                Project ref = projectRepository.findById(t.getProjectId()).orElse(null);
+                if (ref != null) {
+                    submissionRepository.deleteByProject(ref);
+                    projectRepository.delete(ref);
+                }
+                return null;
+            });
             t.setStatus("COMPLETED");
             t.setEndedAt(Instant.now().toEpochMilli());
             t.setMessage("ok");
@@ -100,4 +110,3 @@ public class DeleteProjectTaskService {
         }
     }
 }
-
