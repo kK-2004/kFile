@@ -768,7 +768,15 @@ const queryStatus = async () => {
 }
 
 const queryStatusByField = async () => {
-  if (!project.value || !project.value.queryFieldKey || !queryValue.value) return
+  if (!project.value) return
+  if (!project.value.queryFieldKey) {
+    ElMessage.warning('当前项目未配置查询字段，无法通过该方式查询')
+    return
+  }
+  if (!queryValue.value) {
+    ElMessage.warning('请输入查询值')
+    return
+  }
   querying.value = true
   try {
     const { data } = await api.latestStatus(id, { fieldValue: queryValue.value })
@@ -810,8 +818,8 @@ const handleDrop = (event) => {
 
   if (!project.value?.allowResubmit && latest.value.exists) return
 
-  const files = Array.from(event.dataTransfer.files)
-  files.forEach(file => {
+  const droppedFiles = Array.from(event.dataTransfer.files || [])
+  droppedFiles.forEach(file => {
     const fileObj = {
       name: file.name,
       size: file.size,
