@@ -29,11 +29,33 @@ const router = createRouter({
 
 export default router
 
-// Route guard: require auth for /admin except /admin/login
+// Route guard: 捕获 accessToken 并保护 /admin 路由
 router.beforeEach(async (to) => {
-  if (!to.path.startsWith('/admin') || to.path === '/admin/login') return true
   const store = useAuthStore()
+  // 无论进入哪个页面，都先尝试捕获一次 accessToken
+  try {
+    const url = new URL(window.location.href)
+    const token = url.searchParams.get('accessToken')
+    if (token) {
+      store.setToken(token)
+      url.searchParams.delete('accessToken')
+      window.history.replaceState({}, '', url.pathname + url.search)
+    }
+  } catch {}
+
   if (!store.loaded) await store.loadMe()
-  if (store.user) return true
-  return { path: '/admin/login', query: { redirect: to.fullPath } }
+
+  // 已登录且访问 /admin/login，则直接跳转到目标页
+  if (to.path === '/admin/login' && store.user) {
+    const params = new URLSearchParams(window.location.search)
+    const redirect = params.get('redirect') || '/admin/projects'
+    return { path: redirect }
+  }
+
+  // 保护 /admin/** 除登录页
+  if (to.path.startsWith('/admin') && to.path !== '/admin/login') {
+    if (store.user) return true
+    return { path: '/admin/login', query: { redirect: to.fullPath } }
+  }
+  return true
 })

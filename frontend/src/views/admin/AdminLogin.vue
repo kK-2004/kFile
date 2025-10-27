@@ -33,13 +33,17 @@
             登录
           </el-button>
         </el-form-item>
+        <div class="or-line"><span>或</span></div>
+        <el-button @click="onLoginViaSite" size="large" class="site-button">
+          从主站登录（k‑Site）
+        </el-button>
       </el-form>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage } from 'element-plus'
@@ -49,6 +53,7 @@ const router = useRouter()
 const store = useAuthStore()
 const form = ref({ username: '', password: '' })
 const loading = ref(false)
+const ksiteLoginUrl = import.meta.env.VITE_KSITE_LOGIN_URL || (import.meta.env.VITE_KSITE_BASE ? `${import.meta.env.VITE_KSITE_BASE.replace(/\/$/, '')}/login` : 'http://localhost:8081/login')
 
 const onSubmit = async () => {
   if (!form.value.username || !form.value.password) {
@@ -66,6 +71,41 @@ const onSubmit = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 处理从主站回跳带回的 accessToken
+onMounted(async () => {
+  const token = route.query.accessToken
+  if (token && typeof token === 'string') {
+    store.setToken(token)
+    try {
+      await store.loadMe()
+      const redirect = route.query.redirect || '/admin/projects'
+      router.replace(redirect)
+    } catch (e) {
+      ElMessage.error('主站登录校验失败')
+    }
+  }
+})
+
+const onLoginViaSite = async () => {
+  // 已有 token 则直接验证并跳转
+  const token = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN')
+  if (token) {
+    try {
+      await store.loadMe()
+      const redirect = route.query.redirect || '/admin/projects'
+      router.replace(redirect)
+      return
+    } catch {}
+  }
+  // 无 token，重定向主站登录，登录后回跳并携带 accessToken
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const current = window.location.origin + base + '/admin/login'
+  const redirect = route.query.redirect ? `?redirect=${encodeURIComponent(route.query.redirect)}` : ''
+  const back = encodeURIComponent(current + redirect)
+  // 约定主站支持 redirect 参数并在回跳时追加 accessToken
+  window.location.href = `${ksiteLoginUrl}?redirect=${back}`
 }
 </script>
 
@@ -144,6 +184,16 @@ const onSubmit = async () => {
 
 .login-button:hover {
   background: var(--kf-primary-hover, #66b1ff);
+}
+
+.or-line { display:flex; align-items:center; gap:8px; margin: 6px 0 12px; }
+.or-line::before, .or-line::after { content:''; flex:1; height:1px; background:#eee; }
+.or-line span { color:#999; font-size:12px; }
+
+.site-button {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
 }
 
 /* 响应式优化 */

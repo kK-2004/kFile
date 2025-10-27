@@ -221,7 +221,7 @@ public class SubmissionController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
     public Page<com.kk.project.dto.SubmissionResponse> list(@PathVariable Long projectId,
                                  @RequestParam(defaultValue = "0") int page,
                                  @RequestParam(defaultValue = "20") int size) {
@@ -238,7 +238,7 @@ public class SubmissionController {
     }
 
     @GetMapping("/export")
-    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
     public ResponseEntity<String> exportCsv(@PathVariable Long projectId) {
         Project p = projectService.get(projectId);
         String csv = submissionService.exportCsv(p);
@@ -249,7 +249,7 @@ public class SubmissionController {
     }
 
     @GetMapping("/archive")
-    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
     public ResponseEntity<StreamingResponseBody> downloadZip(@PathVariable Long projectId,
                                                              @RequestParam(required = false) String fieldKey,
                                                              @RequestParam(required = false) String fieldValue) {
@@ -272,7 +272,7 @@ public class SubmissionController {
 
     // 预生成ZIP：返回带 Content-Length 的下载
     @GetMapping("/archive-prepared")
-    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #projectId)")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
     public ResponseEntity<org.springframework.core.io.Resource> downloadPrepared(@PathVariable Long projectId,
                                                                                 @RequestParam(required = false) String fieldKey,
                                                                                 @RequestParam(required = false) String fieldValue) {

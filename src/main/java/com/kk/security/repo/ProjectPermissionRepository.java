@@ -11,5 +11,8 @@ import java.util.Optional;
 public interface ProjectPermissionRepository extends JpaRepository<ProjectPermission, Long> {
     Optional<ProjectPermission> findByUserAndProject(AdminUser user, Project project);
     List<ProjectPermission> findByUser(AdminUser user);
+    Optional<ProjectPermission> findByProjectIdAndSiteUserId(Long projectId, Long siteUserId);
+    List<ProjectPermission> findBySiteUserId(Long siteUserId);
+    void deleteBySiteUserId(Long siteUserId);
     void deleteByUser(AdminUser user);
 }

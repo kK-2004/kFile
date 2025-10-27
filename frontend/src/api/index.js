@@ -3,15 +3,31 @@ import axios from 'axios'
 // 1) 由 Vite 的 BASE_URL 推导出子路径（vite.config.js 已设 base: '/kfile/'）
 const baseFromVite = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
 
-// 2) 允许通过 VITE_API_BASE 覆盖；未提供时回退到 baseFromVite
-//    注意用 ??（空值合并），这样 dev 环境可将其设为 '' 以使用代理
-const apiBase = (import.meta.env.VITE_API_BASE ?? baseFromVite)
+// 2) 允许通过 VITE_API_BASE 覆盖；
+//    dev 环境默认使用 ''（让 Vite 代理 '/api' 生效），prod 回退到 baseFromVite('/kfile')
+const apiBase = (typeof import.meta.env.VITE_API_BASE !== 'undefined')
+  ? import.meta.env.VITE_API_BASE
+  : (import.meta.env.DEV ? '' : baseFromVite)
 
 
 const instance = axios.create({
   baseURL: apiBase,
   timeout: 20000,
   withCredentials: true
+})
+
+// Attach Bearer token from localStorage when present
+instance.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers['Authorization'] = `Bearer ${token}`
+      // 当使用 Bearer 时，不需要发送 Cookie，避免混淆（后端也允许）
+      config.withCredentials = false
+    }
+  } catch {}
+  return config
 })
 
 // Global response interceptor: redirect on 401 with X-Redirect
@@ -43,6 +59,8 @@ instance.interceptors.response.use(
 )
 
 export default {
+  // Site auth
+  authMe() { return instance.get('/api/auth/me') },
   // Projects
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },

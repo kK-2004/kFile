@@ -35,16 +35,25 @@ public class AdminProjectController {
     @PreAuthorize("isAuthenticated()")
     public List<ProjectResponse> myProjects() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        AdminUser user = userRepo.findByUsername(auth.getName()).orElse(null);
         List<Project> projects;
-        if (user != null && "SUPER".equalsIgnoreCase(user.getRole())) {
+        boolean isSuper = auth.getAuthorities().stream().anyMatch(a -> "ROLE_SUPER".equals(a.getAuthority()));
+        if (isSuper) {
             projects = projectService.list();
+        } else if (auth instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth) {
+            String sub = jwtAuth.getToken().getSubject();
+            java.util.List<ProjectPermission> list;
+            try {
+                list = permRepo.findBySiteUserId(Long.parseLong(sub));
+            } catch (Exception e) {
+                list = java.util.List.of();
+            }
+            projects = new ArrayList<>();
+            for (ProjectPermission pp : list) projects.add(pp.getProject());
         } else {
+            AdminUser user = userRepo.findByUsername(auth.getName()).orElse(null);
             List<ProjectPermission> list = user == null ? List.of() : permRepo.findByUser(user);
             projects = new ArrayList<>();
-            for (ProjectPermission pp : list) {
-                projects.add(pp.getProject());
-            }
+            for (ProjectPermission pp : list) projects.add(pp.getProject());
         }
         List<ProjectResponse> out = new ArrayList<>();
         for (Project p : projects) {
@@ -58,4 +67,3 @@ public class AdminProjectController {
         return out;
     }
 }
-

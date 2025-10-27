@@ -19,11 +19,18 @@ import java.util.List;
 public class ProjectController {
     private final ProjectService projectService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final com.kk.security.service.AdminPermissionService adminPermissionService;
 
     @PostMapping
-    @PreAuthorize("hasRole('SUPER')")
-    public ProjectResponse create(@RequestBody CreateProjectRequest req) {
+    @PreAuthorize("hasRole('SUPER') or hasAuthority('ROLE_SITE_USER') or hasAuthority('ROLE_SITE_ADMIN')")
+    public ProjectResponse create(@RequestBody CreateProjectRequest req,
+                                  org.springframework.security.core.Authentication authentication) {
         Project p = projectService.create(req);
+        // 如果是站点用户，自动授予自己管理权限
+        if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth) {
+            String sub = jwtAuth.getToken().getSubject();
+            try { adminPermissionService.grantForSiteUser(p.getId(), Long.parseLong(sub)); } catch (Exception ignored) {}
+        }
         List<String> types = projectService.parseTypes(p);
         Object expected = null;
         try {
@@ -59,7 +66,7 @@ public class ProjectController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication.name, #id)")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #id)")
     public ProjectResponse update(@PathVariable Long id, @RequestBody UpdateProjectRequest req) {
         Project p = projectService.update(id, req);
         List<String> types = projectService.parseTypes(p);

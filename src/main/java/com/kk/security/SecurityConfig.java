@@ -1,6 +1,7 @@
 package com.kk.security;
 
 import com.kk.security.service.AdminUserDetailsService;
+import com.kk.security.service.UserAccountService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,9 +18,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
 
@@ -28,6 +36,14 @@ import java.util.List;
 public class SecurityConfig {
     @Value("${env.cors:http://localhost:5173}")
     private String cors;
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}")
+    private String issuerUri;
+
+    private final UserAccountService userAccountService;
+
+    public SecurityConfig(UserAccountService userAccountService) {
+        this.userAccountService = userAccountService;
+    }
     @Bean
     public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 
@@ -72,7 +88,19 @@ public class SecurityConfig {
             .authenticationProvider(authenticationProvider)
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
-            .logout(logout -> logout.logoutUrl("/api/admin/auth/logout"));
+            .logout(logout -> logout
+                .logoutUrl("/api/admin/auth/logout")
+                .logoutSuccessHandler((request, response, authentication) -> {
+                    try {
+                        response.setStatus(HttpServletResponse.SC_OK);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"ok\":true}");
+                    } catch (Exception ignored) {}
+                })
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(new SiteJwtAuthConverter(userAccountService)))
+            );
         return http.build();
     }
 
@@ -97,5 +125,19 @@ public class SecurityConfig {
     @Bean
     public SecurityContextRepository securityContextRepository() {
         return new HttpSessionSecurityContextRepository();
+    }
+
+    // JWT 解码器，叠加 issuer 与 aud 验证（aud 需包含 k-File）
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        if (issuerUri == null || issuerUri.isBlank()) {
+            // 未配置 issuer 时，使用一个不可用的占位解码器，避免误启用
+            return NimbusJwtDecoder.withJwkSetUri("http://localhost/invalid-jwks").build();
+        }
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuerUri).build();
+        OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuerUri);
+        OAuth2TokenValidator<Jwt> withAudience = new JwtAudienceValidator("k-File");
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
+        return decoder;
     }
 }
