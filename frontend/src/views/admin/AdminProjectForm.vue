@@ -144,6 +144,31 @@
           </el-form-item>
         </div>
 
+        <!-- 自动识别创建（放在期望字段之前） -->
+        <div class="form-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>自动识别创建</span>
+          </div>
+          <div class="auto-detect-bar">
+            <el-space>
+              <el-button type="primary" @click="openAutoDetect">选择 CSV 并自动创建</el-button>
+              <span class="hint">从包含表头的 CSV 自动识别字段（如 major, sid）并生成期望字段与限制名单。</span>
+            </el-space>
+            <input ref="csvInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange" />
+          </div>
+          <div v-if="autoPreview.headers.length" class="auto-summary">
+            <div>已检测到字段：
+              <el-tag v-for="h in autoPreview.headers" :key="h" size="small" style="margin-right:6px">{{ h }}</el-tag>
+              （{{ autoPreview.count }} 行）
+            </div>
+          </div>
+          <el-switch v-model="autoRestrict" active-text="开启提交者限制（仅允许识别名单）" inactive-text="不开启提交者限制" />
+          <div class="advanced-toggle">
+            <el-switch v-model="showAdvanced" active-text="显示高级设置" inactive-text="隐藏高级设置" />
+          </div>
+        </div>
+
         <!-- 用户字段配置 -->
         <div class="form-section">
           <div class="section-title">
@@ -283,31 +308,6 @@
                 </template>
               </el-table-column>
             </el-table>
-          </div>
-        </div>
-
-        <!-- 自动识别创建 -->
-        <div class="form-section">
-          <div class="section-title">
-            <el-icon><Document /></el-icon>
-            <span>自动识别创建</span>
-          </div>
-          <div class="auto-detect-bar">
-            <el-space>
-              <el-button type="primary" @click="openAutoDetect">选择 CSV 并自动创建</el-button>
-              <span class="hint">从包含表头的 CSV 自动识别字段（如 major, sid）并生成期望字段与限制名单。</span>
-            </el-space>
-            <input ref="csvInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange" />
-          </div>
-          <div v-if="autoPreview.headers.length" class="auto-summary">
-            <div>已检测到字段：
-              <el-tag v-for="h in autoPreview.headers" :key="h" size="small" style="margin-right:6px">{{ h }}</el-tag>
-              （{{ autoPreview.count }} 行）
-            </div>
-          </div>
-          <el-switch v-model="autoRestrict" active-text="开启提交者限制（仅允许识别名单）" inactive-text="不开启提交者限制" />
-          <div class="advanced-toggle">
-            <el-switch v-model="showAdvanced" active-text="显示高级设置" inactive-text="隐藏高级设置" />
           </div>
         </div>
 
@@ -1062,6 +1062,8 @@ function bindSegDrag() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .auto-summary { color: var(--kf-muted); font-size: 12px; margin-bottom: 8px; }
 .advanced-toggle { margin-top: 10px; }
@@ -1070,6 +1072,8 @@ function bindSegDrag() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .hidden { display: none; }
 .hint { color: var(--kf-muted); font-size: 12px; }
@@ -1122,33 +1126,32 @@ function bindSegDrag() {
 
 /* Form styling */
 .project-form {
-  padding: 20px 0;
+  padding: 12px 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .form-section {
   margin-bottom: 24px;
-  padding: 20px;
-  background: var(--kf-background);
-  border-radius: 8px;
+  padding: 20px 20px 16px;
+  background: #ffffff;
+  border-radius: 12px;
   border: 1px solid var(--kf-border-color);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.04);
 }
 
 .section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  font-size: 16px;
-  font-weight: bold;
-  color: var(--kf-text-primary);
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--kf-primary);
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
 }
 
-.section-title .el-icon {
-  font-size: 18px;
-  color: var(--kf-primary);
-}
+.section-title .el-icon { font-size: 18px; color: #6b7280; }
 
 /* Form item styling */
 .required-field :deep(.el-form-item__label) {
@@ -1163,6 +1166,37 @@ function bindSegDrag() {
 
 .form-input {
   max-width: 100%;
+}
+
+/* 统一表单项的垂直对齐与间距 */
+:deep(.el-form-item) { margin-bottom: 14px; }
+:deep(.el-form-item__content) { align-items: center; }
+:deep(.el-form-item__label) { font-weight: 500; color: #374151; }
+
+/* 统一输入控件宽度与尺寸 */
+:deep(.el-input),
+:deep(.el-select),
+:deep(.el-date-editor) { width: 100%; }
+:deep(.el-input__inner),
+:deep(.el-select .el-input__inner) { line-height: 36px; }
+
+/* 顶部/分区操作栏布局更稳健 */
+.table-header,
+.auto-detect-bar,
+.import-bar {
+  align-items: center;
+}
+.table-header { flex-wrap: wrap; gap: 10px; }
+.table-hint { margin-left: auto; }
+
+/* 按钮风格统一（更简洁） */
+:deep(.el-button) { border-radius: 8px; font-weight: 500; }
+/* 保持原有主按钮配色（移除全局颜色覆盖） */
+
+/* 小屏优化：提示自动换行，按钮保持可点区域 */
+@media (max-width: 768px) {
+  .auto-detect-bar .hint,
+  .import-bar .hint { flex: 1 1 100%; }
 }
 
 .field-hint {

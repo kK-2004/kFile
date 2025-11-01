@@ -11,7 +11,6 @@
             <el-button type="primary" @click="exportCsv">导出CSV</el-button>
             <el-button type="success" @click="manualVisible = true">手动上传</el-button>
             <el-button @click="showMissing">未提交名单</el-button>
-            <el-button @click="downloadMissing">下载未提交名单</el-button>
           </el-space>
         </div>
       </template>
@@ -749,6 +748,7 @@ const formatDateTime = (dateTimeStr) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 24px;
   font-size: 20px;
   font-weight: 600;
   color: #111827;
