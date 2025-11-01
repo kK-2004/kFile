@@ -46,27 +46,66 @@ router.beforeEach(async (to) => {
     }
   } catch {}
 
-  if (!store.loaded) await store.loadMe()
-
-  // 已登录且访问 /admin/login，则直接跳转到目标页
-  if (to.path === '/admin/login' && store.user) {
-    const params = new URLSearchParams(window.location.search)
-    const raw = params.get('redirect') || '/admin/projects'
-    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-    let target = raw
-    try {
-      if (/^https?:/i.test(target)) {
-        const url = new URL(target)
-        target = url.pathname + url.search + url.hash
-      }
-    } catch {}
-    if (base && target.startsWith(base + '/')) target = target.slice(base.length)
-    return { path: target }
+  // 在非登录页正常探测会话；在登录页如果已携带站点 token 也应探测以便自动跳转
+  if (to.path !== '/admin/login') {
+    if (!store.loaded) await store.loadMe()
+  } else {
+    const hasSiteToken = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
+    if (!store.loaded && hasSiteToken) {
+      try { await store.loadMe() } catch {}
+    }
   }
 
-  // 保护 /admin/** 除登录页
+  // 不再在首页自动将主站用户导向 /user/projects（该页为管理员调试页面）
+
+  // 已登录且访问 /admin/login：
+  // - 本地管理员：跳回目标或 /admin/projects
+  // - 主站管理员（role 包含 ADMIN/SUPER）：直接进 /admin/projects
+  // - 主站普通用户：同样直接进入 /admin/projects
+  if (to.path === '/admin/login' && store.user) {
+    const params = new URLSearchParams(window.location.search)
+    const raw = params.get('redirect') || ''
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+    const normalize = (input) => {
+      let t = input || ''
+      try { if (/^https?:/i.test(t)) { const u = new URL(t); t = u.pathname + u.search + u.hash } } catch {}
+      if (base && t.startsWith(base + '/')) t = t.slice(base.length)
+      if (!t) t = '/'
+      return t
+    }
+    const isAdminPath = (p) => p.startsWith('/admin')
+    const role = String(store.user.role || '').toUpperCase()
+    const isSiteAdmin = store.user.mode === 'site' && (role === 'ADMIN' || role === 'SUPER')
+    if (store.user.mode === 'local') {
+      const t = normalize(raw || '/admin/projects')
+      return { path: t }
+    } else if (store.user.mode === 'site') {
+      // 无论是否管理员，统一进入项目管理页
+      return { path: '/admin/projects' }
+    } else {
+      // 站点普通用户：留在登录页
+      return true
+    }
+  }
+
+  // 保护 /admin/** 除登录页：
+  // - 本地管理员：放行
+  // - 主站管理员（ADMIN/SUPER）：放行（通过 Bearer 访问）
+  // - 主站普通用户：仅放行项目管理相关页面（/admin/projects...）
+  // - 未登录：跳到管理员登录页
   if (to.path.startsWith('/admin') && to.path !== '/admin/login') {
-    if (store.user) return true
+    if (store.user && store.user.mode === 'local') return true
+    if (store.user && store.user.mode === 'site') {
+      const role = String(store.user.role || '').toUpperCase()
+      if (role === 'ADMIN' || role === 'SUPER') return true
+      // 普通站点用户：仅允许进入项目管理相关页面
+      const allowSiteUser = (
+        to.path === '/admin/projects' ||
+        to.path.startsWith('/admin/projects/')
+      )
+      if (allowSiteUser) return true
+      return { path: '/admin/login', query: { redirect: to.fullPath } }
+    }
     return { path: '/admin/login', query: { redirect: to.fullPath } }
   }
   return true

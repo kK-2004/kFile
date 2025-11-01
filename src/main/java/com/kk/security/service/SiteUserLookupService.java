@@ -9,11 +9,19 @@ import org.springframework.web.client.RestTemplate;
 
 @Service
 public class SiteUserLookupService {
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${site.base-url:http://localhost:8081}")
     private String siteBaseUrl;
+
+    public SiteUserLookupService() {
+        // 设置超时，避免上游阻塞导致 /api/auth/me 挂起
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(2000);
+        this.restTemplate = new RestTemplate(factory);
+    }
 
     public String fetchNickNameByUserId(Long userId) {
         try {
@@ -33,4 +41,3 @@ public class SiteUserLookupService {
         }
     }
 }
-

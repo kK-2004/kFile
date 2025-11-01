@@ -33,15 +33,18 @@ import { useAuthStore } from '../../stores/auth'
 const projects = ref([])
 const loading = ref(false)
 const auth = useAuthStore()
-const hasAdmin = computed(() => !!auth.user)
+
+const hasAdmin = computed(() => !!auth.user && auth.user.mode === 'local')
 
 const load = async () => {
   loading.value = true
   try {
     if (!auth.loaded) await auth.loadMe()
-    if (!auth.user) { projects.value = []; return }
-    const { data } = await api.adminListProjects()
-    projects.value = data
+    if (!auth.user || auth.user.mode !== 'local') { projects.value = []; return }
+    try {
+      const { data } = await api.adminListProjects()
+      projects.value = data
+    } catch { projects.value = [] }
   } finally { loading.value = false }
 }
 

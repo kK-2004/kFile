@@ -33,9 +33,20 @@ instance.interceptors.request.use((config) => {
     const isAdminApi = path.startsWith('/api/admin/')
     const isProjectsQuota = path === '/api/projects/quota'
     const isAuthMe = path === '/api/auth/me'
-    const isProjectsCreateOrModify = path === '/api/projects' ? (method !== 'get') : (/^\/api\/projects\//.test(path) && ['put','delete','patch'].includes(method))
-    const isPublicSubmission = /^\/api\/projects\//.test(path) && (path.includes('/submissions') || path.endsWith('/status'))
-    const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && !isProjectsQuota
+    const isProjectsCreateOrModify = path === '/api/projects' ? (method !== 'get') : (/^\/api\/projects\//.test(path) && ['post','put','delete','patch'].includes(method))
+    // Submissions endpoints classification
+    const reProjectId = '[^/]+'
+    const reBase = new RegExp(`^/api/projects/${reProjectId}/submissions`)
+    const isSubmissionList = new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path) && method === 'get'
+    const isPublicSubmissions = (
+      (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path)) ||
+      (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions/(direct-init|direct-complete|direct-multipart-(sign|complete))$`).test(path)) ||
+      (method === 'get'  && new RegExp(`^/api/projects/${reProjectId}/submissions/status$`).test(path))
+    )
+    const isProjectAdminOps = (
+      method === 'get' && new RegExp(`^/api/projects/${reProjectId}/submissions/(export|archive|archive-prepared)$`).test(path)
+    )
+    const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && !isProjectsQuota && !isSubmissionList && !isProjectAdminOps
 
     // 1) 管理员认证接口：强制走 Cookie 会话，不注入 Bearer
     if (isAdminAuth) {
@@ -44,26 +55,45 @@ instance.interceptors.request.use((config) => {
       return config
     }
 
-    // 2) 管理端 API：统一用 Cookie 会话（后端已配置）
+    // 2) 管理端 API：
+    //    - 若存在主站 token，则使用 Bearer（后端资源服务器会识别）
+    //    - 否则回退到 Cookie 会话（用于本地管理员）
     if (isAdminApi) {
-      if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-      config.withCredentials = true
+      const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
+      if (token && !isAdminAuth) {
+        config.headers = config.headers || {}
+        config.headers['Authorization'] = `Bearer ${token}`
+        config.withCredentials = false
+      } else {
+        if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+        config.withCredentials = true
+      }
       return config
     }
 
     // 3) 站点用户保护的项目接口（创建/修改/配额）：注入 Bearer
-    const needBearer = isAuthMe || isProjectsQuota || isProjectsCreateOrModify
+    const needBearer = isAuthMe || isProjectsQuota || isProjectsCreateOrModify || isSubmissionList || isProjectAdminOps
     if (needBearer) {
       const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
       if (token) {
         config.headers = config.headers || {}
         config.headers['Authorization'] = `Bearer ${token}`
         config.withCredentials = false
+      } else {
+        if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+        config.withCredentials = true
       }
       return config
     }
 
-    // 4) 公共接口（含提交/状态/项目GET）：不注入 Bearer，避免无效/过期 Token 触发 401 → 跳管理员登录
+    // 4) 公共接口（含提交/直传/状态/项目GET）：不注入 Bearer，避免无效/过期 Token 触发 401 → 跳管理员登录
+    if (isPublicSubmissions || isProjectPublicGet) {
+      if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+      config.withCredentials = false
+      return config
+    }
+
+    // 其余默认保持现状
     if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
     config.withCredentials = false
   } catch {}
@@ -88,11 +118,27 @@ instance.interceptors.response.use(
         const isAdminAuth = path.startsWith('/api/admin/auth/')
         const isAdminApi = path.startsWith('/api/admin/')
         const isAdminMe = path === '/api/admin/auth/me'
-        const isAuthMe = path === '/api/auth/me'
-        const isPublicSubmission = /^\/api\/projects\//.test(path) && (path.includes('/submissions') || path.endsWith('/status') || path.endsWith('/validate'))
-        const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && path !== '/api/projects/quota'
-        // 这些请求不应触发跳转：公共接口 + 站点 auth 探测
-        if (isAuthMe || isPublicSubmission || isProjectPublicGet) {
+        const reProjectId = '[^/]+'
+        const isSubmissionList = new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path) && method === 'get'
+        const isPublicSubmissions = (
+          (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path)) ||
+          (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions/(direct-init|direct-complete|direct-multipart-(sign|complete))$`).test(path)) ||
+          (method === 'get'  && new RegExp(`^/api/projects/${reProjectId}/submissions/status$`).test(path)) ||
+          (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions/validate$`).test(path))
+        )
+        const isProjectAdminOps = (method === 'get' && new RegExp(`^/api/projects/${reProjectId}/submissions/(export|archive|archive-prepared)$`).test(path))
+        const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && path !== '/api/projects/quota' && !isSubmissionList && !isProjectAdminOps
+        // 这些请求不应触发跳转：公共接口
+        if (isPublicSubmissions || isProjectPublicGet) {
+          return Promise.reject(error)
+        }
+
+        // 如果当前页面是用户端或首页，即便命中了管理端接口的 401 也不要跳转，避免循环
+        let currentPath = ''
+        try { currentPath = new URL(window.location.href).pathname } catch { currentPath = window.location.pathname || '' }
+        if (base && currentPath.startsWith(base)) currentPath = currentPath.slice(base.length)
+        const onUserOrHome = currentPath === '/' || currentPath.startsWith('/user')
+        if (onUserOrHome) {
           return Promise.reject(error)
         }
 
@@ -119,7 +165,7 @@ instance.interceptors.response.use(
 
 export default {
   // Site auth
-  authMe() { return instance.get('/api/auth/me') },
+  authMe() { return instance.get('/api/auth/me', { timeout: 8000 }) },
   // Projects
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },

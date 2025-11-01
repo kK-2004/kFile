@@ -83,24 +83,32 @@ const onSubmit = async () => {
   }
 }
 
-// 处理从主站回跳带回的 accessToken
+// 处理从主站回跳（accessToken 可能被路由守卫吃掉），或已有主站 token 的场景
 onMounted(async () => {
-  const token = route.query.accessToken
-  if (token && typeof token === 'string') {
-    store.setToken(token)
+  const qpToken = route.query.accessToken
+  const savedToken = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
+  if (typeof qpToken === 'string' && qpToken) store.setToken(qpToken)
+  if (qpToken || savedToken) {
     try {
       await store.loadMe()
-      const raw = route.query.redirect || '/admin/projects'
       const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-      let target = String(raw)
-      try {
-        if (target.startsWith('http://') || target.startsWith('https://')) {
-          const url = new URL(target)
-          target = url.pathname + url.search + url.hash
-        }
-      } catch {}
-      if (base && target.startsWith(base + '/')) target = target.slice(base.length)
-      router.replace(target)
+      const normalize = (input) => {
+        let t = String(input || '')
+        try { if (/^https?:/i.test(t)) { const u = new URL(t); t = u.pathname + u.search + u.hash } } catch {}
+        if (base && t.startsWith(base + '/')) t = t.slice(base.length)
+        if (!t) t = '/'
+        return t
+      }
+      const raw = route.query.redirect || ''
+      const t0 = normalize(raw)
+      const role = String(store.user?.role || '').toUpperCase()
+      if (store.user?.mode === 'local') {
+        router.replace(normalize(raw || '/admin/projects'))
+      } else if (store.user?.mode === 'site' && (role === 'ADMIN' || role === 'SUPER')) {
+        router.replace('/admin/projects')
+      } else {
+        // 站点普通用户：不自动跳走，保留在登录页
+      }
     } catch (e) {
       ElMessage.error('主站登录校验失败')
     }
@@ -113,8 +121,23 @@ const onLoginViaSite = async () => {
   if (token) {
     try {
       await store.loadMe()
-      const redirect = route.query.redirect || '/admin/projects'
-      router.replace(redirect)
+      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+      const normalize = (input) => {
+        let t = String(input || '')
+        try { if (/^https?:/i.test(t)) { const u = new URL(t); t = u.pathname + u.search + u.hash } } catch {}
+        if (base && t.startsWith(base + '/')) t = t.slice(base.length)
+        if (!t) t = '/'
+        return t
+      }
+      const raw = route.query.redirect || ''
+      const role = String(store.user?.role || '').toUpperCase()
+      if (store.user?.mode === 'local') {
+        router.replace(normalize(raw || '/admin/projects'))
+      } else if (store.user?.mode === 'site' && (role === 'ADMIN' || role === 'SUPER')) {
+        router.replace('/admin/projects')
+      } else {
+        // 非管理员站点用户保留在登录页
+      }
       return
     } catch {}
   }
