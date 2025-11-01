@@ -41,3 +41,6 @@ app:
 geoip:
   enabled: ${GEOIP_ENABLED:false}
   mmdbPath: ${GEOIP_MMDB_PATH:}
+
+site:
+  base-url: ${KSITE_BASE_URL:https://ksite.xin}
