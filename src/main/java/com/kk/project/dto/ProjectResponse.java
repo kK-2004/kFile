@@ -27,8 +27,16 @@ public class ProjectResponse {
     private String userSubmitStatusType;
     private String userSubmitStatusText;
     private String queryFieldKey;
+    private java.util.List<String> allowedSubmitterKeys;
+    private Object allowedSubmitterList;
+    // Public hint: whether restriction is enabled (keys + list configured)
+    private Boolean submitterRestrictionEnabled;
 
     public static ProjectResponse from(Project p, List<String> types, Object expected) {
+        return from(p, types, expected, true);
+    }
+
+    public static ProjectResponse from(Project p, List<String> types, Object expected, boolean includeAllowedList) {
         ProjectResponse r = new ProjectResponse();
         r.setId(p.getId());
         r.setName(p.getName());
@@ -47,6 +55,20 @@ public class ProjectResponse {
         r.setUserSubmitStatusText(p.getUserSubmitStatusText());
         r.setQueryFieldKey(p.getQueryFieldKey());
         try {
+            if (p.getAllowedSubmitterKeys() != null) {
+                r.setAllowedSubmitterKeys(new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                        p.getAllowedSubmitterKeys(), java.util.List.class));
+            }
+        } catch (Exception ignored) {}
+        if (includeAllowedList) {
+            try {
+                if (p.getAllowedSubmitterList() != null) {
+                    r.setAllowedSubmitterList(new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                            p.getAllowedSubmitterList(), Object.class));
+                }
+            } catch (Exception ignored) {}
+        }
+        try {
             java.time.Instant now = java.time.Instant.now();
             Boolean exp = (p.getEndAt() != null && now.isAfter(p.getEndAt()));
             r.setExpired(exp);
@@ -56,6 +78,12 @@ public class ProjectResponse {
                 r.setPathSegments(new com.fasterxml.jackson.databind.ObjectMapper().readValue(
                         p.getPathSegments(), java.util.List.class));
             }
+        } catch (Exception ignored) {}
+        // set restriction enabled flag (keys + list present on entity)
+        try {
+            boolean hasKeys = p.getAllowedSubmitterKeys() != null && !p.getAllowedSubmitterKeys().isBlank();
+            boolean hasList = p.getAllowedSubmitterList() != null && !p.getAllowedSubmitterList().isBlank();
+            r.setSubmitterRestrictionEnabled(hasKeys && hasList);
         } catch (Exception ignored) {}
         return r;
     }

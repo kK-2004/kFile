@@ -23,4 +23,9 @@ public class CreateProjectRequest {
     private String queryFieldKey;        // 查询提交状态所用字段（key）
     private String pathFieldKey; // 上传路径字段key
     private java.util.List<String> pathSegments; // 上传路径层级
+
+    // 提交者限制：允许提交的字段 key 列表（为空/缺省表示不限制）
+    private java.util.List<String> allowedSubmitterKeys;
+    // 允许提交的名单（可以是字符串数组，或对象数组）；前端可直接传 JSON 结构
+    private Object allowedSubmitterList;
 }

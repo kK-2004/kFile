@@ -36,7 +36,7 @@ public class ProjectController {
         try {
             expected = p.getExpectedUserFields() == null ? null : objectMapper.readValue(p.getExpectedUserFields(), new TypeReference<>(){});
         } catch (Exception ignored) {}
-        return ProjectResponse.from(p, types, expected);
+        return ProjectResponse.from(p, types, expected, false);
     }
 
     @GetMapping("/{id}")
@@ -47,7 +47,7 @@ public class ProjectController {
         try {
             expected = p.getExpectedUserFields() == null ? null : objectMapper.readValue(p.getExpectedUserFields(), new TypeReference<>(){});
         } catch (Exception ignored) {}
-        return ProjectResponse.from(p, types, expected);
+        return ProjectResponse.from(p, types, expected, false);
     }
 
     @GetMapping
@@ -60,7 +60,7 @@ public class ProjectController {
             try {
                 expected = p.getExpectedUserFields() == null ? null : objectMapper.readValue(p.getExpectedUserFields(), new TypeReference<>(){});
             } catch (Exception ignored) {}
-            out.add(ProjectResponse.from(p, types, expected));
+            out.add(ProjectResponse.from(p, types, expected, false));
         }
         return out;
     }

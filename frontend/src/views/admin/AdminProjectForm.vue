@@ -286,6 +286,118 @@
           </div>
         </div>
 
+        <!-- 自动识别创建 -->
+        <div class="form-section">
+          <div class="section-title">
+            <el-icon><Document /></el-icon>
+            <span>自动识别创建</span>
+          </div>
+          <div class="auto-detect-bar">
+            <el-space>
+              <el-button type="primary" @click="openAutoDetect">选择 CSV 并自动创建</el-button>
+              <span class="hint">从包含表头的 CSV 自动识别字段（如 major, sid）并生成期望字段与限制名单。</span>
+            </el-space>
+            <input ref="csvInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange" />
+          </div>
+          <div v-if="autoPreview.headers.length" class="auto-summary">
+            <div>已检测到字段：
+              <el-tag v-for="h in autoPreview.headers" :key="h" size="small" style="margin-right:6px">{{ h }}</el-tag>
+              （{{ autoPreview.count }} 行）
+            </div>
+          </div>
+          <el-switch v-model="autoRestrict" active-text="开启提交者限制（仅允许识别名单）" inactive-text="不开启提交者限制" />
+          <div class="advanced-toggle">
+            <el-switch v-model="showAdvanced" active-text="显示高级设置" inactive-text="隐藏高级设置" />
+          </div>
+        </div>
+
+        <!-- 提交者限制（可选） -->
+        <!-- 高级：保留旧的手动名单导入（可选，可隐藏） -->
+        <div class="form-section" v-if="showAdvanced">
+          <div class="section-title">
+            <el-icon><User /></el-icon>
+            <span>提交者限制（高级）</span>
+          </div>
+          <div class="field-hint" style="margin-bottom:8px">通常无需配置；若你未使用“自动识别创建”，可在此手动设置限制字段与名单。</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="限定字段（可多选）">
+                <el-select v-model="form.allowedSubmitterKeys" multiple placeholder="选择需要限定的字段">
+                  <el-option v-for="f in expectedFields" :key="f.key" :value="f.key" :label="`${f.label} (${f.key})`" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="列表格式">
+                <el-radio-group v-model="listMode">
+                  <el-radio-button label="csv" :disabled="(form.allowedSubmitterKeys||[]).length !== 1">逗号分隔</el-radio-button>
+                  <el-radio-button label="json">JSON 列表</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="允许名单">
+            <div style="width:100%">
+              <div class="import-bar">
+                <el-space>
+                  <el-button @click="triggerCsvSelect">从 CSV 导入</el-button>
+                  <span class="hint">CSV 第一行是表头，导入后映射到限定字段并生成 {{ listMode==='csv' ? '逗号分隔' : 'JSON' }} 列表。</span>
+                </el-space>
+                <input ref="csvInputRef2" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange2" />
+              </div>
+              <el-input type="textarea" :rows="6" v-model="listText" :placeholder="listPlaceholder" />
+            </div>
+          </el-form-item>
+        </div>
+
+        <!-- 自动识别创建结果确认对话框 -->
+        <el-dialog v-model="autoDialogVisible" title="自动识别创建" width="560px">
+          <div v-if="csvHeaders.length">
+            <p class="mb-3 text-sm" style="color: var(--kf-muted);">检测到表头并读取 {{ csvPreviewCount }} 行。将根据唯一值数量自动为字段选择类型：</p>
+            <ul class="mb-3 text-sm" style="color: var(--kf-muted);">
+              <li>唯一值少（如“专业”）：设为 下拉(select)，并自动生成选项</li>
+              <li>唯一值多（如“学号”）：设为 文本(text)</li>
+            </ul>
+            <div class="mb-2">字段预览：</div>
+            <el-table :data="autoFieldPreview" size="small" style="width:100%">
+              <el-table-column prop="key" label="字段名" width="160" />
+              <el-table-column prop="type" label="类型" width="120" />
+              <el-table-column prop="uniqueCount" label="唯一值" width="100" />
+              <el-table-column label="示例/选项">
+                <template #default="{ row }">
+                  <span v-if="row.type==='select'">{{ row.options.slice(0,6).join(', ') }}<span v-if="row.options.length>6"> …</span></span>
+                  <span v-else>{{ row.sample }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div v-else class="text-gray-500">未检测到 CSV 表头，请确认文件内容。</div>
+          <template #footer>
+            <el-button @click="autoDialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="applyAutoDetect">应用到项目</el-button>
+          </template>
+        </el-dialog>
+
+        <!-- 旧 CSV 映射对话框（手动名单导入用） -->
+        <el-dialog v-model="csvDialogVisible" :title="`从 CSV 导入（${csvFileName}）`" width="520px">
+          <div v-if="csvHeaders.length">
+            <div class="mb-3 text-sm" style="color: var(--kf-muted);">检测到 {{ csvPreviewCount }} 行数据。请为每个限定字段选择 CSV 列。</div>
+            <el-form label-width="140px">
+              <el-form-item v-for="k in (form.allowedSubmitterKeys||[])" :key="k" :label="`${k}`">
+                <el-select v-model="csvMapping[k]" style="width: 260px;" placeholder="选择列">
+                  <el-option v-for="h in csvHeaders" :key="h" :label="h" :value="h" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+          </div>
+          <div v-else class="text-gray-500">未检测到 CSV 表头，请确认文件内容。</div>
+          <template #footer>
+            <el-button @click="csvDialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="confirmCsvImport">生成名单</el-button>
+          </template>
+        </el-dialog>
+
+
         <!-- 路径层级配置 -->
         <div class="form-section">
           <div class="section-title">
@@ -405,7 +517,8 @@ const form = ref({
   fileSizeLimitBytes: null,
   startAt: null,
   endAt: null,
-  offline: false
+  offline: false,
+  allowedSubmitterKeys: []
 })
 const allowedTypes = ref([])
 const fileSizeLimitMB = ref(null)
@@ -418,10 +531,262 @@ const expectedFields = ref([])
 const pathSegments = ref([]) // 例如: ['$project','studentNo']
 const fieldsTable = ref()
 const segmentsTable = ref()
+const listMode = ref('csv')
+const listText = ref('')
+// 自动识别/CSV 导入
+const csvPurpose = ref('allow') // 'auto' | 'allow'
+const csvInputRef = ref(null)
+const csvInputRef2 = ref(null)
+const csvDialogVisible = ref(false)
+const csvFileName = ref('')
+const csvHeaders = ref([])
+const csvRows = ref([]) // array of objects by header
+const csvMapping = ref({}) // key -> header
+const csvPreviewCount = computed(() => Array.isArray(csvRows.value) ? csvRows.value.length : 0)
+// 自动识别预览
+const autoDialogVisible = ref(false)
+const autoPreview = ref({ headers: [], count: 0 })
+const autoFieldPreview = ref([])
+const autoRestrict = ref(false)
+const showAdvanced = ref(false)
+
+function openAutoDetect() { csvPurpose.value = 'auto'; csvInputRef.value?.click() }
+function triggerCsvSelect() { csvPurpose.value = 'allow'; (csvInputRef2.value||csvInputRef.value)?.click() }
+function onCsvFileChange(e) {
+  const file = e?.target?.files?.[0]
+  if (!file) return
+  csvFileName.value = file.name || 'data.csv'
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const text = decodeBufferToText(reader.result)
+      const { headers, rows } = parseCsv(text)
+      if (!headers.length) throw new Error('未检测到表头')
+      csvHeaders.value = headers
+      csvRows.value = rows
+      if (csvPurpose.value === 'auto') {
+        prepareAutoPreview()
+        autoDialogVisible.value = true
+      } else {
+        // 预填映射：按完全相同或大小写不敏感匹配
+        const keys = form.value?.allowedSubmitterKeys || []
+        const map = {}
+        for (const k of keys) {
+          const exact = headers.find(h => h === k)
+          const ci = exact || headers.find(h => h.toLowerCase() === k.toLowerCase())
+          map[k] = ci || headers[0]
+        }
+        csvMapping.value = map
+        csvDialogVisible.value = true
+      }
+    } catch (err) {
+      ElMessage.error(err?.message || 'CSV 解析失败')
+    } finally {
+      // 重置 input 以便重复选择同一文件
+      e.target.value = ''
+    }
+  }
+  reader.onerror = () => { ElMessage.error('读取文件失败') }
+  // 读取为二进制缓冲区，后续自行按编码解码，兼容 GBK/GB18030/UTF-8
+  reader.readAsArrayBuffer(file)
+}
+function onCsvFileChange2(e) { return onCsvFileChange(e) }
+
+function parseCsv(text) {
+  // 简易 CSV 解析：支持逗号/分号/Tab 分隔、引号包裹、双引号转义、换行
+  // 1) 自动探测分隔符（首行非引号内的分隔符数量最大者）
+  function detectDelimiter(src) {
+    const candidates = [',', ';', '\t']
+    let inQ = false
+    const counts = { ',': 0, ';': 0, '\t': 0 }
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i]
+      if (ch === '\n' || ch === '\r') break
+      if (ch === '"') { inQ = !inQ; continue }
+      if (!inQ && (ch === ',' || ch === ';' || ch === '\t')) counts[ch]++
+    }
+    let best = ','
+    let max = counts[best]
+    for (const c of candidates) { if (counts[c] > max) { best = c; max = counts[c] } }
+    return best
+  }
+
+  const delim = detectDelimiter(text)
+  const rows = []
+  let i = 0, inQuotes = false, field = ''
+  const out = []
+  function pushField() { out.push(field); field = '' }
+  function pushRow() { rows.push(out.slice()); out.length = 0 }
+  while (i < text.length) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i+1] === '"') { field += '"'; i++ } else { inQuotes = false }
+      } else { field += ch }
+    } else {
+      if (ch === '"') { inQuotes = true }
+      else if (ch === delim) { pushField() }
+      else if (ch === '\n') { pushField(); pushRow() }
+      else if (ch === '\r') { /* ignore */ }
+      else { field += ch }
+    }
+    i++
+  }
+  // last
+  pushField(); pushRow()
+  // trim whitespace
+  const trimmed = rows.map(r => r.map(c => (c??'').trim()))
+  // remove empty trailing rows
+  while (trimmed.length && trimmed[trimmed.length-1].every(c => c === '')) trimmed.pop()
+  if (trimmed.length === 0) return { headers: [], rows: [] }
+  const headers = trimmed[0]
+  const dataRows = trimmed.slice(1).filter(r => r.some(c => c !== ''))
+  const objs = dataRows.map(r => {
+    const o = {}
+    headers.forEach((h, idx) => { o[h] = r[idx] ?? '' })
+    return o
+  })
+  return { headers, rows: objs }
+}
+
+// 将 ArrayBuffer 解码为字符串：优先 UTF-8（BOM 识别），若出现大量替换符则回退 GB18030/GBK
+function decodeBufferToText(result) {
+  try {
+    if (!(result instanceof ArrayBuffer)) return String(result || '')
+    let bytes = new Uint8Array(result)
+    // BOM 检测
+    if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      bytes = bytes.subarray(3)
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    }
+    if (bytes.length >= 2) {
+      // UTF-16 LE/BE
+      if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes.subarray(2))
+      if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes.subarray(2))
+    }
+    // 尝试 UTF-8
+    let text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    const bad = (text.match(/\uFFFD/g) || []).length
+    const ratio = bad / Math.max(1, text.length)
+    if (ratio > 0.01) {
+      // 尝试 GB18030 或 GBK
+      try { text = new TextDecoder('gb18030', { fatal: false }).decode(bytes); return text } catch {}
+      try { text = new TextDecoder('gbk', { fatal: false }).decode(bytes); return text } catch {}
+    }
+    return text
+  } catch {
+    try { return new TextDecoder('utf-8').decode(new Uint8Array(result)) } catch { return '' }
+  }
+}
+
+function confirmCsvImport() {
+  try {
+    const keys = form.value?.allowedSubmitterKeys || []
+    if (keys.length === 0) { ElMessage.warning('请先选择限定字段'); return }
+    // 校验映射
+    for (const k of keys) {
+      if (!csvMapping.value[k]) { ElMessage.warning('请为字段 '+k+' 选择对应列'); return }
+    }
+    if (listMode.value === 'csv') {
+      if (keys.length !== 1) { ElMessage.error('逗号分隔模式仅支持单字段'); return }
+      const col = csvMapping.value[keys[0]]
+      const values = []
+      const seen = new Set()
+      for (const row of csvRows.value) {
+        const v = String(row[col] ?? '').trim()
+        if (!v || seen.has(v)) continue
+        seen.add(v)
+        values.push(v)
+      }
+      listText.value = values.join(',')
+    } else {
+      // JSON 数组
+      const arr = []
+      for (const row of csvRows.value) {
+        const obj = {}
+        let empty = true
+        for (const k of keys) {
+          const col = csvMapping.value[k]
+          const v = String(row[col] ?? '').trim()
+          obj[k] = v
+          if (v) empty = false
+        }
+        if (!empty) arr.push(obj)
+      }
+      listText.value = JSON.stringify(arr, null, 2)
+    }
+    csvDialogVisible.value = false
+    ElMessage.success('已从 CSV 生成允许名单')
+  } catch (e) {
+    ElMessage.error('生成失败')
+  }
+}
+
+function prepareAutoPreview() {
+  const headers = csvHeaders.value || []
+  const rows = csvRows.value || []
+  autoPreview.value = { headers, count: rows.length }
+  const fields = []
+  for (const h of headers) {
+    const values = rows.map(r => String(r[h] ?? '').trim()).filter(Boolean)
+    const uniq = Array.from(new Set(values))
+    const uniqueCount = uniq.length
+    const total = values.length
+    const allUnique = uniqueCount >= total * 0.9 && total > 20
+    const type = (!allUnique && uniqueCount <= 50) ? 'select' : 'text'
+    fields.push({ key: h, type, uniqueCount, options: type==='select' ? uniq.slice(0, 500) : [], sample: values[0] || '' })
+  }
+  autoFieldPreview.value = fields
+}
+
+function applyAutoDetect() {
+  try {
+    // 1) 生成期望字段
+    expectedFields.value = autoFieldPreview.value.map(f => ({
+      key: f.key,
+      label: f.key,
+      placeholder: '',
+      required: true,
+      type: f.type,
+      _options: Array.isArray(f.options) ? f.options : []
+    }))
+    // 2) 建议查询字段：优先 sid 学号
+    const headers = csvHeaders.value || []
+    const sidKey = headers.find(h => h.toLowerCase() === 'sid' || h.toLowerCase() === 'studentno' || h.toLowerCase() === '学号')
+    form.value.queryFieldKey = sidKey || headers[0] || ''
+    // 3) 限制名单
+    form.value.allowedSubmitterKeys = headers.slice()
+    const rows = csvRows.value || []
+    const allowed = rows.map(r => {
+      const o = {}
+      for (const k of form.value.allowedSubmitterKeys) o[k] = String(r[k] ?? '').trim()
+      return o
+    })
+    // 开启限制开关
+    autoRestrict.value = true
+    // 将名单缓存到 listText 以便保存时复用（JSON）
+    listMode.value = 'json'
+    listText.value = JSON.stringify(allowed, null, 2)
+    // 关闭对话框并提示
+    autoDialogVisible.value = false
+    ElMessage.success('已自动识别并填充字段与名单')
+  } catch (e) {
+    ElMessage.error('自动识别失败')
+  }
+}
+const listPlaceholder = computed(() => {
+  const keys = form.value?.allowedSubmitterKeys || []
+  if (keys.length === 1 && listMode.value === 'csv') {
+    return `请输入 ${keys[0]} 的逗号分隔值，例如：1001,1002,1003`
+  }
+  const hint = keys.length > 1 ? `对象需包含字段：${keys.join(', ')}` : '建议为字符串数组或对象数组'
+  return `请输入 JSON 数组，例如：\n[\n  { "${keys[0]||'field'}": "v1"${keys.length>1?`, "${keys[1]}": "w1"`:''} }\n] (${hint})`
+})
 
 const load = async () => {
   if (!isEdit.value) return
-  const { data } = await api.getProject(route.params.id)
+  // 管理端使用 admin 接口，避免公共接口的敏感信息裁剪
+  const { data } = await api.adminGetProject(route.params.id)
   form.value = {
     id: data.id,
     name: data.name,
@@ -453,6 +818,26 @@ const load = async () => {
   } else {
     fileSizeLimitMB.value = null
   }
+  // 限定提交者：载入已有配置
+  form.value.allowedSubmitterKeys = Array.isArray(data.allowedSubmitterKeys) ? data.allowedSubmitterKeys : []
+  const hasSingleKey = (form.value.allowedSubmitterKeys||[]).length === 1
+  if (data.allowedSubmitterList != null) {
+    try {
+      const v = data.allowedSubmitterList
+      if (hasSingleKey && Array.isArray(v) && v.every(x => typeof x === 'string')) {
+        listMode.value = 'csv'
+        listText.value = v.join(',')
+      } else {
+        listMode.value = 'json'
+        listText.value = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+      }
+    } catch {}
+  } else {
+    listMode.value = hasSingleKey ? 'csv' : 'json'
+    listText.value = ''
+  }
+  // 根据后端状态同步开关（存在 keys 且存在名单即视为已限制）
+  autoRestrict.value = (Array.isArray(form.value.allowedSubmitterKeys) && form.value.allowedSubmitterKeys.length > 0 && data.allowedSubmitterList != null)
   // 绑定拖拽（初次加载后）
   bindRowDrag()
   bindSegDrag()
@@ -521,6 +906,39 @@ const save = async () => {
       }
     }
     payload.pathSegments = segs
+    // 提交者限制：若开启自动限制，则直接使用已识别的 keys + JSON 列表
+    const akeys = Array.isArray(payload.allowedSubmitterKeys) ? payload.allowedSubmitterKeys.filter(Boolean) : []
+    if (autoRestrict.value && akeys.length > 0) {
+      try {
+        if (!listText.value || !listText.value.trim()) throw new Error('EMPTY')
+        const parsed = JSON.parse(listText.value || '[]')
+        if (!Array.isArray(parsed)) throw new Error('JSON 列表必须是数组')
+        if (parsed.length === 0) throw new Error('EMPTY')
+        payload.allowedSubmitterList = parsed
+      } catch (e) {
+        throw new Error('自动识别的名单无效，请先导入 CSV 并点击“应用到项目”')
+      }
+    } else {
+      // 高级：兼容手动模式
+      if (akeys.length > 0) {
+        if (listMode.value === 'csv') {
+          if (akeys.length !== 1) throw new Error('逗号分隔模式仅支持单个字段')
+          const arr = (listText.value || '').split(',').map(s => s.trim()).filter(Boolean)
+          payload.allowedSubmitterList = arr
+        } else {
+          try {
+            const parsed = JSON.parse(listText.value || '[]')
+            if (!Array.isArray(parsed)) throw new Error('JSON 列表必须是数组')
+            payload.allowedSubmitterList = parsed
+          } catch (e) {
+            throw new Error('允许名单 JSON 解析失败')
+          }
+        }
+      } else {
+        payload.allowedSubmitterList = null
+        payload.allowedSubmitterKeys = []
+      }
+    }
     // 将 MB 转换为字节
     if (fileSizeLimitMB.value != null && fileSizeLimitMB.value !== '' && !Number.isNaN(fileSizeLimitMB.value)) {
       const bytes = Math.round(Number(fileSizeLimitMB.value) * 1024 * 1024)
@@ -639,6 +1057,22 @@ function bindSegDrag() {
 </script>
 
 <style scoped>
+.auto-detect-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.auto-summary { color: var(--kf-muted); font-size: 12px; margin-bottom: 8px; }
+.advanced-toggle { margin-top: 10px; }
+.import-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.hidden { display: none; }
+.hint { color: var(--kf-muted); font-size: 12px; }
 /* Container and card styling */
 .project-form-container {
   max-width: 1400px;

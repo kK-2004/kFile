@@ -24,4 +24,8 @@ public class UpdateProjectRequest {
     private Boolean offline;
     private String pathFieldKey;
     private java.util.List<String> pathSegments;
+
+    // 提交者限制（可选）
+    private java.util.List<String> allowedSubmitterKeys;
+    private Object allowedSubmitterList;
 }

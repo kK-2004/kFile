@@ -80,6 +80,25 @@ public class SubmissionController {
         return resp;
     }
 
+    // 校验提交者是否允许（不泄露名单，仅返回布尔）
+    @PostMapping(path = "/validate", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> validateSubmitter(@PathVariable Long projectId, @RequestBody Map<String,Object> body) {
+        Project p = projectService.get(projectId);
+        Object sub = body == null ? null : body.get("submitter");
+        String submitterJson;
+        try { submitterJson = objectMapper.writeValueAsString(sub == null ? java.util.Map.of() : sub); }
+        catch (Exception e) { return java.util.Map.of("allowed", false, "message", "提交者信息无效"); }
+        try {
+            submissionService.assertSubmitterAllowed(p, submitterJson);
+            return java.util.Map.of("allowed", true);
+        } catch (IllegalStateException e) {
+            return java.util.Map.of("allowed", false, "message", e.getMessage());
+        } catch (Exception e) {
+            // 若未启用限制或配置异常，按不限制处理
+            return java.util.Map.of("allowed", true);
+        }
+    }
+
     // 直传（分片）初始化：为每个文件创建 uploadId
     @PostMapping(path = "/direct-multipart-init", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> directMultipartInit(@PathVariable Long projectId, @RequestBody DirectInitRequest body) {

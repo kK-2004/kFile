@@ -39,6 +39,7 @@ import java.util.*;
                              String ipAddress, String userAgent) {
         Project project = projectService.get(projectId);
         validateWindow(project);
+        validateSubmitterAllowed(project, submitterJson);
         List<String> types = projectService.parseTypes(project);
         // validate files before upload
         if (files == null || files.isEmpty()) {
@@ -124,6 +125,7 @@ import java.util.*;
     public Submission submitDirectCompleted(Project project, String submitterJson, java.util.List<String> keys,
                                             String ipAddress, String userAgent) {
         validateWindow(project);
+        validateSubmitterAllowed(project, submitterJson);
         if (keys == null || keys.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
         if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && keys.size() > 1) {
             throw new IllegalArgumentException("该项目不允许一次上传多个文件");
@@ -195,6 +197,79 @@ import java.util.*;
         project.setTotalSubmitters((int) distinctSubmitters);
         enforceRetentionMax(project, fingerprint, 10);
         return saved;
+    }
+
+    private void validateSubmitterAllowed(Project project, String submitterJson) {
+        try {
+            String keysJson = project.getAllowedSubmitterKeys();
+            String listJson = project.getAllowedSubmitterList();
+            if (keysJson == null || keysJson.isBlank() || listJson == null || listJson.isBlank()) return; // no restriction
+            java.util.List<String> keys = objectMapper.readValue(keysJson, objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+            if (keys == null || keys.isEmpty()) return;
+
+            // Normalize submitter values
+            JsonNode submitter = objectMapper.readTree(submitterJson == null || submitterJson.isBlank() ? "{}" : submitterJson);
+            if (keys.size() == 1) {
+                String k = keys.get(0);
+                String val = submitter != null && submitter.has(k) && !submitter.get(k).isNull() ? submitter.get(k).asText("").trim() : "";
+                if (val.isEmpty()) throw new IllegalStateException("提交者不在允许名单：缺少 " + k);
+                java.util.Set<String> allowed = new java.util.HashSet<>();
+                JsonNode arr = objectMapper.readTree(listJson);
+                if (arr != null && arr.isArray()) {
+                    for (JsonNode n : arr) {
+                        if (n.isTextual()) {
+                            String v = n.asText("").trim();
+                            if (!v.isEmpty()) allowed.add(v);
+                        } else if (n.isObject()) {
+                            JsonNode vv = n.get(k);
+                            String v = vv == null || vv.isNull() ? "" : vv.asText("").trim();
+                            if (!v.isEmpty()) allowed.add(v);
+                        }
+                    }
+                }
+                if (!allowed.isEmpty() && !allowed.contains(val)) {
+                    throw new IllegalStateException("当前不在允许提交名单");
+                }
+            } else {
+                // composite keys
+                java.util.Set<String> allowed = new java.util.HashSet<>();
+                JsonNode arr = objectMapper.readTree(listJson);
+                if (arr != null && arr.isArray()) {
+                    for (JsonNode n : arr) {
+                        if (!n.isObject()) continue;
+                        java.util.List<String> vals = new java.util.ArrayList<>();
+                        boolean miss = false;
+                        for (String k : keys) {
+                            JsonNode vv = n.get(k);
+                            String v = vv == null || vv.isNull() ? "" : vv.asText("").trim();
+                            if (v.isEmpty()) { miss = true; break; }
+                            vals.add(v);
+                        }
+                        if (!miss) allowed.add(String.join("\u0001", vals));
+                    }
+                }
+                // build composite from submitter
+                java.util.List<String> svals = new java.util.ArrayList<>();
+                for (String k : keys) {
+                    JsonNode vv = submitter.get(k);
+                    String v = vv == null || vv.isNull() ? "" : vv.asText("").trim();
+                    if (v.isEmpty()) { throw new IllegalStateException("提交者不在允许名单：缺少 " + k); }
+                    svals.add(v);
+                }
+                if (!allowed.isEmpty() && !allowed.contains(String.join("\u0001", svals))) {
+                    throw new IllegalStateException("当前不在允许提交名单");
+                }
+            }
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            // 若解析失败，放行（视为未启用限制）
+        }
+    }
+
+    // Expose a safe checker for controller to validate without side effects
+    public void assertSubmitterAllowed(Project project, String submitterJson) {
+        validateSubmitterAllowed(project, submitterJson);
     }
 
     // 构造上传前缀（含项目/提交者字段），末尾带 '/'

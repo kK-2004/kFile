@@ -10,6 +10,8 @@
             <el-button @click="$router.back()">返回</el-button>
             <el-button type="primary" @click="exportCsv">导出CSV</el-button>
             <el-button type="success" @click="manualVisible = true">手动上传</el-button>
+            <el-button @click="showMissing">未提交名单</el-button>
+            <el-button @click="downloadMissing">下载未提交名单</el-button>
           </el-space>
         </div>
       </template>
@@ -47,6 +49,23 @@
           </el-form-item>
         </el-form>
       </div>
+
+      <!-- 未提交名单弹窗 -->
+      <el-dialog v-model="missingVisible" title="未提交名单" width="600px">
+        <div v-if="missing.enabled">
+          <div class="mb-3 text-sm text-gray-600">共 {{ missing.missingCount || (missing.missing||[]).length }} 条</div>
+          <el-table :data="missing.missing" style="width:100%" max-height="360">
+            <el-table-column v-for="k in (missing.keys||[])" :key="k" :prop="k" :label="getFieldLabel(k)" />
+          </el-table>
+        </div>
+        <div v-else class="text-gray-500">{{ missing.message || '未配置允许提交名单' }}</div>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="missingVisible = false">关闭</el-button>
+            <el-button type="primary" @click="downloadMissing">下载CSV</el-button>
+          </span>
+        </template>
+      </el-dialog>
 
       <div class="table-container">
         <el-table
@@ -615,6 +634,32 @@ const hasFilteredResult = computed(() => {
   if (!filterKey.value || !filterValue.value) return false
   return groupedContent.value.length > 0
 })
+
+// 未提交名单
+const missingVisible = ref(false)
+const missing = ref({ enabled: false, keys: [], missing: [], message: '' })
+const showMissing = async () => {
+  try {
+    const { data } = await api.adminMissingAllowed(projectId)
+    missing.value = data || { enabled: false, message: '未配置允许提交名单' }
+    if (!missing.value.enabled) {
+      ElMessage.warning(missing.value.message || '未配置允许提交名单')
+      return
+    }
+    missingVisible.value = true
+  } catch (e) { ElMessage.error('获取未提交名单失败') }
+}
+const downloadMissing = async () => {
+  try {
+    const res = await api.adminDownloadMissingAllowedCsv(projectId)
+    const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `project-${projectId}-missing.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  } catch (e) { ElMessage.error('下载失败') }
+}
 
 const isOverdue = (groupRow) => {
   try {

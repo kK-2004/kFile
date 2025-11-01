@@ -28,24 +28,44 @@ instance.interceptors.request.use((config) => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
     if (base && path.startsWith(base)) path = path.slice(base.length)
 
+    const method = String(config.method || 'get').toLowerCase()
     const isAdminAuth = path.startsWith('/api/admin/auth/')
+    const isAdminApi = path.startsWith('/api/admin/')
+    const isProjectsQuota = path === '/api/projects/quota'
+    const isAuthMe = path === '/api/auth/me'
+    const isProjectsCreateOrModify = path === '/api/projects' ? (method !== 'get') : (/^\/api\/projects\//.test(path) && ['put','delete','patch'].includes(method))
+    const isPublicSubmission = /^\/api\/projects\//.test(path) && (path.includes('/submissions') || path.endsWith('/status'))
+    const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && !isProjectsQuota
+
+    // 1) 管理员认证接口：强制走 Cookie 会话，不注入 Bearer
     if (isAdminAuth) {
-      // 管理员登录接口走服务端 Session，禁止注入 Bearer
-      if (config.headers) {
-        delete config.headers['Authorization']
-        delete config.headers['authorization']
-      }
+      if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
       config.withCredentials = true
       return config
     }
 
-    const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
-    if (token) {
-      config.headers = config.headers || {}
-      config.headers['Authorization'] = `Bearer ${token}`
-      // 当使用 Bearer 时，不需要发送 Cookie，避免混淆（后端也允许）
-      config.withCredentials = false
+    // 2) 管理端 API：统一用 Cookie 会话（后端已配置）
+    if (isAdminApi) {
+      if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+      config.withCredentials = true
+      return config
     }
+
+    // 3) 站点用户保护的项目接口（创建/修改/配额）：注入 Bearer
+    const needBearer = isAuthMe || isProjectsQuota || isProjectsCreateOrModify
+    if (needBearer) {
+      const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
+      if (token) {
+        config.headers = config.headers || {}
+        config.headers['Authorization'] = `Bearer ${token}`
+        config.withCredentials = false
+      }
+      return config
+    }
+
+    // 4) 公共接口（含提交/状态/项目GET）：不注入 Bearer，避免无效/过期 Token 触发 401 → 跳管理员登录
+    if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+    config.withCredentials = false
   } catch {}
   return config
 })
@@ -58,20 +78,39 @@ instance.interceptors.response.use(
       const status = error?.response?.status
       let redirect = error?.response?.headers?.['x-redirect']
       if (status === 401 && redirect) {
-        // 兼容后端未带子路径前缀的场景：自动补上 BASE_URL
-        if (!/^https?:/i.test(redirect)) {
-          const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-          if (redirect.startsWith('/')) {
-            if (!redirect.startsWith(base + '/')) {
-              redirect = base + redirect
-            }
-          } else {
-            redirect = base + '/' + redirect
-          }
+        // 根据原请求路径决定是否跳转（避免公共接口/用户页被误导向）
+        let path = ''
+        try { path = new URL(error?.config?.url || '', window.location.origin).pathname } catch { path = String(error?.config?.url || '') }
+        const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+        if (base && path.startsWith(base)) path = path.slice(base.length)
+
+        const method = String(error?.config?.method || 'get').toLowerCase()
+        const isAdminAuth = path.startsWith('/api/admin/auth/')
+        const isAdminApi = path.startsWith('/api/admin/')
+        const isAdminMe = path === '/api/admin/auth/me'
+        const isAuthMe = path === '/api/auth/me'
+        const isPublicSubmission = /^\/api\/projects\//.test(path) && (path.includes('/submissions') || path.endsWith('/status') || path.endsWith('/validate'))
+        const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && path !== '/api/projects/quota'
+        // 这些请求不应触发跳转：公共接口 + 站点 auth 探测
+        if (isAuthMe || isPublicSubmission || isProjectPublicGet) {
+          return Promise.reject(error)
         }
-        const to = redirect + (redirect.includes('?') ? '&' : '?') + 'redirect=' + encodeURIComponent(window.location.pathname + window.location.search)
-        window.location.href = to
-        return
+
+        // 仅对需要后台登录态的管理端接口触发重定向（排除 /api/admin/auth/me 探测）
+        if ((isAdminAuth || isAdminApi) && !isAdminMe) {
+          if (!/^https?:/i.test(redirect)) {
+            let r = redirect
+            if (r.startsWith('/')) {
+              if (!r.startsWith(base + '/')) r = base + r
+            } else {
+              r = base + '/' + r
+            }
+            redirect = r
+          }
+          const to = redirect + (redirect.includes('?') ? '&' : '?') + 'redirect=' + encodeURIComponent(window.location.pathname + window.location.search)
+          window.location.href = to
+          return
+        }
       }
     } catch {}
     return Promise.reject(error)
@@ -84,6 +123,7 @@ export default {
   // Projects
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },
+  adminGetProject(id) { return instance.get(`/api/admin/projects/${id}`) },
   creationQuota() { return instance.get('/api/projects/quota') },
   createProject(data) { return instance.post('/api/projects', data) },
   updateProject(id, data) { return instance.put(`/api/projects/${id}`, data) },
@@ -105,6 +145,9 @@ export default {
     // params can be: { submitter: string } or { fieldValue: string }
     const p = typeof params === 'string' ? { submitter: params } : (params || {})
     return instance.get(`/api/projects/${projectId}/submissions/status`, { params: p, responseType: 'json' })
+  },
+  validateSubmitter(projectId, submitter) {
+    return instance.post(`/api/projects/${projectId}/submissions/validate`, { submitter })
   },
   submit(projectId, submitter, files, config = {}) {
     const totalSize = (files || []).reduce((s, f) => s + (f?.size || 0), 0)
@@ -184,6 +227,8 @@ export default {
   ,adminGrantProject(userId, projectId) { return instance.post(`/api/admin/users/${userId}/projects/${projectId}`) }
   ,adminRevokeProject(userId, projectId) { return instance.delete(`/api/admin/users/${userId}/projects/${projectId}`) }
   ,adminListProjects() { return instance.get('/api/admin/projects') }
+  ,adminMissingAllowed(projectId) { return instance.get(`/api/admin/projects/${projectId}/missing-allowed`) }
+  ,adminDownloadMissingAllowedCsv(projectId) { return instance.get(`/api/admin/projects/${projectId}/missing-allowed.csv`, { responseType: 'blob' }) }
   ,adminChangePassword(currentPassword, newPassword) { return instance.post('/api/admin/auth/change-password', { currentPassword, newPassword }) }
   ,adminResetPassword(userId) { return instance.post(`/api/admin/users/${userId}/reset-password`) }
   ,adminDeleteUser(userId) { return instance.delete(`/api/admin/users/${userId}`) }

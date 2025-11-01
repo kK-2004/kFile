@@ -65,6 +65,16 @@ public class Project {
     @Column(length = 64)
     private String queryFieldKey;
 
+    // 可选：限制允许提交的“提交者字段组合”key 列表（json 数组）
+    @Column(columnDefinition = "json")
+    private String allowedSubmitterKeys;
+
+    // 可选：允许提交的取值集合（json）。
+    // - 若 keys 只有一个：此处可以为字符串数组 ["1001","1002",...] 或对象数组 [{"studentId":"1001"},...]
+    // - 若 keys 多个：应为对象数组，如 [{"class":"一班","studentId":"1001"}, ...]
+    @Column(columnDefinition = "json")
+    private String allowedSubmitterList;
+
     // 创建者（站点用户ID）
     @Column(name = "creator_site_user_id", columnDefinition = "BIGINT UNSIGNED")
     private Long creatorSiteUserId;

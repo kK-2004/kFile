@@ -87,6 +87,12 @@ public class ProjectService {
             if (req.getPathSegments() != null) {
                 p.setPathSegments(objectMapper.writeValueAsString(req.getPathSegments()));
             }
+            if (req.getAllowedSubmitterKeys() != null) {
+                p.setAllowedSubmitterKeys(objectMapper.writeValueAsString(req.getAllowedSubmitterKeys()));
+            }
+            if (req.getAllowedSubmitterList() != null) {
+                p.setAllowedSubmitterList(objectMapper.writeValueAsString(req.getAllowedSubmitterList()));
+            }
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid JSON for project fields", e);
         }
@@ -209,6 +215,8 @@ public class ProjectService {
             if (req.getAllowedFileTypes() != null) p.setAllowedFileTypes(objectMapper.writeValueAsString(req.getAllowedFileTypes()));
             if (req.getExpectedUserFields() != null) p.setExpectedUserFields(objectMapper.writeValueAsString(req.getExpectedUserFields()));
             if (req.getPathSegments() != null) p.setPathSegments(objectMapper.writeValueAsString(req.getPathSegments()));
+            if (req.getAllowedSubmitterKeys() != null) p.setAllowedSubmitterKeys(objectMapper.writeValueAsString(req.getAllowedSubmitterKeys()));
+            if (req.getAllowedSubmitterList() != null) p.setAllowedSubmitterList(objectMapper.writeValueAsString(req.getAllowedSubmitterList()));
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid JSON for project fields", e);
         }

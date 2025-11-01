@@ -275,6 +275,11 @@
 
             <!-- 文件上传区域 -->
             <div class="space-y-4">
+              <div v-if="validatedOnce && !isSubmitterAllowed && hasSubmitterRestriction" class="mb-2">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                  当前不在允许提交名单，请检查填写的字段
+                </span>
+              </div>
               <label class="block text-sm font-medium text-gray-700">选择文件</label>
 
               <!-- 可点击的上传区域 -->
@@ -540,6 +545,7 @@ const disableSubmit = computed(() => {
   if (isPastDeadline.value && !project.value.allowOverdue) return true
   if (!project.value.allowResubmit && latest.value.exists) return true
   if (!fileList.value.length) return true
+  if (hasSubmitterRestriction.value && !isSubmitterAllowed.value) return true
 
   // 检查必填字段
   for (const field of expectedFields.value) {
@@ -550,6 +556,30 @@ const disableSubmit = computed(() => {
 
   return false
 })
+
+const allowedKeys = computed(() => Array.isArray(project.value?.allowedSubmitterKeys) ? project.value.allowedSubmitterKeys : [])
+const hasSubmitterRestriction = computed(() => !!project.value?.submitterRestrictionEnabled)
+const isSubmitterAllowed = ref(true)
+const validatedOnce = ref(false)
+const hasAnyAllowedFilled = computed(() => {
+  const keys = allowedKeys.value || []
+  return keys.some(k => String((submitter.value?.[k] ?? '')).trim() !== '')
+})
+const hasAllAllowedFilled = computed(() => {
+  const keys = allowedKeys.value || []
+  if (!keys.length) return false
+  return keys.every(k => String((submitter.value?.[k] ?? '')).trim() !== '')
+})
+let allowCheckTimer = null
+const refreshSubmitterAllowed = async () => {
+  if (!project.value || !hasSubmitterRestriction.value) { isSubmitterAllowed.value = true; validatedOnce.value = false; return }
+  if (!hasAllAllowedFilled.value) { isSubmitterAllowed.value = true; validatedOnce.value = false; return }
+  try {
+    const res = await api.validateSubmitter(id, submitter.value)
+    isSubmitterAllowed.value = !!res?.data?.allowed
+    validatedOnce.value = true
+  } catch { isSubmitterAllowed.value = true; validatedOnce.value = false }
+}
 
 // 方法
 const formatTimestamp = (timestamp) => {
@@ -855,6 +885,7 @@ onMounted(async () => {
     if (mode.value === 'submit') {
       await queryStatus()
     }
+    // 首次不触发校验，待用户填写后再校验
 
   } catch (error) {
     console.error('Failed to load project:', error)
@@ -863,6 +894,12 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+// 监听提交者字段变化，防抖校验（仅当限定字段均已填写时才触发）
+watch(() => ({ ...submitter.value }), () => {
+  if (allowCheckTimer) clearTimeout(allowCheckTimer)
+  allowCheckTimer = setTimeout(() => { refreshSubmitterAllowed() }, 300)
+}, { deep: true })
 </script>
 
 <style scoped>
