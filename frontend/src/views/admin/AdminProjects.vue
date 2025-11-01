@@ -2,8 +2,38 @@
   <el-card>
     <template #header>
       <div class="card-header">
-        <span>项目管理</span>
-        <el-button type="primary" v-if="auth.user && (auth.user.role||'').toUpperCase()==='SUPER'" @click="$router.push('/admin/projects/new')">新建项目</el-button>
+        <div class="header-left">
+          <h2 class="page-title">项目管理</h2>
+        </div>
+        <div class="header-right">
+          <div v-if="showUserQuota" class="quota-panel">
+            <div class="quota-item">
+              <div class="quota-label">剩余额度</div>
+              <div class="quota-value">{{ quotaDisplay.remaining }} <span class="quota-unit">/ {{ quotaDisplay.limit }}</span></div>
+            </div>
+            <div class="quota-divider"></div>
+            <div class="quota-item">
+              <div class="quota-label">总配额</div>
+              <div class="quota-value">{{ quotaDisplay.totalGB }} <span class="quota-unit">GB</span></div>
+            </div>
+            <div class="quota-divider"></div>
+            <div class="quota-item">
+              <div class="quota-label">重置日期</div>
+              <div class="quota-value-small">{{ quotaDisplay.resetDate }}</div>
+            </div>
+          </div>
+          <el-button
+            type="primary"
+            v-if="auth.user"
+            :disabled="disableCreateBtn"
+            :title="disableCreateBtn ? '本月创建额度已用尽' : ''"
+            @click="$router.push('/admin/projects/new')"
+            class="create-btn"
+          >
+            <span class="btn-icon">+</span>
+            新建项目
+          </el-button>
+        </div>
       </div>
     </template>
 
@@ -94,10 +124,30 @@ import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
 
 const auth = useAuthStore()
-onMounted(()=>{ if (!auth.loaded) auth.loadMe() })
+onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })
 
 const projects = ref([])
 const loading = ref(false)
+const quota = ref(null)
+const showUserQuota = computed(() => auth.user && (auth.user.role||'').toUpperCase() !== 'SUPER')
+const quotaDisplay = computed(() => {
+  const q = quota.value || {}
+  const limit = q?.unlimited ? '不限' : (q?.limit ?? '-')
+  const remaining = q?.unlimited ? '不限' : (q?.remaining ?? '-')
+  const resetDate = q?.resetAt ? new Date(q.resetAt).toLocaleDateString() : '-'
+  const totalGB = q?.userTotalQuotaBytes ? Math.round(Number(q.userTotalQuotaBytes)/1024/1024/1024) : 1
+  return { limit, remaining, resetDate, totalGB }
+})
+const disableCreateBtn = computed(() => {
+  // SUPER 永远不禁用；普通用户当剩余额度<=0 时禁用
+  const role = (auth.user?.role || '').toUpperCase()
+  if (role === 'SUPER') return false
+  const q = quota.value
+  if (!q) return false
+  if (q.unlimited) return false
+  const rem = q.remaining
+  return typeof rem === 'number' && rem <= 0
+})
 
 const load = async () => {
   loading.value = true
@@ -110,6 +160,14 @@ const load = async () => {
       _userLink: `${origin}${base}/user/projects/${p.id}`
     }))
   } finally { loading.value = false }
+}
+
+const loadQuota = async () => {
+  try {
+    if (!showUserQuota.value) return
+    const { data } = await api.creationQuota()
+    quota.value = data
+  } catch {}
 }
 
 onMounted(load)
@@ -252,11 +310,30 @@ const doDelete = async () => {
   border-radius: 8px 8px 0 0;
 }
 
-.card-header span {
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+
+.page-title {
+  margin: 0;
   color: var(--kf-text-primary);
   font-size: 18px;
   font-weight: bold;
 }
+
+/* 配额面板（右对齐横向分布） */
+.quota-panel { display: flex; align-items: center; gap: 16px; padding: 6px 10px; border: 1px solid var(--kf-border-color); border-radius: 6px; background: var(--kf-background); }
+.quota-item { display: flex; flex-direction: column; gap: 2px; }
+.quota-label { font-size: 12px; color: var(--kf-muted); }
+.quota-value { font-size: 16px; font-weight: 600; color: var(--kf-text-primary); }
+.quota-value-small { font-size: 13px; font-weight: 500; color: var(--kf-text-primary); }
+.quota-unit { font-size: 12px; color: var(--kf-muted); margin-left: 2px; }
+.quota-divider { width: 1px; height: 26px; background: var(--kf-border-color); }
+
+/* 创建按钮（保持原有风格） */
+.create-btn { border-radius: 6px; }
+.btn-icon { font-weight: 700; margin-right: 6px; }
+
+
 
 /* 表格样式优化 */
 :deep(.el-table) {

@@ -4,12 +4,14 @@ import AdminProjectForm from '../views/admin/AdminProjectForm.vue'
 import AdminSubmissions from '../views/admin/AdminSubmissions.vue'
 import AdminLogin from '../views/admin/AdminLogin.vue'
 import AdminUsers from '../views/admin/AdminUsers.vue'
+import AdminSettings from '../views/admin/AdminSettings.vue'
 import UserProjects from '../views/user/UserProjects.vue'
+import Hero from '../views/Hero.vue'
 import UserSubmit from '../views/user/UserSubmit.vue'
 import { useAuthStore } from '../stores/auth'
 
 const routes = [
-  { path: '/', redirect: '/user/projects' },
+  { path: '/', component: Hero },
   { path: '/admin', redirect: '/admin/projects' },
   { path: '/user/projects', component: UserProjects },
   { path: '/user/projects/:id', component: UserSubmit, props: true },
@@ -20,6 +22,7 @@ const routes = [
   { path: '/admin/projects/:id/submissions', component: AdminSubmissions, props: true },
   { path: '/admin/login', component: AdminLogin }
   ,{ path: '/admin/users', component: AdminUsers }
+  ,{ path: '/admin/settings', component: AdminSettings }
 ]
 
 const router = createRouter({
@@ -48,8 +51,17 @@ router.beforeEach(async (to) => {
   // 已登录且访问 /admin/login，则直接跳转到目标页
   if (to.path === '/admin/login' && store.user) {
     const params = new URLSearchParams(window.location.search)
-    const redirect = params.get('redirect') || '/admin/projects'
-    return { path: redirect }
+    const raw = params.get('redirect') || '/admin/projects'
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+    let target = raw
+    try {
+      if (/^https?:/i.test(target)) {
+        const url = new URL(target)
+        target = url.pathname + url.search + url.hash
+      }
+    } catch {}
+    if (base && target.startsWith(base + '/')) target = target.slice(base.length)
+    return { path: target }
   }
 
   // 保护 /admin/** 除登录页

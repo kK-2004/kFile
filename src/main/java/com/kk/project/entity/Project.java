@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import org.hibernate.annotations.CreationTimestamp;
 
 @Getter
 @Setter
@@ -63,4 +64,12 @@ public class Project {
     // 用户端“查询提交状态”所使用的查询字段（期望字段 key）
     @Column(length = 64)
     private String queryFieldKey;
+
+    // 创建者（站点用户ID）
+    @Column(name = "creator_site_user_id", columnDefinition = "BIGINT UNSIGNED")
+    private Long creatorSiteUserId;
+
+    // 创建时间
+    @CreationTimestamp
+    private Instant createdAt;
 }

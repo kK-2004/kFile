@@ -43,3 +43,8 @@ oss:
 
 site:
   base-url: ${KSITE_BASE_URL:http://localhost:8081}
+
+app:
+  project:
+    monthly-limit:
+      user: 3

@@ -44,3 +44,8 @@ geoip:
 
 site:
   base-url: ${KSITE_BASE_URL:https://ksite.xin}
+
+app:
+  project:
+    monthly-limit:
+      user: 3

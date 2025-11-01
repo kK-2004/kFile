@@ -63,8 +63,18 @@ const onSubmit = async () => {
   loading.value = true
   try {
     await store.login(form.value.username, form.value.password)
-    const redirect = route.query.redirect || '/admin/projects'
-    router.replace(redirect)
+    const raw = route.query.redirect || '/admin/projects'
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+    let target = String(raw)
+    // 规范化：移除 base 前缀，确保是应用内路径
+    try {
+      if (target.startsWith('http://') || target.startsWith('https://')) {
+        const url = new URL(target)
+        target = url.pathname + url.search + url.hash
+      }
+    } catch {}
+    if (base && target.startsWith(base + '/')) target = target.slice(base.length)
+    router.replace(target)
   } catch (e) {
     const msg = e?.response?.data?.message || '登录失败'
     ElMessage.error(msg)
@@ -80,8 +90,17 @@ onMounted(async () => {
     store.setToken(token)
     try {
       await store.loadMe()
-      const redirect = route.query.redirect || '/admin/projects'
-      router.replace(redirect)
+      const raw = route.query.redirect || '/admin/projects'
+      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+      let target = String(raw)
+      try {
+        if (target.startsWith('http://') || target.startsWith('https://')) {
+          const url = new URL(target)
+          target = url.pathname + url.search + url.hash
+        }
+      } catch {}
+      if (base && target.startsWith(base + '/')) target = target.slice(base.length)
+      router.replace(target)
     } catch (e) {
       ElMessage.error('主站登录校验失败')
     }

@@ -84,6 +84,7 @@ export default {
   // Projects
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },
+  creationQuota() { return instance.get('/api/projects/quota') },
   createProject(data) { return instance.post('/api/projects', data) },
   updateProject(id, data) { return instance.put(`/api/projects/${id}`, data) },
 
@@ -191,6 +192,8 @@ export default {
   ,adminGetTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}`) }
   ,adminStartArchiveTask(id, fieldKey, fieldValue) { return instance.post(`/api/admin/projects/${id}/archive-task`, { fieldKey, fieldValue }) }
   ,adminDownloadTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}/download`, { responseType: 'blob' }) }
+  ,adminGetConfig() { return instance.get('/api/admin/config') }
+  ,adminUpdateConfig(payload) { return instance.put('/api/admin/config', payload) }
 
   // Prepared ZIP（带 Content-Length）
   

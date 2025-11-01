@@ -11,7 +11,12 @@
           </div>
           <div class="header-actions">
             <el-tag v-if="isEdit" type="info" size="small">编辑模式</el-tag>
-            <el-tag v-else type="success" size="small">新建模式</el-tag>
+            <template v-else>
+              <el-tag type="success" size="small">新建模式</el-tag>
+              <el-tag v-if="showUserQuota" type="info" size="small" class="quota-tag">
+                剩余额度：{{ quotaDisplay.remaining }} / {{ quotaDisplay.limit }}，重置：{{ quotaDisplay.resetDate }}，总配额：{{ quotaDisplay.totalGB }} GB
+              </el-tag>
+            </template>
           </div>
         </div>
       </template>
@@ -452,6 +457,19 @@ const load = async () => {
   bindRowDrag()
   bindSegDrag()
 }
+
+// 配额显示（仅新建页且非 SUPER 显示）
+const quota = ref(null)
+const showUserQuota = computed(() => auth.user && (auth.user.role||'').toUpperCase() !== 'SUPER' && !isEdit.value)
+const quotaDisplay = computed(() => {
+  const q = quota.value || {}
+  const limit = q?.unlimited ? '不限' : (q?.limit ?? '-')
+  const remaining = q?.unlimited ? '不限' : (q?.remaining ?? '-')
+  const resetDate = q?.resetAt ? new Date(q.resetAt).toLocaleDateString() : '-'
+  const totalGB = q?.userTotalQuotaBytes ? Math.round(Number(q.userTotalQuotaBytes)/1024/1024/1024) : 1
+  return { limit, remaining, resetDate, totalGB }
+})
+const loadQuota = async () => { try { const { data } = await api.creationQuota(); quota.value = data } catch {} }
 onMounted(load)
 watch(expectedFields, () => bindRowDrag(), { deep: true })
 watch(pathSegments, () => bindSegDrag(), { deep: true })
@@ -537,7 +555,7 @@ const addSeg = () => { pathSegments.value.push({ value: '$project' }); bindSegDr
 const removeSeg = (idx) => { pathSegments.value.splice(idx, 1); bindSegDrag() }
 // 上移/下移由拖拽排序代替
 const auth = useAuthStore()
-onMounted(()=>{ if (!auth.loaded) auth.loadMe() })
+onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })
 
 function bindRowDrag() {
   nextTick(() => {
@@ -662,6 +680,10 @@ function bindSegDrag() {
 .header-actions {
   display: flex;
   gap: 8px;
+}
+
+.quota-tag {
+  border-radius: 6px;
 }
 
 /* Form styling */

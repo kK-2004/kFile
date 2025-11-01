@@ -83,6 +83,14 @@
                 >
                   管理员与权限
                 </el-button>
+                <el-button
+                    class="nav-btn"
+                    text
+                    v-if="isSuper"
+                    @click="$router.push('/admin/settings')"
+                >
+                  系统设置
+                </el-button>
 
                 <el-divider direction="vertical" class="nav-divider" />
 
@@ -111,7 +119,7 @@
         </div>
       </el-header>
 
-      <el-main class="app-main">
+      <el-main class="app-main" style="padding: 0">
         <router-view />
       </el-main>
     </el-container>
@@ -178,13 +186,16 @@ const changePwd = async () => {
 const logout = async () => { await auth.logout(); router.push('/admin/login') }
 </script>
 
+<style>
+/* 全局重置，消除浏览器默认边距，避免四周留白 */
+html, body, #app { margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+</style>
+
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap');
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
+/* 全局字体放到非 scoped 样式会更稳，这里仅保留局部组件样式 */
 
 /* Header 样式 */
 .app-header {
@@ -348,8 +359,10 @@ body {
 /* 主内容区域 */
 .app-main {
   background: #f5f7fa;
-  padding: 24px;
+  padding: 0;
 }
+/* 强制覆盖 Element Plus 默认主区域内边距 */
+:deep(.el-main.app-main) { padding: 0 !important; }
 
 /* 对话框美化 */
 :deep(.pwd-dialog .el-dialog) {

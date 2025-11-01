@@ -25,7 +25,7 @@ public class ProjectController {
     @PreAuthorize("hasRole('SUPER') or hasAuthority('ROLE_SITE_USER') or hasAuthority('ROLE_SITE_ADMIN')")
     public ProjectResponse create(@RequestBody CreateProjectRequest req,
                                   org.springframework.security.core.Authentication authentication) {
-        Project p = projectService.create(req);
+        Project p = projectService.create(req, authentication);
         // 如果是站点用户，自动授予自己管理权限
         if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth) {
             String sub = jwtAuth.getToken().getSubject();
@@ -65,10 +65,17 @@ public class ProjectController {
         return out;
     }
 
+    @GetMapping("/quota")
+    @PreAuthorize("hasAuthority('ROLE_SITE_USER') or hasAuthority('ROLE_SITE_ADMIN') or hasRole('SUPER')")
+    public java.util.Map<String, Object> quota(org.springframework.security.core.Authentication authentication) {
+        return projectService.getCreationQuota(authentication);
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #id)")
-    public ProjectResponse update(@PathVariable Long id, @RequestBody UpdateProjectRequest req) {
-        Project p = projectService.update(id, req);
+    public ProjectResponse update(@PathVariable Long id, @RequestBody UpdateProjectRequest req,
+                                  org.springframework.security.core.Authentication authentication) {
+        Project p = projectService.update(id, req, authentication);
         List<String> types = projectService.parseTypes(p);
         Object expected = null;
         try {
