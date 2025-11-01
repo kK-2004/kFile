@@ -16,9 +16,29 @@ const instance = axios.create({
   withCredentials: true
 })
 
-// Attach Bearer token from localStorage when present
+// Attach Bearer token from localStorage when appropriate
+// - 对 /api/admin/auth/*（管理员登录/注销/改密）不注入 Bearer，保留 Cookie 会话
+// - 其它请求若存在主站 token，则注入 Bearer 并关闭 Cookie 以避免混淆
 instance.interceptors.request.use((config) => {
   try {
+    const rawUrl = config?.url || ''
+    // 规范化为 pathname，尽量兼容绝对/相对 URL
+    let path = rawUrl
+    try { path = new URL(rawUrl, window.location.origin).pathname } catch {}
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+    if (base && path.startsWith(base)) path = path.slice(base.length)
+
+    const isAdminAuth = path.startsWith('/api/admin/auth/')
+    if (isAdminAuth) {
+      // 管理员登录接口走服务端 Session，禁止注入 Bearer
+      if (config.headers) {
+        delete config.headers['Authorization']
+        delete config.headers['authorization']
+      }
+      config.withCredentials = true
+      return config
+    }
+
     const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
     if (token) {
       config.headers = config.headers || {}
@@ -174,4 +194,15 @@ export default {
 
   // Prepared ZIP（带 Content-Length）
   
+  // Admin submissions tools
+  ,adminManualUpload(projectId, submitter, files, config = {}) {
+    const fd = new FormData()
+    fd.append('projectId', projectId)
+    fd.append('submitter', typeof submitter === 'string' ? submitter : JSON.stringify(submitter || {}))
+    for (const f of files || []) fd.append('files', f)
+    return instance.post('/api/admin/submissions/manual-upload', fd, { timeout: 0, ...config })
+  }
+  ,adminDeleteSubmissionsByField({ fieldKey, fieldValue, projectId }) {
+    return instance.post('/api/admin/submissions/delete-by-field', { fieldKey, fieldValue, projectId })
+  }
 }

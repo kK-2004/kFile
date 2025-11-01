@@ -1,6 +1,6 @@
 env:
   name: prod
-  cors: https://ksite.xin/
+  cors: https://ksite.xin
 
 spring:
   datasource:
@@ -22,6 +22,11 @@ spring:
       enabled: true
       max-file-size: 2048MB
       max-request-size: 2048MB
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://ksite.xin
 
 server:
   tomcat:

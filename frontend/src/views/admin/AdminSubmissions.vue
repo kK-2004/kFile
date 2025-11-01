@@ -9,6 +9,7 @@
           <el-space>
             <el-button @click="$router.back()">返回</el-button>
             <el-button type="primary" @click="exportCsv">导出CSV</el-button>
+            <el-button type="success" @click="manualVisible = true">手动上传</el-button>
           </el-space>
         </div>
       </template>
@@ -160,6 +161,11 @@
           <el-table-column label="创建时间" width="200">
             <template #default="{row}">{{ formatDateTimeLocal(row.createdAt) }}</template>
           </el-table-column>
+          <el-table-column label="操作" width="160">
+            <template #default="{row}">
+              <el-button type="danger" size="small" @click="openDelete(row)">删除</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
 
@@ -176,6 +182,39 @@
       </div>
       <template #footer>
         <el-button @click="archProgressVisible=false" :disabled="archTask && archTask.status==='RUNNING'">关闭</el-button>
+      </template>
+    </el-dialog>
+    <!-- 手动上传 -->
+    <el-dialog v-model="manualVisible" title="手动上传（不受项目限制）" width="560px">
+      <el-form label-width="120px">
+        <el-form-item label="提交者信息(JSON)">
+          <el-input v-model="manual.submitter" type="textarea" :rows="4" placeholder='例如：{"userId":123,"name":"张三"}' />
+        </el-form-item>
+        <el-form-item label="选择文件">
+          <el-upload drag :auto-upload="false" :on-change="onManualFileChange" multiple>
+            <div class="el-upload__text">拖拽文件到此处，或点击选择</div>
+          </el-upload>
+          <div v-if="manualFiles.length" style="margin-left: 12px; color: var(--el-text-color-secondary);">已选择 {{ manualFiles.length }} 个文件</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualVisible=false">取消</el-button>
+        <el-button type="primary" :disabled="!manualFiles.length" @click="doManualUpload">上传</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 删除确认 -->
+    <el-dialog v-model="delVisible" title="删除该用户所有提交" width="520px">
+      <div style="line-height:1.8; margin-bottom: 8px;">
+        将按字段「{{ delFieldKey }}」=「{{ delFieldValue }}」删除该用户在本项目的所有提交及其文件。此操作不可恢复。
+      </div>
+      <el-alert type="warning" :closable="false" show-icon title="删除后不可恢复" style="margin-bottom: 10px;" />
+      <div>为确认，请输入如下文字：</div>
+      <div style="margin: 6px 0; color: var(--el-text-color-primary); font-weight: 500;">我确认删除</div>
+      <el-input v-model="delInput" placeholder="请输入：我确认删除" />
+      <template #footer>
+        <el-button @click="delVisible=false">取消</el-button>
+        <el-button type="danger" :disabled="delInput.trim() !== '我确认删除'" @click="doDelete">删除</el-button>
       </template>
     </el-dialog>
   </div>
@@ -479,6 +518,53 @@ const download = (u, name) => {
 
 const copy = async (text) => {
   try { await navigator.clipboard.writeText(text) } catch {}
+}
+
+// 手动上传
+const manualVisible = ref(false)
+const manual = ref({ submitter: '' })
+const manualFiles = ref([])
+const onManualFileChange = (file, fileList) => { manualFiles.value = fileList.map(f => f.raw).filter(Boolean) }
+const doManualUpload = async () => {
+  try {
+    const submitter = manual.value.submitter && manual.value.submitter.trim() ? manual.value.submitter : '{}'
+    await api.adminManualUpload(projectId, submitter, manualFiles.value, { onUploadProgress: () => {} })
+    if (typeof ElMessage !== 'undefined') ElMessage.success('上传成功')
+    manualVisible.value = false
+    manualFiles.value = []
+    load()
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '上传失败'
+    if (typeof ElMessage !== 'undefined') ElMessage.error(msg)
+  }
+}
+
+// 删除该用户所有提交（按字段=值，限定本项目）
+const delVisible = ref(false)
+const delInput = ref('')
+const delFieldKey = ref('')
+const delFieldValue = ref('')
+let delTargetRow = null
+const openDelete = (row) => {
+  delTargetRow = row
+  // 优先 queryFieldKey，其次当前筛选字段，再其次从提交者中取第一个字段
+  const m = parseSubmitter(row)
+  const prefKey = project.value?.queryFieldKey || (filterKey.value || Object.keys(m||{})[0] || '')
+  delFieldKey.value = prefKey
+  delFieldValue.value = prefKey ? (m?.[prefKey] ?? '') : ''
+  delInput.value = ''
+  delVisible.value = true
+}
+const doDelete = async () => {
+  try {
+    await api.adminDeleteSubmissionsByField({ fieldKey: delFieldKey.value, fieldValue: String(delFieldValue.value||''), projectId })
+    if (typeof ElMessage !== 'undefined') ElMessage.success('删除完成')
+    delVisible.value = false
+    load()
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '删除失败'
+    if (typeof ElMessage !== 'undefined') ElMessage.error(msg)
+  }
 }
 
 // 分组：按 submitterFingerprint 聚合为一个"版本链"
