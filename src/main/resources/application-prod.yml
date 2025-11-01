@@ -37,6 +37,9 @@ server:
 # App-level settings
 app:
   base-path: /kfile
+  project:
+    monthly-limit:
+      user: 3
 
 geoip:
   enabled: ${GEOIP_ENABLED:false}
@@ -44,8 +47,3 @@ geoip:
 
 site:
   base-url: ${KSITE_BASE_URL:https://ksite.xin}
-
-app:
-  project:
-    monthly-limit:
-      user: 3
