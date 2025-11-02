@@ -118,7 +118,7 @@ public class AdminSubmissionController {
 
     // 删除：按提交者字段删除（可选限制项目）。未指定项目则需要 SUPER 权限
     @PostMapping(path = "/delete-by-field", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole('SUPER') or (#body.projectId != null and @adminPermissionService.canManageProject(authentication, #body.projectId))")
+    @PreAuthorize("hasRole('SUPER') or (#body['projectId'] != null and @adminPermissionService.canManageProject(authentication, #body['projectId']))")
     public ResponseEntity<?> deleteByField(@RequestBody Map<String, Object> body) {
         String fieldKey = String.valueOf(body.getOrDefault("fieldKey", "")).trim();
         String fieldValue = String.valueOf(body.getOrDefault("fieldValue", "")).trim();
@@ -186,4 +186,3 @@ public class AdminSubmissionController {
         } catch (Exception e) { return null; }
     }
 }
-

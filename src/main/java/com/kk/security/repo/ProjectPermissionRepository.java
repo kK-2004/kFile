@@ -15,4 +15,6 @@ public interface ProjectPermissionRepository extends JpaRepository<ProjectPermis
     List<ProjectPermission> findBySiteUserId(Long siteUserId);
     void deleteBySiteUserId(Long siteUserId);
     void deleteByUser(AdminUser user);
+    void deleteByProject(Project project);
+    void deleteByProjectId(Long projectId);
 }

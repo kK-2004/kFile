@@ -26,6 +26,7 @@ public class DeleteProjectTaskService {
     private final OssService ossService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PlatformTransactionManager transactionManager;
+    private final com.kk.security.repo.ProjectPermissionRepository permRepo;
 
     private final Map<String, Task> tasks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -95,6 +96,8 @@ public class DeleteProjectTaskService {
             tx.execute(status -> {
                 Project ref = projectRepository.findById(t.getProjectId()).orElse(null);
                 if (ref != null) {
+                    // 先删权限，避免外键约束问题
+                    permRepo.deleteByProject(ref);
                     submissionRepository.deleteByProject(ref);
                     projectRepository.delete(ref);
                 }

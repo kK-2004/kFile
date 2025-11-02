@@ -24,6 +24,7 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SubmissionRepository submissionRepository;
+    private final com.kk.security.repo.ProjectPermissionRepository permRepo;
     private final com.kk.oss.OssService ossService;
     private final com.kk.common.service.AppConfigService appConfigService;
     @Value("${app.project.monthly-limit.user:3}")
@@ -255,6 +256,8 @@ public class ProjectService {
                 try { ossService.deleteByUrls(urls); } catch (Exception e) { /* 忽略OSS删除失败，继续删除DB */ }
             }
         } catch (Exception ignore) {}
+        // 删除项目权限，避免外键约束错误
+        permRepo.deleteByProject(p);
         submissionRepository.deleteByProject(p);
         projectRepository.delete(p);
     }
