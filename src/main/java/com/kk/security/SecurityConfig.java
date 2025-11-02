@@ -73,6 +73,23 @@ public class SecurityConfig {
                 // 登录与预检放行
                 .requestMatchers("/api/admin/auth/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // 用户提交页与公开接口：无需认证
+                .requestMatchers(HttpMethod.GET,
+                        "/api/projects",
+                        "/api/projects/*",
+                        "/api/projects/*/submissions/status"
+                ).permitAll()
+                .requestMatchers(HttpMethod.POST,
+                        "/api/projects/*/submissions",
+                        "/api/projects/*/submissions/validate",
+                        "/api/projects/*/submissions/direct-init",
+                        "/api/projects/*/submissions/direct-complete",
+                        "/api/projects/*/submissions/direct-multipart-init",
+                        "/api/projects/*/submissions/direct-multipart-sign",
+                        "/api/projects/*/submissions/direct-multipart-complete"
+                ).permitAll()
+                // 文件直链/代理：公开下载
+                .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
                 // 其余一律要求已认证（Bearer 或 Cookie 会话其一）
                 .anyRequest().authenticated()
             )
