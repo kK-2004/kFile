@@ -13,7 +13,7 @@
               <button v-if="mode === 'submit'"
                       @click="switchToStatus"
                       class="px-3 py-2 text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg bg-white">
-                查询状态
+                点我查询提交状态
               </button>
               <button v-else
                       @click="switchToSubmit"

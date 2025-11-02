@@ -205,8 +205,8 @@
     <!-- 手动上传：按项目配置字段填写（与用户端一致），但不做限制校验 -->
     <el-dialog v-model="manualVisible" title="手动上传（不受项目限制）" width="600px">
       <el-form label-width="120px">
-        <template v-if="(expectedFields||[]).length">
-          <el-form-item v-for="f in expectedFields" :key="f.key" :label="f.label || f.key">
+        <template v-if="(manualFields||[]).length">
+          <el-form-item v-for="f in manualFields" :key="f.key" :label="f.label || f.key">
             <template v-if="(f.type||'text') === 'select' && Array.isArray(f.options)">
               <el-select v-model="manualSubmitter[f.key]" placeholder="请选择" style="width: 320px;">
                 <el-option v-for="opt in f.options" :key="opt" :label="opt" :value="opt" />
@@ -293,7 +293,8 @@ const load = async () => {
     const { data } = await api.pageSubmissions(projectId, pageNumber.value, size.value)
     page.value = data
 
-    const pj = await api.getProject(projectId)
+    // 管理端使用 admin 接口获取完整配置（含 allowedSubmitterList），用于渲染下拉
+    const pj = await api.adminGetProject(projectId)
     project.value = pj.data
     if (Array.isArray(project.value.expectedUserFields)) {
       expectedFields.value = project.value.expectedUserFields
@@ -551,13 +552,16 @@ const copy = async (text) => {
 const manualVisible = ref(false)
 // 管理端：按项目配置字段填写，构造对象；不强制 required，允许留空
 const manualSubmitter = ref({})
+// 管理端优先使用 allowedSubmitterKeys 作为关键字段（与“未提交名单”一致），否则回退 expectedFields
+// 管理端手动上传与用户端保持一致：按 expectedUserFields 渲染（含下拉/placeholder）
+const manualFields = computed(() => expectedFields.value || [])
 const manualFiles = ref([])
 const onManualFileChange = (file, fileList) => { manualFiles.value = fileList.map(f => f.raw).filter(Boolean) }
 const doManualUpload = async () => {
   try {
     // 构造提交者对象：移除 undefined，仅保留非空字符串或有值的字段
     const sub = {}
-    for (const f of expectedFields.value || []) {
+    for (const f of manualFields.value || []) {
       const k = f?.key
       if (!k) continue
       const v = manualSubmitter.value?.[k]
