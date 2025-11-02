@@ -202,12 +202,21 @@
         <el-button @click="archProgressVisible=false" :disabled="archTask && archTask.status==='RUNNING'">关闭</el-button>
       </template>
     </el-dialog>
-    <!-- 手动上传 -->
-    <el-dialog v-model="manualVisible" title="手动上传（不受项目限制）" width="560px">
+    <!-- 手动上传：按项目配置字段填写（与用户端一致），但不做限制校验 -->
+    <el-dialog v-model="manualVisible" title="手动上传（不受项目限制）" width="600px">
       <el-form label-width="120px">
-        <el-form-item label="提交者信息(JSON)">
-          <el-input v-model="manual.submitter" type="textarea" :rows="4" placeholder='例如：{"userId":123,"name":"张三"}' />
-        </el-form-item>
+        <template v-if="(expectedFields||[]).length">
+          <el-form-item v-for="f in expectedFields" :key="f.key" :label="f.label || f.key">
+            <template v-if="(f.type||'text') === 'select' && Array.isArray(f.options)">
+              <el-select v-model="manualSubmitter[f.key]" placeholder="请选择" style="width: 320px;">
+                <el-option v-for="opt in f.options" :key="opt" :label="opt" :value="opt" />
+              </el-select>
+            </template>
+            <template v-else>
+              <el-input v-model="manualSubmitter[f.key]" :placeholder="f.placeholder || ''" style="width: 320px;" />
+            </template>
+          </el-form-item>
+        </template>
         <el-form-item label="选择文件">
           <el-upload drag :auto-upload="false" :on-change="onManualFileChange" multiple>
             <div class="el-upload__text">拖拽文件到此处，或点击选择</div>
@@ -540,16 +549,28 @@ const copy = async (text) => {
 
 // 手动上传
 const manualVisible = ref(false)
-const manual = ref({ submitter: '' })
+// 管理端：按项目配置字段填写，构造对象；不强制 required，允许留空
+const manualSubmitter = ref({})
 const manualFiles = ref([])
 const onManualFileChange = (file, fileList) => { manualFiles.value = fileList.map(f => f.raw).filter(Boolean) }
 const doManualUpload = async () => {
   try {
-    const submitter = manual.value.submitter && manual.value.submitter.trim() ? manual.value.submitter : '{}'
-    await api.adminManualUpload(projectId, submitter, manualFiles.value, { onUploadProgress: () => {} })
+    // 构造提交者对象：移除 undefined，仅保留非空字符串或有值的字段
+    const sub = {}
+    for (const f of expectedFields.value || []) {
+      const k = f?.key
+      if (!k) continue
+      const v = manualSubmitter.value?.[k]
+      if (v === undefined || v === null) continue
+      const s = typeof v === 'string' ? v.trim() : v
+      if (s === '') continue
+      sub[k] = s
+    }
+    await api.adminManualUpload(projectId, sub, manualFiles.value, { onUploadProgress: () => {} })
     if (typeof ElMessage !== 'undefined') ElMessage.success('上传成功')
     manualVisible.value = false
     manualFiles.value = []
+    manualSubmitter.value = {}
     load()
   } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '上传失败'

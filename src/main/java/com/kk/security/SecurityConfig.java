@@ -58,6 +58,9 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
         http
+            // 同时支持：
+            // - 主站用户/管理员：Bearer Token（资源服务器）
+            // - 本地管理员：Cookie 会话（表单登录控制器保存的 Session）
             .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
             .cors(c -> {})
             .csrf(csrf -> csrf.disable())
@@ -67,22 +70,10 @@ public class SecurityConfig {
                 .accessDeniedHandler(new com.kk.security.handler.RestAccessDeniedHandler())
             )
             .authorizeHttpRequests(reg -> reg
-                .requestMatchers(
-                        "/api/admin/auth/**"
-                ).permitAll()
-                // allow public read of projects
-                .requestMatchers(HttpMethod.GET, "/api/projects", "/api/projects/*").permitAll()
-                // allow public file proxy via internal OSS (GET/HEAD)
-                .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
-                .requestMatchers(HttpMethod.HEAD, "/file/oss/**").permitAll()
-                // allow public submit to project + 直传初始化/完成
-                .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions/direct-init").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/projects/*/submissions/direct-complete").permitAll()
-                // allow public check latest status
-                .requestMatchers(HttpMethod.GET, "/api/projects/*/submissions/status").permitAll()
-                // CORS preflight
+                // 登录与预检放行
+                .requestMatchers("/api/admin/auth/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // 其余一律要求已认证（Bearer 或 Cookie 会话其一）
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider)

@@ -207,6 +207,62 @@ public class AliOssService implements OssService {
         }
     }
 
+    @Override
+    public String uploadStreamWithPrefix(InputStream in, long size, String contentType, String originalName, String keyPrefix) {
+        String original = baseName(originalName);
+        String enc = fileNameCodec.encrypt(original);
+        String key = normalizePrefix(keyPrefix) + enc;
+        final long threshold = 5L * 1024 * 1024; // 5MB
+        try {
+            if (size >= 0 && size < threshold) {
+                ObjectMetadata meta = new ObjectMetadata();
+                meta.setContentLength(size);
+                if (contentType != null && !contentType.isBlank()) meta.setContentType(contentType);
+                PutObjectRequest req = new PutObjectRequest(properties.getBucket(), key, in, meta);
+                ossClientPublic.putObject(req);
+            } else {
+                multipartUploadFromStream(in, key);
+            }
+            return normalizeBase(appBasePath) + "/file/oss/" + key;
+        } catch (Exception ex) {
+            log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), key, ex.getMessage(), ex);
+            throw new IllegalStateException("文件上传失败，请联系管理员", ex);
+        }
+    }
+
+    private void multipartUploadFromStream(InputStream in, String key) throws IOException {
+        String bucket = properties.getBucket();
+        InitiateMultipartUploadRequest initReq = new InitiateMultipartUploadRequest(bucket, key);
+        InitiateMultipartUploadResult initRes = ossClientPublic.initiateMultipartUpload(initReq);
+        String uploadId = initRes.getUploadId();
+        java.util.List<PartETag> partETags = new java.util.ArrayList<>();
+        final int partSize = 5 * 1024 * 1024; // 5MB
+        byte[] buffer = new byte[partSize];
+        int partNumber = 1;
+        long uploaded = 0;
+        try {
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                UploadPartRequest up = new UploadPartRequest();
+                up.setBucketName(bucket);
+                up.setKey(key);
+                up.setUploadId(uploadId);
+                up.setInputStream(new ByteArrayInputStream(buffer, 0, read));
+                up.setPartSize(read);
+                up.setPartNumber(partNumber++);
+                UploadPartResult upRes = ossClientPublic.uploadPart(up);
+                partETags.add(upRes.getPartETag());
+                uploaded += read;
+            }
+            CompleteMultipartUploadRequest completeReq = new CompleteMultipartUploadRequest(bucket, key, uploadId, partETags);
+            ossClientPublic.completeMultipartUpload(completeReq);
+        } catch (Exception ex) {
+            try { ossClientPublic.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId)); } catch (Exception ignore) {}
+            log.error("OSS分片上传失败: bucket={}, key={}, uploaded={}, msg={}", bucket, key, uploaded, ex.getMessage(), ex);
+            throw new IllegalStateException("文件上传失败，请联系管理员", ex);
+        }
+    }
+
     private String baseName(String filename) {
         if (!StringUtils.hasText(filename)) return "file";
         String fn = filename;

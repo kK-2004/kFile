@@ -31,35 +31,95 @@ public class AdminSubmissionController {
     private final OssService ossService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // 手动上传（绕过项目窗口/类型/重复限制）
-    @PostMapping(path = "/manual-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    // 手动上传（统一入口）：
+    // - multipart/form-data: 与用户端一致（projectId, submitter, files）
+    // - 非 multipart（如 application/octet-stream）: 作为单文件流处理，projectId & submitter 走 query 参数
+    @PostMapping(path = "/manual-upload")
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
-    public Map<String, Object> manualUpload(@RequestPart("projectId") Long projectId,
-                                            @RequestPart("submitter") String submitterJson,
-                                            @RequestPart("files") List<MultipartFile> files,
-                                            HttpServletRequest request) {
-        if (files == null || files.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
-        Project project = projectService.get(projectId);
+    public Map<String, Object> manualUploadUnified(HttpServletRequest request,
+                                                   @RequestParam(value = "projectId", required = false) Long projectId,
+                                                   @RequestParam(value = "submitter", required = false) String submitterParam) {
+        String ct = Optional.ofNullable(request.getContentType()).orElse("").toLowerCase();
+        boolean isMultipart = ct.startsWith("multipart/");
 
+        if (isMultipart) {
+            // 直接从 Multipart 请求中取参数与文件
+            String submitterJson;
+            java.util.List<MultipartFile> files;
+            if (request instanceof org.springframework.web.multipart.MultipartHttpServletRequest mreq) {
+                String p = mreq.getParameter("projectId");
+                try { projectId = p == null ? null : Long.parseLong(p); } catch (Exception e) { projectId = null; }
+                submitterJson = mreq.getParameter("submitter");
+                files = mreq.getFiles("files");
+            } else {
+                // 兼容某些容器未包裹的情况
+                String p = request.getParameter("projectId");
+                try { projectId = p == null ? null : Long.parseLong(p); } catch (Exception e) { projectId = null; }
+                submitterJson = request.getParameter("submitter");
+                files = java.util.List.of();
+            }
+            if (projectId == null) throw new IllegalArgumentException("projectId 不能为空");
+            if (submitterJson == null) submitterJson = "{}";
+            if (files == null || files.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
+            Project project = projectService.get(projectId);
+            String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
+            List<String> urls = ossService.uploadWithPrefix(files, keyPrefix);
+            return finalizeManualSubmission(project, submitterJson, urls, request);
+        } else {
+            // 流式单文件
+            Long pid = projectId;
+            String submitterJson = submitterParam;
+            if (pid == null) {
+                String p = request.getParameter("projectId");
+                try { pid = p == null ? null : Long.parseLong(p); } catch (Exception ignored) {}
+            }
+            if (submitterJson == null) submitterJson = Optional.ofNullable(request.getParameter("submitter")).orElse("{}");
+            if (pid == null) throw new IllegalArgumentException("projectId 不能为空");
+            Project project = projectService.get(pid);
+            String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
+            String contentType = Optional.ofNullable(request.getContentType()).orElse("application/octet-stream");
+            String originalName = Optional.ofNullable(request.getHeader("X-Filename"))
+                    .or(() -> Optional.ofNullable(request.getHeader("X-File-Name")))
+                    .orElse("file");
+            try (java.io.InputStream in = request.getInputStream()) {
+                long size = request.getContentLengthLong();
+                String url = ossService.uploadStreamWithPrefix(in, size, contentType, originalName, keyPrefix);
+                return finalizeManualSubmission(project, submitterJson, java.util.List.of(url), request);
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("读取上传数据失败", e);
+            }
+        }
+    }
+
+    private Map<String, Object> finalizeManualSubmission(Project project,
+                                                         String submitterJson,
+                                                         List<String> urls,
+                                                         HttpServletRequest request) {
         String ip = com.kk.common.WebClientInfoUtil.getClientIp(request);
         String ua = request.getHeader("User-Agent");
 
-        // 直接上传，不做窗口/类型/大小/重复校验
-        String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
-        List<String> urls = ossService.uploadWithPrefix(files, keyPrefix);
-
         Submission s = new Submission();
-        // 复用内部逻辑：canonical submitter + fingerprint
+        // 规范化提交者：尽力解析 JSON 并稳定排序；失败则回退为 {}
+        String canonical;
         try {
-            java.lang.reflect.Method m = SubmissionService.class.getDeclaredMethod("canonicalizeSubmitter", String.class);
-            m.setAccessible(true);
-            String canonical = (String) m.invoke(submissionService, submitterJson);
-            String fp = org.springframework.util.DigestUtils.md5DigestAsHex(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            s.setSubmitterInfo(canonical);
-            s.setSubmitterFingerprint(fp);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("提交者信息JSON无效", e);
+            String raw = (submitterJson == null || submitterJson.isBlank()) ? "{}" : submitterJson;
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(raw);
+            // 按键名排序，保持稳定字符串
+            java.util.TreeMap<String, com.fasterxml.jackson.databind.JsonNode> map = new java.util.TreeMap<>();
+            if (node != null && node.isObject()) {
+                node.fieldNames().forEachRemaining(fn -> map.put(fn, node.get(fn)));
+                canonical = objectMapper.writeValueAsString(map);
+            } else {
+                canonical = objectMapper.writeValueAsString(node);
+            }
+        } catch (Exception ignore) {
+            canonical = "{}";
         }
+        String fp = org.springframework.util.DigestUtils.md5DigestAsHex(
+                canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        s.setSubmitterInfo(canonical);
+        s.setSubmitterFingerprint(fp);
         s.setProject(project);
         s.setIpAddress(ip);
         s.setUserAgent(ua);
@@ -82,7 +142,6 @@ public class AdminSubmissionController {
         try { s.setFileUrls(objectMapper.writeValueAsString(urls)); }
         catch (Exception e) { throw new RuntimeException("Failed to serialize file urls", e); }
 
-        // 计数与有效性（按常规）
         long exist = submissionRepository.countByProjectAndSubmitterFingerprint(project, s.getSubmitterFingerprint());
         s.setSubmitCount((int) (exist + 1));
         s.setValid(true);

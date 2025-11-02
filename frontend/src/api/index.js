@@ -16,9 +16,9 @@ const instance = axios.create({
   withCredentials: true
 })
 
-// Attach Bearer token from localStorage when appropriate
-// - 对 /api/admin/auth/*（管理员登录/注销/改密）不注入 Bearer，保留 Cookie 会话
-// - 其它请求若存在主站 token，则注入 Bearer 并关闭 Cookie 以避免混淆
+// Attach Bearer token when appropriate
+// - 管理端 API：若有主站 token 注入 Bearer；否则回退 Cookie 会话（用于本地管理员）
+// - 用户端/项目相关 API：一律注入 Bearer（主站登录）
 instance.interceptors.request.use((config) => {
   try {
     const rawUrl = config?.url || ''
@@ -36,44 +36,20 @@ instance.interceptors.request.use((config) => {
     const isProjectsCreateOrModify = path === '/api/projects' ? (method !== 'get') : (/^\/api\/projects\//.test(path) && ['post','put','delete','patch'].includes(method))
     // Submissions endpoints classification
     const reProjectId = '[^/]+'
-    const reBase = new RegExp(`^/api/projects/${reProjectId}/submissions`)
     const isSubmissionList = new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path) && method === 'get'
-    const isPublicSubmissions = (
-      (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path)) ||
-      (method === 'post' && new RegExp(`^/api/projects/${reProjectId}/submissions/(direct-init|direct-complete|direct-multipart-(sign|complete))$`).test(path)) ||
-      (method === 'get'  && new RegExp(`^/api/projects/${reProjectId}/submissions/status$`).test(path))
-    )
     const isProjectAdminOps = (
       method === 'get' && new RegExp(`^/api/projects/${reProjectId}/submissions/(export|archive|archive-prepared)$`).test(path)
     )
-    const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && !isProjectsQuota && !isSubmissionList && !isProjectAdminOps
 
-    // 1) 管理员认证接口：强制走 Cookie 会话，不注入 Bearer
+    // 1) 管理员认证接口：不注入 Bearer
     if (isAdminAuth) {
       if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-      config.withCredentials = true
+      config.withCredentials = false
       return config
     }
 
-    // 2) 管理端 API：
-    //    - 若存在主站 token，则使用 Bearer（后端资源服务器会识别）
-    //    - 否则回退到 Cookie 会话（用于本地管理员）
+    // 2) 管理端 API：优先 Bearer，否则回退 Cookie 会话
     if (isAdminApi) {
-      const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
-      if (token && !isAdminAuth) {
-        config.headers = config.headers || {}
-        config.headers['Authorization'] = `Bearer ${token}`
-        config.withCredentials = false
-      } else {
-        if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-        config.withCredentials = true
-      }
-      return config
-    }
-
-    // 3) 站点用户保护的项目接口（创建/修改/配额）：注入 Bearer
-    const needBearer = isAuthMe || isProjectsQuota || isProjectsCreateOrModify || isSubmissionList || isProjectAdminOps
-    if (needBearer) {
       const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
       if (token) {
         config.headers = config.headers || {}
@@ -86,14 +62,21 @@ instance.interceptors.request.use((config) => {
       return config
     }
 
-    // 4) 公共接口（含提交/直传/状态/项目GET）：不注入 Bearer，避免无效/过期 Token 触发 401 → 跳管理员登录
-    if (isPublicSubmissions || isProjectPublicGet) {
-      if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+    // 3) 用户相关受保护接口：一律注入 Bearer（不回退 Cookie）
+    const needBearer = isAuthMe || isProjectsQuota || isProjectsCreateOrModify || isSubmissionList || isProjectAdminOps || path.startsWith('/api/projects')
+    if (needBearer) {
+      const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
+      if (token) {
+        config.headers = config.headers || {}
+        config.headers['Authorization'] = `Bearer ${token}`
+      } else {
+        if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
+      }
       config.withCredentials = false
       return config
     }
 
-    // 其余默认保持现状
+    // 其余默认不注入 Bearer，不携带 Cookie
     if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
     config.withCredentials = false
   } catch {}

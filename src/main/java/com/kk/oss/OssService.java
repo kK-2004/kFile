@@ -52,4 +52,10 @@ public interface OssService {
     default String generatePresignedUploadPartUrl(String key, String uploadId, int partNumber, long expireSeconds, String contentType) { throw new UnsupportedOperationException(); }
     default void completeMultipartUpload(String key, String uploadId, List<com.aliyun.oss.model.PartETag> parts) { throw new UnsupportedOperationException(); }
     default void abortMultipartUpload(String key, String uploadId) { throw new UnsupportedOperationException(); }
+
+    // ===== Stream upload (server-side) support =====
+    // 直接以流方式上传单个文件，指定原始文件名与可选的 Content-Type，并返回可访问的代理 URL
+    default String uploadStreamWithPrefix(java.io.InputStream in, long size, String contentType, String originalName, String keyPrefix) {
+        throw new UnsupportedOperationException();
+    }
 }
