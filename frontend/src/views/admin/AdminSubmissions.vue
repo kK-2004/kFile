@@ -346,7 +346,7 @@ const exportCsv = async () => {
 const applyFilter = ()=>{ pageNumber.value = 0; load() }
 const resetFilter = ()=>{ filterKey.value=''; filterValue.value=''; pageNumber.value=0; load() }
 
-// 异步打包（选择目录 + 进度）
+// 异步打包（浏览器保存 + 进度）
 const archProgressVisible = ref(false)
 const archTask = ref(null)
 let archTimer = null
@@ -356,12 +356,9 @@ const archPct = computed(()=>{
   return Math.floor((t.processedEntries / t.totalEntries) * 100)
 })
 const startArchive = async (byFilter=false) => {
-  // 优先使用目录句柄，若不支持则走保存文件/浏览器下载兜底
-  const supportsDir = 'showDirectoryPicker' in window
+  // 直接使用浏览器保存：优先 showSaveFilePicker，退化为浏览器下载
+  // 不再请求对文件夹的长期读写权限
   let dirHandle = null
-  if (supportsDir) {
-    try { dirHandle = await window.showDirectoryPicker() } catch { /* 用户取消 */ return }
-  }
   const params = byFilter ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
   try {
     const { data } = await api.adminStartArchiveTask(projectId, params.fieldKey, params.fieldValue)
