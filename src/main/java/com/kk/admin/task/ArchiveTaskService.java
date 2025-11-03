@@ -149,31 +149,39 @@ public class ArchiveTaskService {
     }
 
     private String buildEntryName(String objectKey, java.util.Set<String> used) {
-        // 1) 去掉 oss.prefix
+        // 1) 规范化 & 去掉 oss.prefix
         String key = objectKey == null ? "" : objectKey;
+        key = key.replace('\\', '/');
         String pre = ossProperties.getPrefix();
         if (pre != null && !pre.isEmpty()) {
             String p = pre.endsWith("/") ? pre : pre + "/";
             if (key.startsWith(p)) key = key.substring(p.length());
         }
-        // 2) 只取文件名部分并解密
-        int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+
+        // 2) 拆分目录与文件名，仅解密文件名
+        int slash = key.lastIndexOf('/');
+        String dir = slash >= 0 ? key.substring(0, slash + 1) : "";
         String enc = slash >= 0 ? key.substring(slash + 1) : key;
-        String name = fileNameCodec.decrypt(enc);
-        if (name == null || name.isBlank()) name = enc;
-        // 3) 去除路径穿越
-        name = name.replace("..", "");
-        // 4) 重名去重
-        String base = name;
+        String dec = fileNameCodec.decrypt(enc);
+        String name = (dec == null || dec.isBlank()) ? enc : dec;
+
+        // 3) 安全：去除路径穿越符号，并保持目录分隔符为 '/'
+        dir = (dir == null ? "" : dir).replace("..", "").replace('\\', '/');
+        name = (name == null ? "" : name).replace("..", "");
+
+        // 4) 重名去重（针对完整路径，改写文件名部分）
+        String baseName = name;
         int dot = name.lastIndexOf('.');
         String stem = dot > 0 ? name.substring(0, dot) : name;
         String ext = dot > 0 ? name.substring(dot) : "";
+        String candidate = dir + baseName;
         int i = 2;
-        while (used.contains(name)) {
+        while (used.contains(candidate)) {
             name = stem + " (" + i + ")" + ext;
+            candidate = dir + name;
             i++;
         }
-        used.add(name);
-        return name;
+        used.add(candidate);
+        return candidate;
     }
 }
