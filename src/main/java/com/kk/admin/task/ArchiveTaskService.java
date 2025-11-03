@@ -167,6 +167,17 @@ public class ArchiveTaskService {
 
         // 3) 安全：去除路径穿越符号，并保持目录分隔符为 '/'
         dir = (dir == null ? "" : dir).replace("..", "").replace('\\', '/');
+        // 限制目录层级：仅保留前两级（项目名/第二段），去掉可能用于去重的中间段
+        if (!dir.isEmpty()) {
+            String[] parts = dir.split("/");
+            java.util.List<String> kept = new java.util.ArrayList<>();
+            for (String pseg : parts) {
+                if (pseg == null || pseg.isEmpty()) continue;
+                kept.add(pseg);
+                if (kept.size() >= 2) break;
+            }
+            dir = kept.isEmpty() ? "" : (String.join("/", kept) + "/");
+        }
         name = (name == null ? "" : name).replace("..", "");
 
         // 4) 重名去重（针对完整路径，改写文件名部分）
