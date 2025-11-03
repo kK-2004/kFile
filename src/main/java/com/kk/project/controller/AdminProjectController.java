@@ -203,7 +203,11 @@ public class AdminProjectController {
             }
             sb.append('\n');
         }
-        byte[] bytes = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] bom = new byte[] {(byte)0xEF, (byte)0xBB, (byte)0xBF};
+        byte[] bytesUtf8 = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] bytes = new byte[bom.length + bytesUtf8.length];
+        System.arraycopy(bom, 0, bytes, 0, bom.length);
+        System.arraycopy(bytesUtf8, 0, bytes, bom.length, bytesUtf8.length);
         String filename = "project-" + id + "-missing.csv";
         return org.springframework.http.ResponseEntity.ok()
                 .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)

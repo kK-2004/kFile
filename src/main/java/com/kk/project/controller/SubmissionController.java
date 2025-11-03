@@ -258,13 +258,18 @@ public class SubmissionController {
 
     @GetMapping("/export")
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
-    public ResponseEntity<String> exportCsv(@PathVariable Long projectId) {
+    public ResponseEntity<byte[]> exportCsv(@PathVariable Long projectId) {
         Project p = projectService.get(projectId);
         String csv = submissionService.exportCsv(p);
+        byte[] bom = new byte[] {(byte)0xEF, (byte)0xBB, (byte)0xBF}; // UTF-8 BOM for Excel compatibility
+        byte[] bytes = csv == null ? new byte[0] : csv.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] body = new byte[bom.length + bytes.length];
+        System.arraycopy(bom, 0, body, 0, bom.length);
+        System.arraycopy(bytes, 0, body, bom.length, bytes.length);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=project-" + projectId + "-submissions.csv")
                 .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
-                .body(csv);
+                .body(body);
     }
 
     @GetMapping("/archive")
