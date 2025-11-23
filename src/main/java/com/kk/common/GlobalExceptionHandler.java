@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import java.util.Arrays;
 
 @ControllerAdvice
+@lombok.extern.slf4j.Slf4j
 public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiError> handleBadRequest(IllegalArgumentException ex) {
@@ -65,6 +66,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleOther(Exception ex) {
         boolean isDev = java.util.Arrays.asList(env.getActiveProfiles()).contains("dev");
+        // 始终记录未处理异常，便于线上排查
+        log.error("Unhandled exception in controller", ex);
         String msg = isDev ? ("服务器错误 [" + ex.getClass().getSimpleName() + ": " + String.valueOf(ex.getMessage()) + "]") : "服务器错误";
         try {
             if (isDev && ex.getCause() instanceof com.aliyun.oss.OSSException oe) {
