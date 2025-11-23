@@ -318,15 +318,16 @@ public class AliOssService implements OssService {
 
     @Override
     public String extractObjectKey(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
         String host = properties.getHost();
         String objectKey;
         // Support internal proxy path anywhere in URL: .../file/oss/{key}
         String proxyPrefix = "/file/oss/";
-        if (url != null) {
-            int pos = url.indexOf(proxyPrefix);
-            if (pos >= 0) {
-                return url.substring(pos + proxyPrefix.length());
-            }
+        int pos = url.indexOf(proxyPrefix);
+        if (pos >= 0) {
+            return url.substring(pos + proxyPrefix.length());
         }
         if (StringUtils.hasText(host) && url.startsWith(host)) {
             objectKey = url.substring(host.length());
@@ -336,8 +337,8 @@ public class AliOssService implements OssService {
                 int slash = url.indexOf('/', idx + ".aliyuncs.com".length() + 1);
                 objectKey = slash > 0 ? url.substring(slash + 1) : "";
             } else {
-                int pos = url.indexOf('/', 8);
-                objectKey = pos > 0 ? url.substring(pos + 1) : url;
+                int firstSlash = url.indexOf('/', 8);
+                objectKey = firstSlash > 0 ? url.substring(firstSlash + 1) : url;
             }
         }
         return objectKey;

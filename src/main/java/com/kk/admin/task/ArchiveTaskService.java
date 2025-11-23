@@ -125,14 +125,20 @@ public class ArchiveTaskService {
                 toPack = List.of(urls.get(urls.size() - 1));
             }
             for (String url : toPack) {
+                if (url == null || url.isBlank()) continue;
                 String key = ossService.extractObjectKey(url);
+                if (key == null || key.isBlank()) continue;
                 String entryName = buildEntryName(key, usedNames);
-                String signedUrl = ossService.generatePresignedUrlByKey(key, true, urlExpireSeconds, false);
-                ManifestEntry me = new ManifestEntry();
-                me.setKey(key);
-                me.setUrl(signedUrl);
-                me.setFilename(entryName);
-                out.add(me);
+                try {
+                    String signedUrl = ossService.generatePresignedUrlByKey(key, true, urlExpireSeconds, false);
+                    ManifestEntry me = new ManifestEntry();
+                    me.setKey(key);
+                    me.setUrl(signedUrl);
+                    me.setFilename(entryName);
+                    out.add(me);
+                } catch (Exception ex) {
+                    log.warn("failed to generate presigned url for key {}: {}", key, ex.getMessage());
+                }
             }
         }
         return out;

@@ -97,8 +97,12 @@ public class AdminTaskController {
         if (fk != null && fk.isEmpty()) fk = null;
         if (fv != null && fv.isEmpty()) fv = null;
         long exp = expireSeconds <= 0 ? 3600 : expireSeconds;
-        java.util.List<com.kk.admin.task.ArchiveTaskService.ManifestEntry> entries =
-                archiveTaskService.buildManifest(projectId, fk, fv, exp);
+        java.util.List<com.kk.admin.task.ArchiveTaskService.ManifestEntry> entries;
+        try {
+            entries = archiveTaskService.buildManifest(projectId, fk, fv, exp);
+        } catch (Exception e) {
+            throw new IllegalStateException("生成打包清单失败: " + e.getMessage(), e);
+        }
         return java.util.Map.of(
                 "projectId", projectId,
                 "fieldKey", fk,
