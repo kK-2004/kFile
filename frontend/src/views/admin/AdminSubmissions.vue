@@ -249,6 +249,7 @@
 
 <script setup>
 import { ref, onMounted, computed, onUnmounted } from 'vue'
+import JSZip from 'jszip'
 import api from '../../api'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
@@ -346,66 +347,71 @@ const exportCsv = async () => {
 const applyFilter = ()=>{ pageNumber.value = 0; load() }
 const resetFilter = ()=>{ filterKey.value=''; filterValue.value=''; pageNumber.value=0; load() }
 
-// 异步打包（浏览器保存 + 进度）
+// 异步打包（前端并发下载 + 打包）
 const archProgressVisible = ref(false)
 const archTask = ref(null)
-let archTimer = null
 const archPct = computed(()=>{
   const t = archTask.value
   if (!t || !t.totalEntries) return 0
   return Math.floor((t.processedEntries / t.totalEntries) * 100)
 })
 const startArchive = async (byFilter=false) => {
-  // 直接使用浏览器保存：优先 showSaveFilePicker，退化为浏览器下载
-  // 不再请求对文件夹的长期读写权限
-  let dirHandle = null
   const params = byFilter ? { fieldKey: filterKey.value, fieldValue: filterValue.value } : {}
   try {
-    const { data } = await api.adminStartArchiveTask(projectId, params.fieldKey, params.fieldValue)
-    const tid = data && data.taskId
-    if (!tid) {
-      ElMessage.error('打包任务创建失败：未返回任务ID')
+    const { data } = await api.adminArchiveManifest(projectId, params.fieldKey, params.fieldValue)
+    const entries = data?.entries || []
+    if (!entries.length) {
+      if (typeof ElMessage !== 'undefined') ElMessage.info('没有可打包的文件')
       return
     }
-    archTask.value = { taskId: tid, status: data.status, totalEntries: 0, processedEntries: 0, filename: data.filename }
+    archTask.value = { status: 'RUNNING', totalEntries: entries.length, processedEntries: 0 }
     archProgressVisible.value = true
-    archTimer && clearInterval(archTimer)
-    archTimer = setInterval(async () => {
-      if (!archTask.value || !archTask.value.taskId) {
-        clearInterval(archTimer); archTimer = null
-        return
-      }
-      try {
-        const { data: st } = await api.adminGetTask(archTask.value.taskId)
-        archTask.value = st
-        if (st.status === 'COMPLETED') {
-          clearInterval(archTimer); archTimer = null
-          const res = await api.adminDownloadTask(st.id || archTask.value.taskId)
-          const blob = new Blob([res.data], { type: 'application/zip' })
-          const ok = await saveBlobToTarget(blob, st.filename || `project-${projectId}.zip`, dirHandle)
-          if (ok) {
-            ElMessage.success('打包完成，文件已保存')
-          } else {
-            ElMessage.error('打包完成，但保存文件失败')
-          }
-          archProgressVisible.value = false
-        } else if (st.status === 'FAILED') {
-          clearInterval(archTimer); archTimer = null
-          ElMessage.error('打包失败：' + (st.message||''))
-          archProgressVisible.value = false
+
+    const zip = new JSZip()
+    const concurrency = 4
+    let index = 0
+    let processed = 0
+
+    const worker = async () => {
+      while (true) {
+        const current = index++
+        if (current >= entries.length) break
+        const e = entries[current]
+        try {
+          const resp = await fetch(e.url)
+          if (!resp.ok) throw new Error(`下载失败: ${resp.status}`)
+          const buf = await resp.arrayBuffer()
+          const name = e.filename || e.key || `file-${current + 1}`
+          zip.file(name, buf)
+        } catch (err) {
+          console.warn('download failed for entry', e, err)
+        } finally {
+          processed++
+          archTask.value = { ...archTask.value, processedEntries: processed }
         }
-      } catch (e) {
-        const code = e?.response?.status
-        if (code === 401 || code === 403) {
-          clearInterval(archTimer); archTimer = null
-          archProgressVisible.value = false
-          ElMessage.error('无权限查询打包进度，请联系管理员')
-        }
-        // 其他错误忽略，等待下次轮询
       }
-    }, 1200)
+    }
+
+    const workers = []
+    const workerCount = Math.min(concurrency, entries.length)
+    for (let i = 0; i < workerCount; i++) {
+      workers.push(worker())
+    }
+    await Promise.all(workers)
+
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const filename = data.filename || `project-${projectId}.zip`
+    const ok = await saveBlobToTarget(blob, filename, null)
+    if (ok) {
+      if (typeof ElMessage !== 'undefined') ElMessage.success('打包完成，文件已保存')
+    } else {
+      if (typeof ElMessage !== 'undefined') ElMessage.error('打包完成，但保存文件失败')
+    }
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '打包任务创建失败')
+    const msg = e?.response?.data?.message || e?.message || '打包失败'
+    if (typeof ElMessage !== 'undefined') ElMessage.error(msg)
+  } finally {
+    archProgressVisible.value = false
   }
 }
 

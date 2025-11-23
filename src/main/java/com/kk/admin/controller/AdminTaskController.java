@@ -81,6 +81,34 @@ public class AdminTaskController {
         return java.util.Map.of("taskId", t.getId(), "status", t.getStatus(), "filename", t.getFilename());
     }
 
+    // 前端打包 ZIP：后端仅返回清单（OSS 预签名直链 + 解密后的文件名）
+    @GetMapping("/projects/{projectId}/archive-manifest")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
+    public java.util.Map<String,Object> archiveManifest(@PathVariable Long projectId,
+                                                        @RequestParam(required = false) String fieldKey,
+                                                        @RequestParam(required = false) String fieldValue,
+                                                        @RequestParam(required = false, defaultValue = "3600") long expireSeconds) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!adminPermissionService.canManageProject(auth, projectId)) {
+            throw new AccessDeniedException("Access denied");
+        }
+        String fk = fieldKey == null ? null : fieldKey.trim();
+        String fv = fieldValue == null ? null : fieldValue.trim();
+        if (fk != null && fk.isEmpty()) fk = null;
+        if (fv != null && fv.isEmpty()) fv = null;
+        long exp = expireSeconds <= 0 ? 3600 : expireSeconds;
+        java.util.List<com.kk.admin.task.ArchiveTaskService.ManifestEntry> entries =
+                archiveTaskService.buildManifest(projectId, fk, fv, exp);
+        return java.util.Map.of(
+                "projectId", projectId,
+                "fieldKey", fk,
+                "fieldValue", fv,
+                "expireSeconds", exp,
+                "totalEntries", entries.size(),
+                "entries", entries
+        );
+    }
+
     @GetMapping("/tasks/{taskId}/download")
     @PreAuthorize("isAuthenticated()")
     public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> download(@PathVariable String taskId) {

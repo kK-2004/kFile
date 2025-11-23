@@ -52,6 +52,16 @@ public class ArchiveTaskService {
         private String fieldValue;
     }
 
+    @Data
+    public static class ManifestEntry {
+        // OSS 对象 key（不含 host）
+        private String key;
+        // 预签名直链
+        private String url;
+        // 在 ZIP 中显示的路径/文件名（已解密）
+        private String filename;
+    }
+
     public Task get(String id) { return tasks.get(id); }
 
     public Task start(Long projectId, String fieldKey, String fieldValue) {
@@ -76,6 +86,56 @@ public class ArchiveTaskService {
         Task t = tasks.get(taskId);
         if (t == null || t.getFilePath() == null) throw new IllegalArgumentException("Task not found or not completed");
         return new FileSystemResource(new File(t.getFilePath()));
+    }
+
+    /**
+     * 仅构建清单：不在服务端打包 ZIP，而是返回
+     * 每个对象的 OSS key、预签名直链以及在压缩包中的解密文件名，由前端自行并发下载与打包。
+     */
+    public java.util.List<ManifestEntry> buildManifest(Long projectId, String fieldKey, String fieldValue, long urlExpireSeconds) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+        List<Submission> all = submissionRepository.findVisibleByProjectOrderByCreatedAtDesc(project);
+        LinkedHashMap<String, Submission> latestMap = new LinkedHashMap<>();
+        boolean doFilter = fieldKey != null && !fieldKey.isBlank() && fieldValue != null && !fieldValue.isBlank();
+        for (Submission s : all) {
+            if (doFilter) {
+                try {
+                    JsonNode node = objectMapper.readTree(s.getSubmitterInfo());
+                    JsonNode v = node.get(fieldKey);
+                    String val = v == null || v.isNull() ? "" : v.asText("");
+                    if (val == null || !val.startsWith(fieldValue)) continue;
+                } catch (Exception ignored) { continue; }
+            }
+            String key = s.getSubmitterFingerprint();
+            if (key == null || key.isBlank()) key = String.valueOf(s.getId());
+            if (!latestMap.containsKey(key)) latestMap.put(key, s);
+        }
+        List<Submission> list = new ArrayList<>(latestMap.values());
+        java.util.Set<String> usedNames = new java.util.HashSet<>();
+        java.util.List<ManifestEntry> out = new java.util.ArrayList<>();
+        for (Submission s : list) {
+            List<String> urls;
+            try {
+                urls = objectMapper.readValue(s.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            } catch (Exception e) { urls = null; }
+            if (urls == null) { continue; }
+            List<String> toPack = urls;
+            if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && !urls.isEmpty()) {
+                toPack = List.of(urls.get(urls.size() - 1));
+            }
+            for (String url : toPack) {
+                String key = ossService.extractObjectKey(url);
+                String entryName = buildEntryName(key, usedNames);
+                String signedUrl = ossService.generatePresignedUrlByKey(key, true, urlExpireSeconds, false);
+                ManifestEntry me = new ManifestEntry();
+                me.setKey(key);
+                me.setUrl(signedUrl);
+                me.setFilename(entryName);
+                out.add(me);
+            }
+        }
+        return out;
     }
 
     private void runTask(Task t) {

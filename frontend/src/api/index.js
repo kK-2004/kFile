@@ -265,7 +265,14 @@ export default {
   ,adminStartDeleteProject(id) { return instance.post(`/api/admin/projects/${id}/delete-task`) }
   ,adminGetTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}`) }
   ,adminStartArchiveTask(id, fieldKey, fieldValue) { return instance.post(`/api/admin/projects/${id}/archive-task`, { fieldKey, fieldValue }) }
-  ,adminDownloadTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}/download`, { responseType: 'blob' }) }
+  ,adminDownloadTask(taskId) { return instance.get(`/api/admin/tasks/${taskId}/download`, { responseType: 'blob', timeout: 0 }) }
+  ,adminArchiveManifest(id, fieldKey, fieldValue, expireSeconds) {
+    const params = {}
+    if (fieldKey) params.fieldKey = fieldKey
+    if (fieldValue) params.fieldValue = fieldValue
+    if (expireSeconds) params.expireSeconds = expireSeconds
+    return instance.get(`/api/admin/projects/${id}/archive-manifest`, { params })
+  }
   ,adminGetConfig() { return instance.get('/api/admin/config') }
   ,adminUpdateConfig(payload) { return instance.put('/api/admin/config', payload) }
 
