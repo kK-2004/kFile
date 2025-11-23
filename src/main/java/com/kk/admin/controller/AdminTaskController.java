@@ -103,14 +103,19 @@ public class AdminTaskController {
         } catch (Exception e) {
             throw new IllegalStateException("生成打包清单失败: " + e.getMessage(), e);
         }
-        return java.util.Map.of(
-                "projectId", projectId,
-                "fieldKey", fk,
-                "fieldValue", fv,
-                "expireSeconds", exp,
-                "totalEntries", entries.size(),
-                "entries", entries
-        );
+        // Map.of 不允许 null，这里改为可接受 null 的可变 Map
+        java.util.Map<String,Object> map = new java.util.HashMap<>();
+        map.put("projectId", projectId);
+        map.put("fieldKey", fk);
+        map.put("fieldValue", fv);
+        map.put("expireSeconds", exp);
+        map.put("totalEntries", entries.size());
+        map.put("entries", entries);
+        String baseName = "project-" + projectId
+                + ((fk != null && !fk.isBlank() && fv != null && !fv.isBlank()) ? ("-" + fk + "-" + fv) : "")
+                + ".zip";
+        map.put("filename", baseName);
+        return map;
     }
 
     @GetMapping("/tasks/{taskId}/download")
