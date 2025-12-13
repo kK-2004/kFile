@@ -145,14 +145,15 @@ public class ProjectService {
         Integer remaining = unlimited ? null : Math.max(monthlyLimit - used, 0);
         Long totalQuota = appConfigService.getLong(com.kk.common.service.AppConfigService.KEY_USER_TOTAL_QUOTA_BYTES);
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
-        return java.util.Map.of(
-                "limit", limit,
-                "used", used,
-                "remaining", remaining,
-                "resetAt", end.toInstant().toEpochMilli(),
-                "unlimited", unlimited,
-                "userTotalQuotaBytes", totalQuota
-        );
+        // Map.of 不允许 null 值，这里需要兼容 unlimited 场景下的 null limit/remaining
+        java.util.Map<String,Object> resp = new java.util.HashMap<>();
+        resp.put("limit", limit);
+        resp.put("used", used);
+        resp.put("remaining", remaining);
+        resp.put("resetAt", end.toInstant().toEpochMilli());
+        resp.put("unlimited", unlimited);
+        resp.put("userTotalQuotaBytes", totalQuota);
+        return resp;
     }
 
     public Project get(Long id) {

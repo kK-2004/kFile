@@ -205,8 +205,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
   height: 64px !important;
   display: flex;
   align-items: center;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 1000;
   border-bottom: 1px solid #f0f0f0;
 }
@@ -360,6 +362,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .app-main {
   background: #f5f7fa;
   padding: 0;
+  margin-top: 64px; /* 避开固定头部 */
 }
 /* 强制覆盖 Element Plus 默认主区域内边距 */
 :deep(.el-main.app-main) { padding: 0 !important; }

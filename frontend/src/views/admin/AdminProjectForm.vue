@@ -1,495 +1,380 @@
 <template>
-  <div class="project-form-container">
-    <el-card class="project-form-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-title">
-            <el-icon class="header-icon">
-              <Document />
-            </el-icon>
-            <span>{{ isEdit ? '编辑项目' : '新建项目' }}</span>
+  <div class="page-container">
+    <div class="project-form-container">
+
+      <div class="page-header">
+        <div class="header-left">
+          <div class="back-btn" @click="$router.back()">
+            <el-icon><Back /></el-icon>
           </div>
-          <div class="header-actions">
-            <el-tag v-if="isEdit" type="info" size="small">编辑模式</el-tag>
-            <template v-else>
-              <el-tag type="success" size="small">新建模式</el-tag>
-              <el-tag v-if="showUserQuota" type="info" size="small" class="quota-tag">
-                剩余额度：{{ quotaDisplay.remaining }} / {{ quotaDisplay.limit }}，重置：{{ quotaDisplay.resetDate }}，总配额：{{ quotaDisplay.totalGB }} GB
-              </el-tag>
-            </template>
+          <div class="title-group">
+            <h1 class="page-title">{{ isEdit ? '编辑项目：' + form.name : '新建项目' }}</h1>
+            <span
+                v-if="!isEdit && showUserQuota"
+                class="quota-text"
+            >
+              剩余额度: {{ quotaDisplay.remaining }} / {{ quotaDisplay.limit }}
+            </span>
           </div>
         </div>
-      </template>
+        <div class="header-right">
+          <el-button @click="$router.back()">取消</el-button>
+          <el-button type="primary" @click="save" :loading="saving">保存项目</el-button>
+        </div>
+      </div>
 
-      <el-form :model="form" label-width="140px" class="project-form">
-        <!-- 基本信息与设置 -->
-        <div class="form-section">
-          <div class="section-title">
-            <el-icon><Setting /></el-icon>
-            <span>基本信息与设置</span>
-          </div>
+      <div class="content-wrapper">
+        <el-form :model="form" label-position="top" class="project-form">
 
-          <el-form-item label="项目名称" class="required-field">
-            <el-input
-                v-model="form.name"
-                placeholder="请输入项目名称"
-                class="form-input"
-            />
-          </el-form-item>
+          <div class="form-section card-style">
+            <div class="section-header">
+              <div class="header-text">
+                <h3>基本设置</h3>
+                <p class="section-desc">配置项目的核心信息、时间限制及文件规则。</p>
+              </div>
+            </div>
 
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="开始时间">
-                <el-date-picker
-                    v-model="form.startAt"
-                    type="datetime"
-                    placeholder="选择开始时间"
-                    value-format="x"
-                    class="form-input"
-                />
+            <div class="form-content">
+              <el-form-item label="项目名称" class="required-field full-width">
+                <el-input v-model="form.name" placeholder="请输入项目名称" size="large" />
               </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="截止时间">
-                <el-date-picker
-                    v-model="form.endAt"
-                    type="datetime"
-                    placeholder="选择截止时间"
-                    value-format="x"
-                    class="form-input"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
 
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="可重复提交">
-                <div class="switch-wrapper">
-                  <el-switch
-                      v-model="form.allowResubmit"
-                      :active-text="form.allowResubmit ? '允许' : '禁止'"
-                      inline-prompt
-                  />
-                  <span class="switch-desc">{{ form.allowResubmit ? '允许多次提交' : '只能提交一次' }}</span>
+              <div class="grid-row">
+                <el-form-item label="开始时间">
+                  <el-date-picker v-model="form.startAt" type="datetime" placeholder="选择开始时间" value-format="x" style="width: 100%"/>
+                </el-form-item>
+                <el-form-item label="截止时间">
+                  <el-date-picker v-model="form.endAt" type="datetime" placeholder="选择截止时间" value-format="x" style="width: 100%"/>
+                </el-form-item>
+              </div>
+
+              <div class="switch-grid">
+                <div class="switch-card">
+                  <span class="switch-label">可重复提交</span>
+                  <el-switch v-model="form.allowResubmit" />
                 </div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="允许多文件">
-                <div class="switch-wrapper">
-                  <el-switch
-                      v-model="form.allowMultiFiles"
-                      :active-text="form.allowMultiFiles ? '允许' : '禁止'"
-                      inline-prompt
-                  />
-                  <span class="switch-desc">{{ form.allowMultiFiles ? '一次可上传多个文件' : '一次仅允许一个文件' }}</span>
+                <div class="switch-card">
+                  <span class="switch-label">允许多文件</span>
+                  <el-switch v-model="form.allowMultiFiles" />
                 </div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="允许逾期提交">
-                <div class="switch-wrapper">
-                  <el-switch
-                      v-model="form.allowOverdue"
-                      :active-text="form.allowOverdue ? '允许' : '禁止'"
-                      inline-prompt
-                  />
-                  <span class="switch-desc">{{ form.allowOverdue ? '到期后仍可提交（将标记为逾期）' : '到期后不可提交' }}</span>
+                <div class="switch-card">
+                  <span class="switch-label">允许逾期提交</span>
+                  <el-switch v-model="form.allowOverdue" />
                 </div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="项目状态">
-                <div class="switch-wrapper">
+                <div class="switch-card">
+                  <span class="switch-label">项目状态</span>
                   <el-switch
                       v-model="form.offline"
-                      :active-text="form.offline ? '已下线' : '在线'"
-                      :active-color="form.offline ? '#f56c6c' : '#67c23a'"
+                      :active-value="false"
+                      :inactive-value="true"
+                      active-text="在线"
+                      inactive-text="已下线"
                       inline-prompt
+                      style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
                   />
-                  <span class="switch-desc">{{ form.offline ? '已下线' : '正常运行' }}</span>
                 </div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="文件大小上限">
-                <div class="size-input-wrapper">
-                  <el-input
-                      v-model.number="fileSizeLimitMB"
-                      type="number"
-                      placeholder="如: 100"
-                      class="size-input"
-                  />
-                  <span class="size-unit">MB</span>
-                </div>
-                <div class="field-hint">留空不限制</div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-form-item label="文件扩展名白名单">
-            <el-select
-                v-model="allowedTypes"
-                multiple
-                filterable
-                allow-create
-                default-first-option
-                placeholder="选择或输入文件扩展名 (如: pdf, doc, zip)"
-                class="form-input"
-            >
-              <el-option v-for="t in typeSelectable" :key="t" :value="t" :label="`.${t}`" />
-            </el-select>
-            <div class="field-hint">不设置则允许所有文件类型</div>
-          </el-form-item>
-        </div>
-
-        <!-- 自动识别创建（放在期望字段之前） -->
-        <div class="form-section">
-          <div class="section-title">
-            <el-icon><Document /></el-icon>
-            <span>自动识别创建</span>
-          </div>
-          <div class="auto-detect-bar">
-            <el-space>
-              <el-button type="primary" @click="openAutoDetect">选择 CSV 并自动创建</el-button>
-              <span class="hint">从包含表头的 CSV 自动识别字段（如 major, sid）并生成期望字段与限制名单。</span>
-            </el-space>
-            <input ref="csvInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange" />
-          </div>
-          <div v-if="autoPreview.headers.length" class="auto-summary">
-            <div>已检测到字段：
-              <el-tag v-for="h in autoPreview.headers" :key="h" size="small" style="margin-right:6px">{{ h }}</el-tag>
-              （{{ autoPreview.count }} 行）
-            </div>
-          </div>
-          <el-switch v-model="autoRestrict" active-text="开启提交者限制（仅允许识别名单）" inactive-text="不开启提交者限制" />
-          <div class="advanced-toggle">
-            <el-switch v-model="showAdvanced" active-text="显示高级设置" inactive-text="隐藏高级设置" />
-          </div>
-        </div>
-
-        <!-- 用户字段配置 -->
-        <div class="form-section">
-          <div class="section-title">
-            <el-icon><InfoFilled /></el-icon>
-            <span>用户端提交状态提示</span>
-          </div>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="提示类型">
-                <el-select v-model="form.userSubmitStatusType" placeholder="选择标签类型">
-                  <el-option label="Info" value="info" />
-                  <el-option label="Success" value="success" />
-                  <el-option label="Warning" value="warning" />
-                  <el-option label="Danger" value="danger" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="16">
-              <el-form-item label="提示文案">
-                <el-input v-model="form.userSubmitStatusText" placeholder="如：请先填写学号后再提交" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="查询字段（用户端查询状态使用）">
-                <el-select v-model="form.queryFieldKey" placeholder="请选择一个期望字段">
-                  <el-option v-for="f in expectedFields" :key="f.key" :value="f.key" :label="`${f.label} (${f.key})`" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-        <div class="form-section">
-          <div class="section-title">
-            <el-icon><User /></el-icon>
-            <span>期望用户字段</span>
-          </div>
-
-          <div class="table-container">
-            <div class="table-header">
-              <el-button
-                  size="default"
-                  type="primary"
-                  @click="addField"
-                  :icon="Plus"
-              >
-                新增字段
-              </el-button>
-              <div class="table-hint">
-                <el-icon><InfoFilled /></el-icon>
-                <span>拖拽 ☰ 图标可调整字段顺序</span>
               </div>
-            </div>
 
-            <el-table
-                :data="expectedFields"
-                size="default"
-                class="fields-table"
-                ref="fieldsTable"
-                empty-text="暂无字段，点击上方按钮添加"
-            >
-              <el-table-column label="排序" width="80" align="center">
-                <template #default>
-                  <span class="drag-handle" title="拖拽排序">☰</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="字段标识 (Key)" min-width="180">
-                <template #default="{ row }">
-                  <el-input
-                      v-model="row.key"
-                      placeholder="如: studentNo"
-                      size="small"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column label="显示名称" min-width="150">
-                <template #default="{ row }">
-                  <el-input
-                      v-model="row.label"
-                      placeholder="如: 学号"
-                      size="small"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column label="字段类型" width="120">
-                <template #default="{ row }">
-                  <el-select v-model="row.type" size="small" style="width:100%">
-                    <el-option value="text" label="文本" />
-                    <el-option value="select" label="下拉" />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column label="下拉选项" min-width="220">
-                <template #default="{ row }">
+              <div class="grid-row mt-4">
+                <el-form-item label="文件大小上限 (MB)">
+                  <el-input v-model.number="fileSizeLimitMB" type="number" placeholder="留空不限制">
+                    <template #append>MB</template>
+                  </el-input>
+                </el-form-item>
+                <el-form-item label="文件扩展名白名单">
                   <el-select
-                      v-if="row.type==='select'"
-                      v-model="row._options"
+                      v-model="allowedTypes"
                       multiple
-                      allow-create
                       filterable
+                      allow-create
                       default-first-option
-                      placeholder="输入后回车添加选项"
-                      size="small"
-                      style="width:100%"
+                      placeholder="所有类型 (或输入 pdf, zip...)"
                   >
-                    <el-option v-for="opt in row._options" :key="opt" :value="opt" :label="opt" />
+                    <el-option v-for="t in typeSelectable" :key="t" :value="t" :label="`.${t}`" />
                   </el-select>
-                  <span v-else class="na-text">—</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="占位说明" min-width="160">
-                <template #default="{ row }">
-                  <el-input
-                      v-model="row.placeholder"
-                      placeholder="提示文字"
-                      size="small"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column label="必填" width="80" align="center">
-                <template #default="{ row }">
-                  <el-switch v-model="row.required" size="small"/>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="90" align="center">
-                <template #default="{ $index }">
-                  <el-button
-                      size="small"
-                      type="danger"
-                      text
-                      @click="removeField($index)"
-                      :icon="Delete"
-                  >
-                    删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </div>
-
-        <!-- 提交者限制（可选） -->
-        <!-- 高级：保留旧的手动名单导入（可选，可隐藏） -->
-        <div class="form-section" v-if="showAdvanced">
-          <div class="section-title">
-            <el-icon><User /></el-icon>
-            <span>提交者限制（高级）</span>
-          </div>
-          <div class="field-hint" style="margin-bottom:8px">通常无需配置；若你未使用“自动识别创建”，可在此手动设置限制字段与名单。</div>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="限定字段（可多选）">
-                <el-select v-model="form.allowedSubmitterKeys" multiple placeholder="选择需要限定的字段">
-                  <el-option v-for="f in expectedFields" :key="f.key" :value="f.key" :label="`${f.label} (${f.key})`" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="列表格式">
-                <el-radio-group v-model="listMode">
-                  <el-radio-button label="csv" :disabled="(form.allowedSubmitterKeys||[]).length !== 1">逗号分隔</el-radio-button>
-                  <el-radio-button label="json">JSON 列表</el-radio-button>
-                </el-radio-group>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item label="允许名单">
-            <div style="width:100%">
-              <div class="import-bar">
-                <el-space>
-                  <el-button @click="triggerCsvSelect">从 CSV 导入</el-button>
-                  <span class="hint">CSV 第一行是表头，导入后映射到限定字段并生成 {{ listMode==='csv' ? '逗号分隔' : 'JSON' }} 列表。</span>
-                </el-space>
-                <input ref="csvInputRef2" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange2" />
+                </el-form-item>
               </div>
-              <el-input type="textarea" :rows="6" v-model="listText" :placeholder="listPlaceholder" />
             </div>
-          </el-form-item>
-        </div>
-
-        <!-- 自动识别创建结果确认对话框 -->
-        <el-dialog v-model="autoDialogVisible" title="自动识别创建" width="560px">
-          <div v-if="csvHeaders.length">
-            <p class="mb-3 text-sm" style="color: var(--kf-muted);">检测到表头并读取 {{ csvPreviewCount }} 行。将根据唯一值数量自动为字段选择类型：</p>
-            <ul class="mb-3 text-sm" style="color: var(--kf-muted);">
-              <li>唯一值少（如“专业”）：设为 下拉(select)，并自动生成选项</li>
-              <li>唯一值多（如“学号”）：设为 文本(text)</li>
-            </ul>
-            <div class="mb-2">字段预览：</div>
-            <el-table :data="autoFieldPreview" size="small" style="width:100%">
-              <el-table-column prop="key" label="字段名" width="160" />
-              <el-table-column prop="type" label="类型" width="120" />
-              <el-table-column prop="uniqueCount" label="唯一值" width="100" />
-              <el-table-column label="示例/选项">
-                <template #default="{ row }">
-                  <span v-if="row.type==='select'">{{ row.options.slice(0,6).join(', ') }}<span v-if="row.options.length>6"> …</span></span>
-                  <span v-else>{{ row.sample }}</span>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-          <div v-else class="text-gray-500">未检测到 CSV 表头，请确认文件内容。</div>
-          <template #footer>
-            <el-button @click="autoDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="applyAutoDetect">应用到项目</el-button>
-          </template>
-        </el-dialog>
-
-        <!-- 旧 CSV 映射对话框（手动名单导入用） -->
-        <el-dialog v-model="csvDialogVisible" :title="`从 CSV 导入（${csvFileName}）`" width="520px">
-          <div v-if="csvHeaders.length">
-            <div class="mb-3 text-sm" style="color: var(--kf-muted);">检测到 {{ csvPreviewCount }} 行数据。请为每个限定字段选择 CSV 列。</div>
-            <el-form label-width="140px">
-              <el-form-item v-for="k in (form.allowedSubmitterKeys||[])" :key="k" :label="`${k}`">
-                <el-select v-model="csvMapping[k]" style="width: 260px;" placeholder="选择列">
-                  <el-option v-for="h in csvHeaders" :key="h" :label="h" :value="h" />
-                </el-select>
-              </el-form-item>
-            </el-form>
-          </div>
-          <div v-else class="text-gray-500">未检测到 CSV 表头，请确认文件内容。</div>
-          <template #footer>
-            <el-button @click="csvDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="confirmCsvImport">生成名单</el-button>
-          </template>
-        </el-dialog>
-
-
-        <!-- 路径层级配置 -->
-        <div class="form-section">
-          <div class="section-title">
-            <el-icon><FolderOpened /></el-icon>
-            <span>上传路径层级</span>
           </div>
 
-          <div class="table-container">
-            <div class="table-header">
-              <el-button
-                  size="default"
-                  @click="addSeg"
-                  :icon="Plus"
-              >
-                新增层级
+          <div class="form-section card-style">
+            <div class="section-header with-action">
+              <div class="header-text">
+                <h3>智能识别</h3>
+                <p class="section-desc">上传 Excel/CSV 表头自动生成字段配置。</p>
+              </div>
+              <el-button type="primary" @click="openAutoDetect">
+                <el-icon class="el-icon--left"><Document /></el-icon>
+                导入表单
               </el-button>
-              <div class="table-hint">
-                <el-icon><InfoFilled /></el-icon>
-                <span>配置文件上传的目录结构，可多级且可排序</span>
+              <input ref="csvInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange" />
+            </div>
+
+            <div class="form-content">
+              <div v-if="autoPreview.headers.length" class="detect-status-bar">
+                <el-icon><Check /></el-icon>
+                <span>已识别 {{ autoPreview.count }} 行数据，包含字段：</span>
+                <div class="tags-wrapper">
+                  <el-tag v-for="h in autoPreview.headers" :key="h" size="small" type="info">{{ h }}</el-tag>
+                </div>
+              </div>
+
+              <div class="advanced-setting-area">
+                <el-checkbox v-model="autoRestrict" label="开启提交者限制（仅允许识别名单内的用户提交）" />
+                <el-button type="primary" size="small" @click="showAdvanced = !showAdvanced">
+                  {{ showAdvanced ? '隐藏高级设置' : '展开高级设置' }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section card-style" v-if="showAdvanced">
+            <div class="section-header">
+              <div class="header-text">
+                <h3>提交限制 (高级)</h3>
+                <p class="section-desc">仅在未使用“自动识别”时需手动配置。</p>
               </div>
             </div>
 
-            <el-table
-                :data="pathSegments"
-                size="default"
-                class="segments-table"
-                ref="segmentsTable"
-                empty-text="暂无层级，点击上方按钮添加"
-            >
-              <el-table-column label="排序" width="80" align="center">
-                <template #default>
-                  <span class="drag-handle" title="拖拽排序">☰</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="层级" width="80" align="center">
-                <template #default="{ $index }">
-                  <el-tag size="small" type="info">{{ $index + 1 }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="数据来源" min-width="300">
-                <template #default="{ row }">
-                  <el-select
-                      v-model="row.value"
-                      placeholder="选择: 项目名称 或 期望字段"
-                      size="small"
-                      style="width:100%"
-                  >
-                    <el-option :value="'$project'" label="项目名称" />
-                    <el-option
-                        v-for="f in expectedFields"
-                        :key="f.key"
-                        :value="f.key"
-                        :label="`${f.label} (${f.key})`"
-                    />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="120" align="center">
-                <template #default="{ $index }">
-                  <el-button
-                      type="danger"
-                      size="small"
-                      @click="removeSeg($index)"
-                      :icon="Delete"
-                  >删除</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </div>
+            <div class="form-content">
+              <div class="advanced-box">
+                <div class="grid-row">
+                  <el-form-item label="限制依据字段">
+                    <el-select v-model="form.allowedSubmitterKeys" multiple placeholder="选择字段">
+                      <el-option v-for="f in expectedFields" :key="f.key" :value="f.key" :label="`${f.label} (${f.key})`" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="名单格式">
+                    <el-radio-group v-model="listMode">
+                      <el-radio-button label="csv" :disabled="(form.allowedSubmitterKeys||[]).length !== 1">单列逗号</el-radio-button>
+                      <el-radio-button label="json">JSON 列表</el-radio-button>
+                    </el-radio-group>
+                  </el-form-item>
+                </div>
 
-        <!-- 操作按钮 -->
-        <div class="form-actions">
-          <el-button
-              type="primary"
-              size="large"
-              @click="save"
-              :loading="saving"
-              :icon="Check"
-          >
-            {{ isEdit ? '保存修改' : '创建项目' }}
-          </el-button>
-          <el-button
-              size="large"
-              @click="$router.back()"
-              :icon="Back"
-          >
-            返回
-          </el-button>
+                <el-form-item label="白名单数据">
+                  <div class="list-editor-container">
+                    <div class="editor-toolbar">
+                      <el-button size="small" @click="triggerCsvSelect">导入 CSV 填充</el-button>
+                      <input ref="csvInputRef2" type="file" accept=".csv,text/csv" class="hidden" @change="onCsvFileChange2" />
+                      <span class="editor-hint">支持从 CSV 读取并转换为下方格式</span>
+                    </div>
+                    <el-input
+                        type="textarea"
+                        :rows="6"
+                        v-model="listText"
+                        :placeholder="listPlaceholder"
+                        class="code-textarea"
+                    />
+                  </div>
+                </el-form-item>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section card-style">
+            <div class="section-header with-action">
+              <div class="header-text">
+                <h3>收集字段配置</h3>
+                <p class="section-desc">定义用户需要填写或选择的信息。</p>
+              </div>
+              <el-button type="primary" :icon="Plus" @click="addField">新增字段</el-button>
+            </div>
+
+            <div class="form-content">
+              <div class="custom-table-wrapper">
+                <el-table :data="expectedFields" row-key="key" class="modern-table" ref="fieldsTable" empty-text="暂无配置，请点击右上方添加">
+                  <el-table-column width="40" align="center">
+                    <template #default>
+                      <div class="drag-handle-icon">⋮⋮</div>
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="字段标识 (Key)" min-width="140">
+                    <template #default="{ row }">
+                      <el-input v-model="row.key" placeholder="如: studentNo" class="table-input" />
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="显示名称" min-width="140">
+                    <template #default="{ row }">
+                      <el-input v-model="row.label" placeholder="如: 学号" class="table-input" />
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="类型" width="110">
+                    <template #default="{ row }">
+                      <el-select v-model="row.type" class="table-input">
+                        <el-option value="text" label="文本" />
+                        <el-option value="select" label="下拉" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="选项配置 / 占位符" min-width="200">
+                    <template #default="{ row }">
+                      <el-select
+                          v-if="row.type==='select'"
+                          v-model="row._options"
+                          multiple allow-create filterable default-first-option
+                          placeholder="回车添加选项"
+                          class="table-input"
+                      />
+                      <el-input v-else v-model="row.placeholder" placeholder="输入框提示文字" class="table-input" />
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="必填" width="70" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.required" />
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column width="60" align="center">
+                    <template #default="{ $index }">
+                      <el-button link type="danger" :icon="Delete" @click="removeField($index)" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section card-style">
+            <div class="section-header">
+              <div class="header-text">
+                <h3>状态反馈</h3>
+                <p class="section-desc">配置用户在查询界面看到的信息。</p>
+              </div>
+            </div>
+            <div class="form-content">
+              <div class="form-grid">
+                <div class="grid-row-sidebar">
+                  <el-form-item label="提示类型">
+                    <el-select v-model="form.userSubmitStatusType">
+                      <el-option label="普通 (Info)" value="info" />
+                      <el-option label="成功 (Success)" value="success" />
+                      <el-option label="警告 (Warning)" value="warning" />
+                      <el-option label="危险 (Danger)" value="danger" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="提示文案" class="flex-grow">
+                    <el-input v-model="form.userSubmitStatusText" placeholder="例如：请务必核对学号..." />
+                  </el-form-item>
+                </div>
+                <div class="grid-row-sidebar" id="main_key">
+                  <el-form-item label="查询主键 (用户查询凭证)">
+                    <el-select v-model="form.queryFieldKey" placeholder="请选择唯一标识字段 (如：学号)">
+                      <el-option v-for="f in expectedFields" :key="f.key" :value="f.key" :label="`${f.label} (${f.key})`" />
+                    </el-select>
+                  </el-form-item>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section card-style">
+            <div class="section-header with-action">
+              <div class="header-text">
+                <h3>存储路径结构</h3>
+                <p class="section-desc">定义文件在服务器上的存储目录层级。</p>
+              </div>
+              <el-button type="primary" :icon="Plus" @click="addSeg">添加层级</el-button>
+            </div>
+
+            <div class="form-content">
+              <div class="custom-table-wrapper">
+                <el-table :data="pathSegments" class="modern-table" ref="segmentsTable" empty-text="暂无层级">
+                  <el-table-column width="40" align="center">
+                    <template #default>
+                      <div class="drag-handle-icon">⋮⋮</div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="层级序号" width="100">
+                    <template #default="{ $index }">
+                      <span class="step-badge">Level {{ $index + 1 }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="命名来源">
+                    <template #default="{ row }">
+                      <el-select v-model="row.value" placeholder="选择来源" class="table-input">
+                        <el-option :value="'$project'" label="项目名称 (固定)" />
+                        <el-option
+                            v-for="f in expectedFields"
+                            :key="f.key"
+                            :value="f.key"
+                            :label="`字段: ${f.label} (${f.key})`"
+                        />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column width="60" align="center">
+                    <template #default="{ $index }">
+                      <el-button link type="danger" :icon="Delete" @click="removeSeg($index)" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </div>
+          </div>
+
+        </el-form>
+      </div>
+
+      <el-dialog v-model="autoDialogVisible" title="确认自动配置" width="600px" class="modern-dialog">
+        <div v-if="csvHeaders.length">
+          <p class="dialog-desc">已分析 CSV 文件，即将应用以下配置：</p>
+          <div class="preview-stats">
+            <div class="stat-item">
+              <strong>{{ csvPreviewCount }}</strong>
+              <span>数据行数</span>
+            </div>
+            <div class="stat-item">
+              <strong>{{ autoFieldPreview.length }}</strong>
+              <span>检测字段</span>
+            </div>
+          </div>
+
+          <el-table :data="autoFieldPreview" height="300" class="dialog-table">
+            <el-table-column prop="key" label="字段名" width="140" />
+            <el-table-column prop="type" label="类型" width="100">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.type==='select'?'warning':''">{{ row.type }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="预览">
+              <template #default="{ row }">
+                <span v-if="row.type==='select'" class="text-truncate">{{ row.options.join(', ') }}</span>
+                <span v-else class="text-gray">{{ row.sample }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
-      </el-form>
-    </el-card>
+        <div v-else class="empty-state">未检测到有效数据</div>
+        <template #footer>
+          <el-button @click="autoDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="applyAutoDetect">应用配置</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="csvDialogVisible" title="导入名单映射" width="500px" class="modern-dialog">
+        <div class="dialog-content">
+          <p class="dialog-desc">请选择 CSV 列与限制字段的对应关系：</p>
+          <el-form label-position="top">
+            <el-form-item v-for="k in (form.allowedSubmitterKeys||[])" :key="k" :label="`字段: ${k}`">
+              <el-select v-model="csvMapping[k]" placeholder="选择对应的 CSV 列">
+                <el-option v-for="h in csvHeaders" :key="h" :label="h" :value="h" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+        <template #footer>
+          <el-button @click="csvDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmCsvImport">确认导入</el-button>
+        </template>
+      </el-dialog>
+
+    </div>
   </div>
 </template>
 
@@ -882,7 +767,7 @@ const save = async () => {
       placeholder: f.placeholder || '',
       required: !!f.required,
       type: f.type || 'text',
-      options: f.type === 'select' ? (Array.isArray(f._options) ? f._options : []) : undefined
+      _options: f.type === 'select' ? (Array.isArray(f._options) ? f._options : []) : undefined
     }))
     // 若为下拉类型，至少一个选项
     for (const f of payload.expectedUserFields) {
@@ -1057,374 +942,393 @@ function bindSegDrag() {
 </script>
 
 <style scoped>
-.auto-detect-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.auto-summary { color: var(--kf-muted); font-size: 12px; margin-bottom: 8px; }
-.advanced-toggle { margin-top: 10px; }
-.import-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.hidden { display: none; }
-.hint { color: var(--kf-muted); font-size: 12px; }
-/* Container and card styling */
-.project-form-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
+/* 定义 CSS 变量：OpenAI/Modern SaaS 风格 */
+:root {
+  --oa-bg: #f9f9f9;
+  --oa-text-main: #202123;
+  --oa-text-sub: #6e6e80;
+  --oa-border: #e5e5e5;
+  --oa-primary: #10a37f;
+  --oa-radius: 8px;
+  --oa-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
 }
 
-.project-form-card {
-  border-radius: 8px;
-  border: 1px solid var(--kf-border-color);
-  box-shadow: var(--kf-box-shadow);
+.hidden { display: none; }
+
+.page-container {
+  height: calc(100vh - 65px);
+  background-color: #f7f7f8;
+  color: #353740;
+  font-family: -apple-system, "system-ui", "Segoe UI", Helvetica, Arial, sans-serif;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-/* Header styling */
-.card-header {
+.project-form-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 20px;
+
+  /* 关键修改：设置为相对定位，作为 Header 绝对定位的参考系 */
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 顶部 Header - 核心修改：改为悬浮毛玻璃状态 */
+.page-header {
+  position: absolute; /* 悬浮在内容上方 */
+  top: 0;
+  left: 0;
+  width: 100%; /* 占满容器宽度 */
+  z-index: 100; /* 确保层级最高 */
+
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 15px 20px;
-  background-color: var(--kf-header-bg);
-  border-bottom: 1px solid var(--kf-border-color);
+
+  /* 调整高度和内边距 */
+  height: 72px;
+  padding: 0; /* 移除左右 padding，因为容器已有 padding */
+
+  /* 毛玻璃特效核心代码 */
+  background: rgba(247, 247, 248, 0.85); /* 稍微降低透明度，让下方内容隐约可见 */
+  backdrop-filter: blur(12px); /* 高斯模糊效果 */
+  -webkit-backdrop-filter: blur(12px); /* Safari 支持 */
+
+  /* 可选：添加一条极细的分割线，增加精致感 */
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+
+  mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
 }
 
-.header-title {
+.header-left, .header-right {
+  /* 确保内容不会贴边，因为 .page-header 现在 padding 是 0 */
+  padding: 0 4px;
+}
+
+.content-wrapper {
+  flex: 1;
+  /* 确保溢出内容可滚动 */
+  overflow-y: scroll;
+
+  /* 顶部留白避开毛玻璃 Header */
+  padding-top: 88px;
+  padding-bottom: 20px;
+
+  /* 方案 A: 标准隐藏 (增加 !important 确保生效) */
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge */
+}
+
+/* 方案 B: Webkit 强力隐藏 */
+.content-wrapper::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+.header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 18px;
-  font-weight: bold;
-  color: var(--kf-text-primary);
+  gap: 16px;
 }
 
-.header-icon {
-  font-size: 20px;
-  color: var(--kf-primary);
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.quota-tag {
+.back-btn {
+  cursor: pointer;
+  padding: 8px;
   border-radius: 6px;
+  color: #6e6e80;
+  transition: background 0.2s;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+.back-btn:hover { background: #ececf1; }
+
+.title-group {
+  display: flex;
+  flex-direction: column;
 }
 
-/* Form styling */
-.project-form {
-  padding: 12px 0 20px;
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #202123;
+  line-height: 1.2;
+}
+
+.quota-text {
+  font-size: 12px;
+  color: #8e8ea0;
+}
+
+/* 核心修改：内容区域
+   设置为 flex: 1 自动占据剩余高度
+   并开启 overflow-y: auto 实现内部滚动
+   调整 padding-bottom 减少留白
+*/
+.content-wrapper {
+  flex: 1;
+  overflow-y: auto; /* 开启垂直滚动 */
+  padding-bottom: 20px; /* 减少底部留白 */
+
+  /* 隐藏滚动条样式 (可选) */
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+/* Form Section 卡片 */
+.form-section {
+  margin-bottom: 24px;
+}
+
+.card-style {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px 0 rgba(0,0,0,0.03);
+  overflow: hidden; /* 确保子元素不溢出圆角 */
+}
+
+/* Section Header 放在卡片内部 */
+.section-header {
+  padding: 20px 24px 16px; /* 内部 padding */
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.section-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: #202123;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: #6e6e80;
+  margin: 0;
+}
+
+.section-header.with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start; /* 对齐顶部 */
+}
+
+/* 表单内容区 */
+.form-content {
+  padding: 24px;
+}
+
+/* 分隔线 - 不需要了 */
+.section-divider { display: none; }
+
+/* 表单网格系统 */
+.form-grid {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.form-section {
-  margin-bottom: 24px;
-  padding: 20px 20px 16px;
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid var(--kf-border-color);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.04);
+.grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
 
-.section-title {
+.grid-row-sidebar {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
+  gap: 20px;
+}
+.flex-grow { flex: 1; }
+
+.grid-row-sidebar > .el-form-item:first-child {
+  width: 160px;
+  flex-shrink: 0;
 }
 
-.section-title .el-icon { font-size: 18px; color: #6b7280; }
-
-/* Form item styling */
-.required-field :deep(.el-form-item__label) {
-  position: relative;
+.grid-row-sidebar#main_key > .el-form-item:first-child {
+  width: 300px;
+  flex-shrink: 0;
 }
 
-.required-field :deep(.el-form-item__label::before) {
-  content: '*';
-  color: #f56c6c;
-  margin-right: 4px;
+/* 开关卡片组 */
+.switch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
 }
 
-.form-input {
-  max-width: 100%;
-}
-
-/* 统一表单项的垂直对齐与间距 */
-:deep(.el-form-item) { margin-bottom: 14px; }
-:deep(.el-form-item__content) { align-items: center; }
-:deep(.el-form-item__label) { font-weight: 500; color: #374151; }
-
-/* 统一输入控件宽度与尺寸 */
-:deep(.el-input),
-:deep(.el-select),
-:deep(.el-date-editor) { width: 100%; }
-:deep(.el-input__inner),
-:deep(.el-select .el-input__inner) { line-height: 36px; }
-
-/* 顶部/分区操作栏布局更稳健 */
-.table-header,
-.auto-detect-bar,
-.import-bar {
-  align-items: center;
-}
-.table-header { flex-wrap: wrap; gap: 10px; }
-.table-hint { margin-left: auto; }
-
-/* 按钮风格统一（更简洁） */
-:deep(.el-button) { border-radius: 8px; font-weight: 500; }
-/* 保持原有主按钮配色（移除全局颜色覆盖） */
-
-/* 小屏优化：提示自动换行，按钮保持可点区域 */
-@media (max-width: 768px) {
-  .auto-detect-bar .hint,
-  .import-bar .hint { flex: 1 1 100%; }
-}
-
-.field-hint {
-  font-size: 12px;
-  color: var(--kf-muted);
-  margin-top: 2px;
-  line-height: 1.3;
-}
-
-/* Switch styling */
-.switch-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.switch-desc {
-  font-size: 12px;
-  color: var(--kf-muted);
-  white-space: nowrap;
-}
-
-/* Size input styling */
-.size-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 140px;
-}
-
-.size-input {
-  flex: 1;
-}
-
-.size-unit {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--kf-text);
-  white-space: nowrap;
-}
-
-/* Table container styling */
-.table-container {
-  background: var(--kf-background);
-  border-radius: 8px;
-  border: 1px solid var(--kf-border-color);
-  overflow: hidden;
-  box-shadow: var(--kf-box-shadow);
-}
-
-.table-header {
+.switch-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 15px 20px;
-  background: var(--kf-header-bg);
-  border-bottom: 1px solid var(--kf-border-color);
+  background: #f9f9f9;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+.switch-card:hover {
+  background: #f0f0f0;
+}
+.switch-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #353740;
 }
 
-.table-hint {
+/* 智能识别样式 */
+.detect-status-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #15803d;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.tags-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.advanced-setting-area {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--kf-muted);
-}
-
-/* Table styling */
-.fields-table,
-.segments-table {
-  border: none;
-}
-
-.fields-table :deep(.el-table__header),
-.segments-table :deep(.el-table__header) {
-  background: var(--kf-header-bg);
-}
-
-.fields-table :deep(.el-table__header th),
-.segments-table :deep(.el-table__header th) {
-  background: var(--kf-header-bg);
-  font-weight: 500;
-  color: var(--kf-text-primary);
-  border-bottom: 1px solid var(--kf-border-color);
-  padding: 12px;
-}
-
-.fields-table :deep(.el-table__body td),
-.segments-table :deep(.el-table__body td) {
-  padding: 12px;
-}
-
-.fields-table :deep(.el-table__body tr),
-.segments-table :deep(.el-table__body tr) {
-  transition: all 0.2s ease;
-}
-
-.fields-table :deep(.el-table__body tr:hover),
-.segments-table :deep(.el-table__body tr:hover) {
-  background: var(--kf-background-light);
-}
-
-/* Drag and drop styling */
-.drag-handle {
-  cursor: move;
-  user-select: none;
-  color: var(--kf-muted);
-  font-size: 14px;
-  transition: all 0.2s ease;
-  padding: 2px;
-  border-radius: 3px;
-}
-
-.drag-handle:hover {
-  color: var(--kf-primary);
-  background: rgba(64, 158, 255, 0.1);
-}
-
-:deep(.dragging) {
-  opacity: 0.6;
-  transform: scale(0.98);
-}
-
-:deep(.drag-over) {
-  background: rgba(64, 158, 255, 0.1) !important;
-  border-top: 2px solid var(--kf-primary);
-}
-
-/* N/A text styling */
-.na-text {
-  color: var(--kf-muted);
-  font-style: italic;
-}
-
-/* Action buttons styling */
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  padding: 20px 0 12px;
-  border-top: 1px solid var(--kf-border-color);
-  margin-top: 20px;
-}
-
-.form-actions .el-button {
-  min-width: 120px;
-  height: 38px;
-  font-weight: 500;
-  border-radius: 4px;
-}
-
-.form-actions .el-button--primary {
-  background-color: var(--kf-primary);
-  border-color: var(--kf-primary);
-}
-
-.form-actions .el-button--primary:hover {
-  background-color: var(--kf-primary-hover);
-  border-color: var(--kf-primary-hover);
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .project-form-container {
-    padding: 8px;
-  }
-
-  .form-section {
-    padding: 12px 16px;
-    margin-bottom: 16px;
-  }
-
-  .el-row .el-col {
-    margin-bottom: 8px;
-  }
-
-  .switch-desc {
-    display: none; /* 移动端隐藏描述文字 */
-  }
-
-  .size-input-wrapper {
-    max-width: 120px;
-  }
-
-  .table-header {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-    padding: 10px 12px;
-  }
-
-  .form-actions {
-    flex-direction: column;
-    align-items: center;
-    padding: 16px 0 8px;
-  }
-
-  .form-actions .el-button {
-    width: 100%;
-    max-width: 280px;
-    height: 36px;
-  }
-}
-
-/* Animation enhancements */
-.el-button {
-  transition: all 0.2s ease;
-}
-
-.el-button:hover {
-  transform: translateY(-1px);
-}
-
-.el-form-item {
-  margin-bottom: 18px;
-}
-
-.el-card :deep(.el-card__body) {
-  padding: 24px;
-}
-
-/* Tag styling */
-.el-tag {
+  justify-content: space-between;
+  background: #f9f9f9;
+  padding: 10px 16px;
   border-radius: 6px;
 }
 
-/* Button group styling */
-.el-button-group .el-button {
-  margin: 0;
+/* 表格样式重写 - Modern */
+.custom-table-wrapper {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.modern-table :deep(th.el-table__cell) {
+  background-color: #f7f7f8;
+  color: #6e6e80;
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e5e5e5;
+  height: 40px;
+  padding: 4px 0;
+}
+
+.modern-table :deep(td.el-table__cell) {
+  border-bottom: 1px solid #f2f2f2;
+  padding: 12px 0;
+}
+.modern-table :deep(.el-table__row:last-child td.el-table__cell) {
+  border-bottom: none;
+}
+
+.table-input :deep(.el-input__wrapper),
+.table-input :deep(.el-select__wrapper) {
+  box-shadow: none !important;
+  background: transparent;
+  padding-left: 8px;
+}
+.table-input :deep(.el-input__wrapper.is-focus),
+.table-input :deep(.el-select__wrapper.is-focus) {
+  background: #fff;
+  box-shadow: 0 0 0 1px #10a37f inset !important;
+}
+
+.drag-handle-icon {
+  cursor: grab;
+  color: #d9d9e3;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+.drag-handle-icon:hover { color: #6e6e80; }
+
+/* Element Plus 覆盖 */
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #353740;
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+:deep(.el-input__wrapper), :deep(.el-select__wrapper) {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px #d9d9e3 inset;
+  transition: all 0.2s;
+}
+:deep(.el-input__wrapper:hover), :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px #8e8ea0 inset;
+}
+:deep(.el-input__wrapper.is-focus), :deep(.el-select__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2) inset, 0 0 0 1px #10a37f inset;
+}
+:deep(.el-button) {
+  border-radius: 6px;
+  font-weight: 500;
+}
+:deep(.el-button--primary) {
+  background-color: #1a1a1a;
+  border-color: #1a1a1a;
+}
+:deep(.el-button--primary:hover) {
+  background-color: #353740;
+  border-color: #353740;
+}
+
+/* 列表编辑器 */
+.list-editor-container {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.editor-toolbar {
+  background: #f7f7f8;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.editor-hint { font-size: 12px; color: #8e8ea0; }
+.code-textarea :deep(.el-textarea__inner) {
+  border: none;
+  box-shadow: none;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 13px;
+  background: #fff;
+}
+
+/* 拖拽反馈 */
+:deep(.dragging) {
+  background: #fafafa !important;
+  opacity: 0.8;
+}
+:deep(.drag-over) {
+  border-bottom: 2px solid #10a37f !important;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .grid-row { grid-template-columns: 1fr; }
+  .grid-row-sidebar { flex-direction: column; gap: 0; }
+  .section-header { flex-direction: column; gap: 10px; }
 }
 </style>
