@@ -2,7 +2,6 @@
   <div class="min-h-full bg-gray-50/30">
     <div class="container mx-auto px-4 py-4 max-w-4xl">
 
-      <!-- 页面头部 - 使用高亮样式 -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
         <div class="px-6 py-4">
           <div class="flex items-center justify-between gap-4">
@@ -22,7 +21,6 @@
               </button>
             </div>
           </div>
-          <!-- 项目信息紧凑显示 -->
           <div v-if="project" class="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600">
             <span class="flex items-center gap-1">
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -40,10 +38,8 @@
         </div>
       </div>
 
-      <!-- 主要内容区域 -->
       <div v-if="project" class="space-y-6">
 
-        <!-- 状态查询模式 -->
         <div v-if="mode === 'status'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div class="max-w-2xl">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -53,7 +49,7 @@
                   <input
                       v-model="queryValue"
                       :placeholder="`请输入${queryLabel}`"
-                      class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors box-border outline-none"
                   />
                   <button
                       :disabled="!queryValue || querying"
@@ -66,7 +62,6 @@
               </div>
             </div>
 
-            <!-- 用户状态标签（与提交页一致） -->
             <div v-if="project.userSubmitStatusText" class="mb-4">
               <span :class="[
                 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
@@ -79,11 +74,9 @@
               </span>
             </div>
 
-            <!-- 查询结果 -->
             <div class="border-t border-gray-100 pt-6">
               <h3 class="text-sm font-medium text-gray-700 mb-4">查询结果</h3>
 
-              <!-- 查询中提示 -->
               <div v-if="querying" class="flex items-center gap-2 text-gray-500 mb-3">
                 <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -93,7 +86,6 @@
               </div>
 
               <div v-if="latest.exists" class="space-y-4">
-                <!-- 状态标签 -->
                 <div class="flex items-center gap-3">
                   <span :class="[
                     'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
@@ -108,11 +100,9 @@
                   </span>
                 </div>
 
-                <!-- 版本时间线 -->
                 <div v-if="Array.isArray(versions) && versions.length" class="relative">
                   <div class="space-y-4">
                     <div v-for="(ver, idx) in versions" :key="ver.id" class="relative flex">
-                      <!-- 时间线图标 -->
                       <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center relative z-10"
                            :class="[
                              idx === 0 ? 'bg-green-100 text-green-600' :
@@ -125,11 +115,9 @@
                         <div v-else class="w-2 h-2 bg-current rounded-full"></div>
                       </div>
 
-                      <!-- 连接线 -->
                       <div v-if="idx < versions.length - 1"
                            class="absolute left-5 top-10 w-px h-6 bg-gray-200"></div>
 
-                      <!-- 内容区域 -->
                       <div class="ml-4 flex-1 min-w-0">
                         <div class="flex items-center justify-between mb-2">
                           <h4 class="text-sm font-medium text-gray-800">
@@ -138,7 +126,6 @@
                           <time class="text-sm text-gray-500">{{ formatTimestamp(ver.createdAt) }}</time>
                         </div>
 
-                        <!-- 文件列表 -->
                         <div v-if="Array.isArray(ver.fileNames) && ver.fileNames.length"
                              class="grid gap-2">
                           <div v-for="(name, i2) in ver.fileNames" :key="i2"
@@ -174,9 +161,7 @@
           </div>
         </div>
 
-        <!-- 提交模式 -->
         <template v-if="mode === 'submit'">
-          <!-- 警告信息（紧凑显示） -->
           <div v-if="hasWarnings" class="space-y-3">
             <div v-if="project.offline" class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -229,9 +214,7 @@
             </div>
           </div>
 
-          <!-- 提交表单 -->
           <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <!-- 用户状态标签 -->
             <div v-if="project.userSubmitStatusText" class="mb-6">
               <span :class="[
                 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
@@ -244,18 +227,16 @@
               </span>
             </div>
 
-            <!-- 动态字段 -->
             <div v-if="expectedFields.length" class="grid gap-4 mb-6">
-              <div v-for="field in expectedFields" :key="field.key" class="space-y-2">
+              <div v-for="field in expectedFields" :key="field.key" class="space-y-2 w-full">
                 <label class="block text-sm font-medium text-gray-700">
                   {{ field.label || field.key }}
                   <span v-if="field.required" class="text-red-500 ml-1">*</span>
                 </label>
 
-                <!-- 美化的下拉框 -->
-                <div v-if="(field.type||'text') === 'select' && Array.isArray(field.options)" class="relative">
+                <div v-if="(field.type||'text') === 'select' && Array.isArray(field.options)" class="relative w-full">
                   <select v-model="submitter[field.key]"
-                          class="custom-select w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none bg-white text-gray-800">
+                          class="custom-select w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none bg-white text-gray-800 box-border outline-none cursor-pointer hover:border-blue-400">
                     <option value="" class="text-gray-500">请选择</option>
                     <option v-for="opt in field.options" :key="opt" :value="opt" class="text-gray-800">{{ opt }}</option>
                   </select>
@@ -269,56 +250,90 @@
                 <input v-else
                        v-model="submitter[field.key]"
                        :placeholder="field.placeholder || ''"
-                       class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
+                       class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors box-border outline-none" />
               </div>
             </div>
 
-            <!-- 文件上传区域 -->
             <div class="space-y-4">
               <div v-if="validatedOnce && !isSubmitterAllowed && hasSubmitterRestriction" class="mb-2">
                 <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
                   当前不在允许提交名单，请检查填写的字段
                 </span>
               </div>
+              <div v-if="autoNamingEnabled" class="p-3 rounded-xl border border-blue-100 bg-blue-50/40 text-sm text-blue-800">
+                {{ autoNamingHint }}
+              </div>
               <label class="block text-sm font-medium text-gray-700">选择文件</label>
 
-              <!-- 可点击的上传区域 -->
-              <div class="upload-click-area border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer"
+              <div class="upload-click-area border-2 border-dashed border-gray-200 rounded-2xl p-6 transition-colors hover:border-blue-400 hover:bg-blue-50/30 relative min-h-[200px] flex flex-col justify-center"
                    :class="{
                      'opacity-50 cursor-not-allowed': !project.allowResubmit && latest.exists,
-                     'border-blue-400 bg-blue-50/30': isDragging
+                     'border-blue-400 bg-blue-50/30': isDragging,
+                     'cursor-pointer': !fileList.length, /* 只有没文件时，整个大框才显示手型，有文件时由内部控制 */
+                     'items-center': !fileList.length /* 没文件时居中，有文件时靠上 */
                    }"
-                   @click="triggerFileSelect"
                    @dragenter.prevent="handleDragEnter"
                    @dragover.prevent
                    @dragleave.prevent="handleDragLeave"
-                   @drop.prevent="handleDrop">
-
-                <!-- 上传图标 -->
-                <div class="w-16 h-16 mx-auto mb-4 rounded-2xl border-2 border-dashed border-gray-300 flex items-center justify-center bg-white"
-                     :class="{ 'border-blue-400 bg-blue-50': isDragging }">
-                  <svg class="w-8 h-8 text-gray-400" :class="{ 'text-blue-500': isDragging }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-
-                <!-- 上传文本 -->
-                <div class="space-y-2">
-                  <h3 class="text-lg font-medium text-gray-800">
-                    {{ fileList.length ? '继续添加文件' : '上传文件' }}
-                  </h3>
+                   @drop.prevent="handleDrop"
+                   @click="!fileList.length ? triggerFileSelect() : null">
+                <div v-if="!fileList.length" class="text-center space-y-2">
+                  <div class="w-16 h-16 mx-auto mb-4 rounded-2xl border-2 border-dashed border-gray-300 flex items-center justify-center bg-white"
+                       :class="{ 'border-blue-400 bg-blue-50': isDragging }">
+                    <svg class="w-8 h-8 text-gray-400" :class="{ 'text-blue-500': isDragging }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <h3 class="text-lg font-medium text-gray-800">上传文件</h3>
                   <p class="text-gray-500">
-                    将文件拖拽到此处，或 <span class="text-blue-600 font-medium">点击选择文件</span>
+                    将文件<span class="text-blue-600 font-medium">拖拽</span>到此处，或 <span class="text-blue-600 font-medium">点击选择文件</span>
                   </p>
-
-                  <!-- 文件限制信息 -->
                   <div class="text-sm text-gray-400 space-y-1">
                     <div>允许类型：{{ (project.allowedFileTypes||[]).join(', ') || '不限' }}</div>
                     <div>大小上限：{{ sizeLimitText }}</div>
                   </div>
                 </div>
 
-                <!-- 隐藏的文件输入 -->
+                <div v-else class="w-full">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
+
+                    <div v-for="(file, index) in fileList" :key="index"
+                         class="group relative bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-start gap-3">
+
+                      <button @click.stop="removeFile(index)"
+                              class="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors z-10 outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 border-none p-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+
+                      <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 flex-shrink-0">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                        </svg>
+                      </div>
+
+                      <div class="min-w-0 w-full">
+                        <p class="text-sm font-medium text-gray-800 truncate" :title="file.name">{{ file.name }}</p>
+                        <p class="text-xs text-gray-500 mt-0.5">{{ formatBytes(file.size) }}</p>
+                      </div>
+
+                    </div>
+
+                    <div @click.stop="triggerFileSelect"
+                         v-if="project.allowMultiFiles || fileList.length === 0"
+                         class="group flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-all min-h-[120px]">
+                      <div class="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-blue-100 text-gray-400 group-hover:text-blue-500 flex items-center justify-center mb-2 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
+                      <span class="text-sm text-gray-500 group-hover:text-blue-600">继续添加</span>
+                    </div>
+
+                  </div>
+                </div>
+
                 <input ref="fileInput"
                        type="file"
                        :multiple="!!project.allowMultiFiles"
@@ -328,40 +343,6 @@
                        class="hidden" />
               </div>
 
-              <!-- 文件列表 -->
-              <div v-if="fileList.length" class="space-y-3">
-                <h4 class="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
-                  </svg>
-                  已选择文件 ({{ fileList.length }})
-                </h4>
-
-                <div class="grid gap-2">
-                  <div v-for="(file, index) in fileList" :key="index"
-                       class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-                    <div class="flex items-center gap-3 min-w-0 flex-1">
-                      <div class="w-5 h-5 text-blue-500 flex-shrink-0">
-                        <svg fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
-                        </svg>
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <p class="text-sm font-medium text-gray-800 truncate">{{ file.name }}</p>
-                        <p class="text-xs text-gray-500">{{ formatBytes(file.size) }}</p>
-                      </div>
-                    </div>
-                    <button @click.stop="removeFile(index)"
-                            class="w-6 h-6 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2 rounded-full hover:bg-red-50 flex items-center justify-center">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 操作按钮 -->
               <div class="flex gap-3 pt-4">
                 <button :disabled="disableSubmit"
                         @click="submit"
@@ -383,7 +364,6 @@
       </div>
     </div>
 
-    <!-- 上传进度对话框 -->
     <div v-if="showUploadDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <div class="text-center space-y-4">
@@ -418,7 +398,6 @@
       </div>
     </div>
 
-    <!-- Loading 遮罩 -->
     <div v-if="loading || submitting" class="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-40">
       <div class="text-center">
         <div class="w-12 h-12 mx-auto mb-4 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -426,7 +405,6 @@
       </div>
     </div>
 
-    <!-- ElementUI Upload (隐藏，用于功能支持) -->
     <el-upload
         ref="uploadRef"
         class="hidden"
@@ -530,6 +508,25 @@ const acceptAttr = computed(() => {
   return types.map(t => `.${t}`).join(',')
 })
 
+const autoNamingEnabled = computed(() => !!project.value?.autoFileNamingEnabled)
+const autoNamingHint = computed(() => {
+  if (!autoNamingEnabled.value) return ''
+  const cfg = project.value?.autoFileNamingConfig && typeof project.value.autoFileNamingConfig === 'object'
+      ? project.value.autoFileNamingConfig
+      : {}
+  const fields = Array.isArray(cfg.fields) ? cfg.fields.filter(Boolean) : []
+  const sep = cfg.separator == null ? ' ' : String(cfg.separator)
+  const labelOf = (k) => {
+    const f = (expectedFields.value || []).find(x => x.key === k)
+    return f?.label || k
+  }
+  if (!fields.length) {
+    return '本项目已开启文件自动命名：上传后文件名将由系统根据填写信息自动生成。'
+  }
+  const pattern = fields.map(labelOf).join(sep)
+  return `本项目已开启文件自动命名：上传后文件名将按「${pattern}」生成。`
+})
+
 const hasWarnings = computed(() => {
   if (!project.value) return false
   return project.value.offline ||
@@ -615,23 +612,23 @@ const onFileInputChange = (event) => {
   })
   // 同步原生 File 列表
   files.value = fileList.value
-    .map(f => f?.raw || f)
-    .filter(f => f && typeof f.size === 'number')
+      .map(f => f?.raw || f)
+      .filter(f => f && typeof f.size === 'number')
   event.target.value = '' // 清空input
 }
 
 const onFileChange = (file, fileListParam) => {
   fileList.value = fileListParam
   files.value = (fileListParam || [])
-    .map(f => f?.raw || f)
-    .filter(f => f && typeof f.size === 'number')
+      .map(f => f?.raw || f)
+      .filter(f => f && typeof f.size === 'number')
 }
 
 const onFileRemove = (file, fileListParam) => {
   fileList.value = fileListParam
   files.value = (fileListParam || [])
-    .map(f => f?.raw || f)
-    .filter(f => f && typeof f.size === 'number')
+      .map(f => f?.raw || f)
+      .filter(f => f && typeof f.size === 'number')
 }
 
 const removeFile = (index) => {
@@ -861,8 +858,8 @@ const handleDrop = (event) => {
   })
   // 同步原生 File 列表
   files.value = fileList.value
-    .map(f => f?.raw || f)
-    .filter(f => f && typeof f.size === 'number')
+      .map(f => f?.raw || f)
+      .filter(f => f && typeof f.size === 'number')
 }
 
 // 输入变化时重置查询结果展示状态
@@ -912,17 +909,14 @@ watch(() => ({ ...submitter.value }), () => {
   padding: 0 4px;
 }
 
-/* 自定义下拉框样式 */
+/* 修复：删除 background-image 等属性，只保留 padding-right，依靠模板中的 SVG 显示图标 */
 .custom-select {
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.75rem center;
-  background-repeat: no-repeat;
-  background-size: 1.5em 1.5em;
-  padding-right: 3rem;
+  padding-right: 2.5rem; /* 预留右侧空间给绝对定位的箭头 */
 }
 
+/* 移除 focus 时的背景图切换 */
 .custom-select:focus {
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  outline: none;
 }
 
 /* 可点击上传区域 */

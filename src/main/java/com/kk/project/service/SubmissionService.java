@@ -71,7 +71,19 @@ import java.util.*;
 
         String keyPrefix = buildUploadPrefix(project, submitterJson);
 
-        List<String> urls = ossService.uploadWithPrefix(files, keyPrefix);
+        // 自动命名文件：在服务端为 MultipartFile 提供新的 originalFilename
+        List<MultipartFile> filesToUpload = files;
+        if (Boolean.TRUE.equals(project.getAutoFileNamingEnabled())) {
+            List<MultipartFile> renamed = new ArrayList<>();
+            for (int i = 0; i < files.size(); i++) {
+                MultipartFile f = files.get(i);
+                String newName = computeAutoFileName(project, submitterJson, f.getOriginalFilename(), i, files.size());
+                renamed.add(new RenamedMultipartFile(f, newName));
+            }
+            filesToUpload = renamed;
+        }
+
+        List<String> urls = ossService.uploadWithPrefix(filesToUpload, keyPrefix);
 
         Submission s = new Submission();
         s.setProject(project);
@@ -295,6 +307,134 @@ import java.util.*;
         }
         if (org.springframework.util.StringUtils.hasText(p) && !p.endsWith("/")) p += "/";
         return p + encName;
+    }
+
+    /**
+     * 根据项目配置与提交者字段计算“存储文件名”（保留原扩展名）。
+     * 配置结构示例：
+     * { "fields": ["major","class","sid"], "separator": " ", "aliases": { "major": {"计算机":"计"} } }
+     */
+    public String computeAutoFileName(Project project, String submitterJson, String originalFilename, int index, int total) {
+        AutoFileNamingConfig cfg = parseAutoFileNamingConfig(project);
+        if (cfg == null || cfg.fields().isEmpty()) {
+            // 没有配置字段时：直接返回原文件名（保持兼容）
+            return baseName(originalFilename);
+        }
+        List<String> parts = new ArrayList<>();
+        for (String key : cfg.fields()) {
+            if (!StringUtils.hasText(key)) continue;
+            String raw = extractFieldValue(submitterJson, key);
+            String v = raw == null ? "" : raw.trim();
+            if (!StringUtils.hasText(v)) {
+                throw new IllegalArgumentException("自动命名缺少字段: " + key);
+            }
+            Map<String, String> amap = cfg.aliases().getOrDefault(key, java.util.Map.of());
+            String aliased = amap.get(v);
+            if (!StringUtils.hasText(aliased)) aliased = v;
+            String safe = safeSegment(aliased);
+            if (!StringUtils.hasText(safe)) safe = "unknown";
+            parts.add(safe);
+        }
+        String sep = cfg.separator() == null ? "" : cfg.separator();
+        String stem = String.join(sep, parts);
+
+        // 多文件提交时，为避免同名覆盖，附加原文件名（不含扩展名）或索引
+        if (total > 1) {
+            String origStem = safeSegment(stripExtension(baseName(originalFilename)));
+            if (!StringUtils.hasText(origStem)) origStem = String.valueOf(index + 1);
+            stem = stem + sep + origStem;
+        }
+
+        String ext = getExtension(originalFilename);
+        if (StringUtils.hasText(ext)) return stem + "." + ext;
+        return stem;
+    }
+
+    private AutoFileNamingConfig parseAutoFileNamingConfig(Project project) {
+        if (project == null) return null;
+        if (!Boolean.TRUE.equals(project.getAutoFileNamingEnabled())) return null;
+        String json = project.getAutoFileNamingConfig();
+        if (!StringUtils.hasText(json)) return null;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> m = objectMapper.readValue(json, Map.class);
+            Object fieldsRaw = m.get("fields");
+            List<String> fields = new ArrayList<>();
+            if (fieldsRaw instanceof List<?> arr) {
+                for (Object o : arr) {
+                    if (o == null) continue;
+                    String s = String.valueOf(o).trim();
+                    if (StringUtils.hasText(s)) fields.add(s);
+                }
+            }
+            String separator = m.get("separator") == null ? "" : String.valueOf(m.get("separator"));
+
+            Map<String, Map<String, String>> aliases = new HashMap<>();
+            Object aliasesRaw = m.get("aliases");
+            if (aliasesRaw instanceof Map<?, ?> amap) {
+                for (Map.Entry<?, ?> e : amap.entrySet()) {
+                    String fieldKey = e.getKey() == null ? "" : String.valueOf(e.getKey()).trim();
+                    if (!StringUtils.hasText(fieldKey)) continue;
+                    Map<String, String> one = new HashMap<>();
+                    Object inner = e.getValue();
+                    if (inner instanceof Map<?, ?> innerMap) {
+                        for (Map.Entry<?, ?> ie : innerMap.entrySet()) {
+                            if (ie.getKey() == null) continue;
+                            String k = String.valueOf(ie.getKey());
+                            String v = ie.getValue() == null ? "" : String.valueOf(ie.getValue());
+                            one.put(k, v);
+                        }
+                    }
+                    aliases.put(fieldKey, one);
+                }
+            }
+            return new AutoFileNamingConfig(fields, separator, aliases);
+        } catch (Exception e) {
+            // 配置损坏时：按未启用处理，避免影响提交
+            return null;
+        }
+    }
+
+    private String stripExtension(String filename) {
+        if (!StringUtils.hasText(filename)) return "";
+        int idx = filename.lastIndexOf('.');
+        if (idx <= 0) return filename;
+        return filename.substring(0, idx);
+    }
+
+    private String baseName(String filename) {
+        if (!StringUtils.hasText(filename)) return "file";
+        String fn = filename;
+        int slash = Math.max(fn.lastIndexOf('/'), fn.lastIndexOf('\\'));
+        if (slash >= 0) fn = fn.substring(slash + 1);
+        // 防止路径穿越，移除 ..
+        fn = fn.replace("..", "");
+        return fn;
+    }
+
+    private record AutoFileNamingConfig(
+            List<String> fields,
+            String separator,
+            Map<String, Map<String, String>> aliases
+    ) {}
+
+    private static class RenamedMultipartFile implements MultipartFile {
+        private final MultipartFile delegate;
+        private final String filename;
+
+        private RenamedMultipartFile(MultipartFile delegate, String filename) {
+            this.delegate = delegate;
+            this.filename = filename;
+        }
+
+        @Override public String getName() { return delegate.getName(); }
+        @Override public String getOriginalFilename() { return filename; }
+        @Override public String getContentType() { return delegate.getContentType(); }
+        @Override public boolean isEmpty() { return delegate.isEmpty(); }
+        @Override public long getSize() { return delegate.getSize(); }
+        @Override public byte[] getBytes() throws java.io.IOException { return delegate.getBytes(); }
+        @Override public java.io.InputStream getInputStream() throws java.io.IOException { return delegate.getInputStream(); }
+        @Override public void transferTo(java.io.File dest) throws java.io.IOException, IllegalStateException { delegate.transferTo(dest); }
     }
 
     public List<Submission> list(Long projectId) {

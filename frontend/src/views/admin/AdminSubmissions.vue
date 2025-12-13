@@ -70,7 +70,7 @@
         <el-table
             :data="groupedContent"
             v-loading="loading"
-            :max-height="tableMaxHeight"
+            height="100%"
             style="width: 100%"
         >
           <el-table-column type="expand">
@@ -807,7 +807,7 @@ const formatDateTime = (dateTimeStr) => {
 <style scoped>
 /* 全屏布局 - 考虑 header 高度 */
 .admin-submissions-fullscreen {
-  height: calc(100vh - 64px - 50px);
+  height: calc(100vh - 64px - 2px);
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;

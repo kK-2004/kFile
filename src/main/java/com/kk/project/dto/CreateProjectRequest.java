@@ -28,4 +28,8 @@ public class CreateProjectRequest {
     private java.util.List<String> allowedSubmitterKeys;
     // 允许提交的名单（可以是字符串数组，或对象数组）；前端可直接传 JSON 结构
     private Object allowedSubmitterList;
+
+    // 自动命名文件（可选）
+    private Boolean autoFileNamingEnabled;
+    private Object autoFileNamingConfig;
 }

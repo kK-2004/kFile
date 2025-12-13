@@ -94,6 +94,11 @@ public class ProjectService {
             if (req.getAllowedSubmitterList() != null) {
                 p.setAllowedSubmitterList(objectMapper.writeValueAsString(req.getAllowedSubmitterList()));
             }
+            // 自动命名文件配置
+            p.setAutoFileNamingEnabled(Boolean.TRUE.equals(req.getAutoFileNamingEnabled()));
+            if (req.getAutoFileNamingConfig() != null) {
+                p.setAutoFileNamingConfig(objectMapper.writeValueAsString(req.getAutoFileNamingConfig()));
+            }
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid JSON for project fields", e);
         }
@@ -219,6 +224,8 @@ public class ProjectService {
             if (req.getPathSegments() != null) p.setPathSegments(objectMapper.writeValueAsString(req.getPathSegments()));
             if (req.getAllowedSubmitterKeys() != null) p.setAllowedSubmitterKeys(objectMapper.writeValueAsString(req.getAllowedSubmitterKeys()));
             if (req.getAllowedSubmitterList() != null) p.setAllowedSubmitterList(objectMapper.writeValueAsString(req.getAllowedSubmitterList()));
+            if (req.getAutoFileNamingEnabled() != null) p.setAutoFileNamingEnabled(Boolean.TRUE.equals(req.getAutoFileNamingEnabled()));
+            if (req.getAutoFileNamingConfig() != null) p.setAutoFileNamingConfig(objectMapper.writeValueAsString(req.getAutoFileNamingConfig()));
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid JSON for project fields", e);
         }

@@ -113,11 +113,17 @@ public class SubmissionController {
 
         java.util.List<java.util.Map<String,Object>> entries = new java.util.ArrayList<>();
         final int partSize = 10 * 1024 * 1024; // 10MB 建议分片大小
-        for (DirectInitRequest.FileMeta fm : body.getFiles()) {
-            String key = submissionService.normalizeFullKey(keyPrefix, fm.getName());
+        java.util.List<DirectInitRequest.FileMeta> files = body.getFiles() == null ? java.util.List.of() : body.getFiles();
+        for (int i = 0; i < files.size(); i++) {
+            DirectInitRequest.FileMeta fm = files.get(i);
+            String storedName = fm.getName();
+            if (Boolean.TRUE.equals(p.getAutoFileNamingEnabled())) {
+                storedName = submissionService.computeAutoFileName(p, submitterJson, fm.getName(), i, files.size());
+            }
+            String key = submissionService.normalizeFullKey(keyPrefix, storedName);
             String uploadId = submissionService.getOssService().initiateMultipartUpload(key);
             java.util.Map<String,Object> e = new java.util.HashMap<>();
-            e.put("name", fm.getName());
+            e.put("name", storedName);
             e.put("key", key);
             e.put("uploadId", uploadId);
             e.put("partSize", partSize);
@@ -161,16 +167,21 @@ public class SubmissionController {
         if (!keyPrefix.endsWith("/")) keyPrefix += "/";
         keyPrefix = keyPrefix + uniq + "/";
         java.util.List<Map<String,Object>> entries = new java.util.ArrayList<>();
-        for (DirectInitRequest.FileMeta fm : body.getFiles()) {
-            String originalName = fm.getName();
-            String key = submissionService.normalizeFullKey(keyPrefix, originalName);
+        java.util.List<DirectInitRequest.FileMeta> files = body.getFiles() == null ? java.util.List.of() : body.getFiles();
+        for (int i = 0; i < files.size(); i++) {
+            DirectInitRequest.FileMeta fm = files.get(i);
+            String storedName = fm.getName();
+            if (Boolean.TRUE.equals(p.getAutoFileNamingEnabled())) {
+                storedName = submissionService.computeAutoFileName(p, submitterJson, fm.getName(), i, files.size());
+            }
+            String key = submissionService.normalizeFullKey(keyPrefix, storedName);
             long size = Math.max(0L, fm.getSize() == null ? 0L : fm.getSize());
             // 过期时间按文件大小动态设置：至少10分钟，至多2小时；估算速率 64KB/s + 额外 5 分钟冗余
             long estimate = size <= 0 ? 600 : (size / 65536) + 300;
             long expireSeconds = Math.max(600, Math.min(7200, estimate));
             String putUrl = submissionService.getOssService().generatePresignedPutUrlByKey(key, expireSeconds, fm.getContentType());
             Map<String,Object> e = new java.util.HashMap<>();
-            e.put("name", originalName);
+            e.put("name", storedName);
             e.put("key", key);
             e.put("putUrl", putUrl);
             e.put("url", submissionService.getOssService().proxyUrlByKey(key));

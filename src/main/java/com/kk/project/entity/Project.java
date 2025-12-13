@@ -82,4 +82,13 @@ public class Project {
     // 创建时间
     @CreationTimestamp
     private Instant createdAt;
+
+    // ===== 自动命名文件（可选）=====
+    // 是否开启自动命名
+    private Boolean autoFileNamingEnabled = false;
+
+    // 自动命名配置（json），示例：
+    // { "fields": ["major","class","sid"], "separator": " ", "aliases": { "major": {"计算机":"计"} } }
+    @Column(columnDefinition = "json")
+    private String autoFileNamingConfig;
 }

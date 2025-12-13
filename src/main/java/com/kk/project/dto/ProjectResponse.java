@@ -32,6 +32,10 @@ public class ProjectResponse {
     // Public hint: whether restriction is enabled (keys + list configured)
     private Boolean submitterRestrictionEnabled;
 
+    // 自动命名文件（可选）
+    private Boolean autoFileNamingEnabled;
+    private Object autoFileNamingConfig;
+
     public static ProjectResponse from(Project p, List<String> types, Object expected) {
         return from(p, types, expected, true);
     }
@@ -84,6 +88,15 @@ public class ProjectResponse {
             boolean hasKeys = p.getAllowedSubmitterKeys() != null && !p.getAllowedSubmitterKeys().isBlank();
             boolean hasList = p.getAllowedSubmitterList() != null && !p.getAllowedSubmitterList().isBlank();
             r.setSubmitterRestrictionEnabled(hasKeys && hasList);
+        } catch (Exception ignored) {}
+
+        // auto file naming config
+        r.setAutoFileNamingEnabled(Boolean.TRUE.equals(p.getAutoFileNamingEnabled()));
+        try {
+            if (p.getAutoFileNamingConfig() != null && !p.getAutoFileNamingConfig().isBlank()) {
+                r.setAutoFileNamingConfig(new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                        p.getAutoFileNamingConfig(), Object.class));
+            }
         } catch (Exception ignored) {}
         return r;
     }

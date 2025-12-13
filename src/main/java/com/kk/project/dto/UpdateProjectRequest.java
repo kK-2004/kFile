@@ -28,4 +28,8 @@ public class UpdateProjectRequest {
     // 提交者限制（可选）
     private java.util.List<String> allowedSubmitterKeys;
     private Object allowedSubmitterList;
+
+    // 自动命名文件（可选）
+    private Boolean autoFileNamingEnabled;
+    private Object autoFileNamingConfig;
 }

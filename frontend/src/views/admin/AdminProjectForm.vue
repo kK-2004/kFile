@@ -243,6 +243,94 @@
           <div class="form-section card-style">
             <div class="section-header">
               <div class="header-text">
+                <h3>文件自动命名</h3>
+                <p class="section-desc">按字段自动生成存储文件名（保留原扩展名），例如：计 2306 20231234。</p>
+              </div>
+              <div class="header-right-inline">
+                <span class="switch-label-inline">开启</span>
+                <el-switch v-model="autoFileNamingEnabled" />
+              </div>
+            </div>
+
+            <div class="form-content" v-if="autoFileNamingEnabled">
+              <div class="grid-row">
+                <el-form-item label="拼接符号（Separator）">
+                  <el-select v-model="separatorChoice" placeholder="请选择">
+                    <el-option :value="' '" label="空格 ( )" />
+                    <el-option value="+" label="+ (加号)" />
+                    <el-option value="-" label="- (横杠)" />
+                    <el-option value="_" label="_ (下划线)" />
+                    <el-option value="" label="不拼接 (直接连起来)" />
+                    <el-option value="__custom__" label="自定义..." />
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-if="separatorChoice === '__custom__'" label="自定义拼接符号">
+                  <el-input v-model="separatorCustom" placeholder="例如：/" />
+                </el-form-item>
+              </div>
+
+              <div class="section-subtitle">字段顺序</div>
+              <div class="custom-table-wrapper">
+                <div class="table-actions">
+                  <el-button type="primary" :icon="Plus" @click="addAutoNameField">添加字段</el-button>
+                  <span class="text-gray">拖拽排序；多文件提交时会在末尾附加原文件名以避免同名覆盖。</span>
+                </div>
+                <el-table :data="autoNameFields" class="modern-table" ref="nameFieldsTable" empty-text="请添加至少一个字段">
+                  <el-table-column width="40" align="center">
+                    <template #default>
+                      <div class="drag-handle-icon">⋮⋮</div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="字段" min-width="220">
+                    <template #default="{ row }">
+                      <el-select v-model="row.value" placeholder="选择字段" class="table-input">
+                        <el-option
+                            v-for="f in expectedFields"
+                            :key="f.key"
+                            :value="f.key"
+                            :label="`${f.label} (${f.key})`"
+                        />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column width="60" align="center">
+                    <template #default="{ $index }">
+                      <el-button link type="danger" :icon="Delete" @click="removeAutoNameField($index)" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+
+              <div v-if="autoNameSelectFields.length" class="mt-4">
+                <div class="section-subtitle">选项别名（用于下拉字段）</div>
+                <div v-for="sf in autoNameSelectFields" :key="sf.key" class="alias-block">
+                  <div class="alias-title">{{ sf.label }} ({{ sf.key }})</div>
+                  <el-table :data="sf._options.map(o => ({ option: o }))" size="small" class="modern-table">
+                    <el-table-column prop="option" label="原始选项" />
+                    <el-table-column label="别名（留空则使用原值）">
+                      <template #default="{ row }">
+                        <el-input
+                            :model-value="(autoAliases?.[sf.key] && autoAliases[sf.key][row.option] != null) ? autoAliases[sf.key][row.option] : ''"
+                            @update:model-value="(v) => { if (!autoAliases[sf.key]) autoAliases[sf.key] = {}; autoAliases[sf.key][row.option] = v }"
+                            placeholder="例如：计"
+                            size="small"
+                        />
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </div>
+
+              <div class="preview-row">
+                <span class="text-gray">预览：</span>
+                <span class="preview-text">{{ autoNamePreview || '（未配置）' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section card-style">
+            <div class="section-header">
+              <div class="header-text">
                 <h3>状态反馈</h3>
                 <p class="section-desc">配置用户在查询界面看到的信息。</p>
               </div>
@@ -434,6 +522,31 @@ const autoPreview = ref({ headers: [], count: 0 })
 const autoFieldPreview = ref([])
 const autoRestrict = ref(false)
 const showAdvanced = ref(false)
+
+// 自动命名文件（项目级）
+const autoFileNamingEnabled = ref(false)
+const autoNameFields = ref([]) // [{ value: 'major' }]
+const nameFieldsTable = ref()
+const separatorChoice = ref(' ')
+const separatorCustom = ref('')
+const autoAliases = ref({}) // { fieldKey: { option: alias } }
+const separatorValue = computed(() => separatorChoice.value === '__custom__' ? (separatorCustom.value ?? '') : separatorChoice.value)
+const autoNameSelectFields = computed(() => {
+  const keys = new Set(autoNameFields.value.map(x => x.value).filter(Boolean))
+  return expectedFields.value.filter(f => keys.has(f.key) && (f.type || 'text') === 'select')
+})
+const autoNamePreview = computed(() => {
+  const sep = separatorValue.value ?? ''
+  const parts = autoNameFields.value
+      .map(x => x.value)
+      .filter(Boolean)
+      .map(k => {
+        const f = expectedFields.value.find(e => e.key === k)
+        return f ? f.label : k
+      })
+  if (!parts.length) return ''
+  return parts.join(sep) + '.ext'
+})
 
 function openAutoDetect() { csvPurpose.value = 'auto'; csvInputRef.value?.click() }
 function triggerCsvSelect() { csvPurpose.value = 'allow'; (csvInputRef2.value||csvInputRef.value)?.click() }
@@ -723,9 +836,32 @@ const load = async () => {
   }
   // 根据后端状态同步开关（存在 keys 且存在名单即视为已限制）
   autoRestrict.value = (Array.isArray(form.value.allowedSubmitterKeys) && form.value.allowedSubmitterKeys.length > 0 && data.allowedSubmitterList != null)
+
+  // 自动命名：载入配置
+  autoFileNamingEnabled.value = !!data.autoFileNamingEnabled
+  const cfg = (data.autoFileNamingConfig && typeof data.autoFileNamingConfig === 'object') ? data.autoFileNamingConfig : {}
+  autoNameFields.value = Array.isArray(cfg.fields) ? cfg.fields.map(v => ({ value: v })) : []
+  const sep = cfg.separator == null ? ' ' : String(cfg.separator)
+  const presets = new Set([' ', '+', '-', '_', ''])
+  if (presets.has(sep)) {
+    separatorChoice.value = sep
+    separatorCustom.value = ''
+  } else {
+    separatorChoice.value = '__custom__'
+    separatorCustom.value = sep
+  }
+  autoAliases.value = (cfg.aliases && typeof cfg.aliases === 'object') ? cfg.aliases : {}
+  // 确保每个 select 字段都有 alias map
+  for (const sf of autoNameSelectFields.value) {
+    if (!autoAliases.value[sf.key] || typeof autoAliases.value[sf.key] !== 'object') autoAliases.value[sf.key] = {}
+    for (const opt of (sf._options || [])) {
+      if (autoAliases.value[sf.key][opt] == null) autoAliases.value[sf.key][opt] = ''
+    }
+  }
   // 绑定拖拽（初次加载后）
   bindRowDrag()
   bindSegDrag()
+  bindAutoNameDrag()
 }
 
 // 配额显示（仅新建页且非 SUPER 显示）
@@ -743,6 +879,19 @@ const loadQuota = async () => { try { const { data } = await api.creationQuota()
 onMounted(load)
 watch(expectedFields, () => bindRowDrag(), { deep: true })
 watch(pathSegments, () => bindSegDrag(), { deep: true })
+watch(autoNameFields, () => bindAutoNameDrag(), { deep: true })
+watch([expectedFields, autoNameFields], () => {
+  // 别名配置跟随字段/选项变化（仅保留仍存在的字段）
+  const current = autoAliases.value || {}
+  const next = {}
+  for (const field of autoNameSelectFields.value) {
+    const map = (current[field.key] && typeof current[field.key] === 'object') ? current[field.key] : {}
+    const m2 = {}
+    for (const opt of (field._options || [])) m2[opt] = map[opt] ?? ''
+    next[field.key] = m2
+  }
+  autoAliases.value = next
+}, { deep: true, immediate: true })
 
 const save = async () => {
   if (saving.value) return
@@ -767,7 +916,7 @@ const save = async () => {
       placeholder: f.placeholder || '',
       required: !!f.required,
       type: f.type || 'text',
-      _options: f.type === 'select' ? (Array.isArray(f._options) ? f._options : []) : undefined
+      options: f.type === 'select' ? (Array.isArray(f._options) ? f._options : []) : undefined
     }))
     // 若为下拉类型，至少一个选项
     for (const f of payload.expectedUserFields) {
@@ -791,6 +940,21 @@ const save = async () => {
       }
     }
     payload.pathSegments = segs
+
+    // 自动命名文件：组装配置
+    payload.autoFileNamingEnabled = !!autoFileNamingEnabled.value
+    const nameFields = autoNameFields.value.map(x => x.value).filter(Boolean)
+    if (payload.autoFileNamingEnabled) {
+      if (!nameFields.length) throw new Error('已开启自动命名，但未配置字段顺序')
+      for (const k of nameFields) {
+        if (!expectedFields.value.some(f => f.key === k)) throw new Error('自动命名包含未知字段: ' + k)
+      }
+    }
+    payload.autoFileNamingConfig = {
+      fields: nameFields,
+      separator: separatorValue.value ?? '',
+      aliases: autoAliases.value || {}
+    }
     // 提交者限制：若开启自动限制，则直接使用已识别的 keys + JSON 列表
     const akeys = Array.isArray(payload.allowedSubmitterKeys) ? payload.allowedSubmitterKeys.filter(Boolean) : []
     if (autoRestrict.value && akeys.length > 0) {
@@ -856,6 +1020,8 @@ const addField = () => {
 const removeField = (idx) => { expectedFields.value.splice(idx, 1); bindRowDrag() }
 const addSeg = () => { pathSegments.value.push({ value: '$project' }); bindSegDrag() }
 const removeSeg = (idx) => { pathSegments.value.splice(idx, 1); bindSegDrag() }
+const addAutoNameField = () => { autoNameFields.value.push({ value: '' }); bindAutoNameDrag() }
+const removeAutoNameField = (idx) => { autoNameFields.value.splice(idx, 1); bindAutoNameDrag() }
 // 上移/下移由拖拽排序代替
 const auth = useAuthStore()
 onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })
@@ -939,6 +1105,46 @@ function bindSegDrag() {
     })
   })
 }
+
+function bindAutoNameDrag() {
+  nextTick(() => {
+    const tableEl = nameFieldsTable.value?.$el
+    const tbody = tableEl?.querySelector('.el-table__body-wrapper tbody')
+    if (!tbody) return
+    const rows = tbody.querySelectorAll('tr')
+    rows.forEach((tr, idx) => {
+      tr.setAttribute('draggable', 'true')
+      tr.style.cursor = 'move'
+      tr.dataset.index = String(idx)
+      tr.ondragstart = (ev) => {
+        tr.classList.add('dragging')
+        ev.dataTransfer?.setData('text/plain', String(idx))
+      }
+      tr.ondragend = () => {
+        tr.classList.remove('dragging')
+      }
+      tr.ondragover = (ev) => {
+        ev.preventDefault()
+        tr.classList.add('drag-over')
+      }
+      tr.ondragleave = () => {
+        tr.classList.remove('drag-over')
+      }
+      tr.ondrop = (ev) => {
+        ev.preventDefault()
+        tr.classList.remove('drag-over')
+        const fromTxt = ev.dataTransfer?.getData('text/plain') || '-1'
+        const from = parseInt(fromTxt)
+        const to = parseInt(tr.dataset.index || '-1')
+        if (!Number.isNaN(from) && !Number.isNaN(to) && from >= 0 && to >= 0 && from !== to) {
+          const item = autoNameFields.value.splice(from, 1)[0]
+          autoNameFields.value.splice(to, 0, item)
+          bindAutoNameDrag()
+        }
+      }
+    })
+  })
+}
 </script>
 
 <style scoped>
@@ -954,6 +1160,32 @@ function bindSegDrag() {
 }
 
 .hidden { display: none; }
+
+.header-right-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.switch-label-inline {
+  color: #6e6e80;
+  font-size: 13px;
+}
+.section-subtitle {
+  margin: 10px 0 6px;
+  font-weight: 600;
+  color: #353740;
+  font-size: 13px;
+}
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.alias-block { margin-top: 10px; }
+.alias-title { font-weight: 600; color: #353740; font-size: 13px; margin: 6px 0; }
+.preview-row { margin-top: 10px; }
+.preview-text { font-weight: 600; color: #202123; }
 
 .page-container {
   height: calc(100vh - 65px);
