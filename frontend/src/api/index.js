@@ -289,4 +289,9 @@ export default {
   ,adminDeleteSubmissionsByField({ fieldKey, fieldValue, projectId }) {
     return instance.post('/api/admin/submissions/delete-by-field', { fieldKey, fieldValue, projectId })
   }
+  ,adminPresignedUrl(projectId, fileUrlOrKey, expireSeconds, download = true) {
+    const params = { projectId, fileUrlOrKey, download }
+    if (expireSeconds) params.expireSeconds = expireSeconds
+    return instance.get('/api/admin/submissions/presigned-url', { params })
+  }
 }

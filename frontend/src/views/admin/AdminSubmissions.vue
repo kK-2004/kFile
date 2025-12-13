@@ -134,7 +134,7 @@
                               </svg>
                               下载
                             </button>
-                            <button @click="copy(file.url)" class="action-btn action-btn-secondary">
+                            <button @click="openPresign(file.url, file.name, 'copy')" class="action-btn action-btn-secondary">
                               <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
                                 <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
@@ -242,6 +242,28 @@
       <template #footer>
         <el-button @click="delVisible=false">取消</el-button>
         <el-button type="danger" :disabled="delInput.trim() !== '我确认删除'" @click="doDelete">删除</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 预签名下载/复制：选择有效期 -->
+    <el-dialog v-model="presignDialogVisible" title="生成预签名链接" width="400px">
+      <div style="margin-bottom: 12px;">
+        目标文件：<span style="font-weight:500;">{{ presignTargetName }}</span>
+      </div>
+      <el-form label-width="80px">
+        <el-form-item label="有效期">
+          <el-radio-group v-model="presignExpire">
+            <el-radio-button v-for="opt in presignOptions" :key="opt.value" :label="opt.value">
+              {{ opt.label }}
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="presignDialogVisible=false" :disabled="presignLoading">取消</el-button>
+        <el-button type="primary" :loading="presignLoading" @click="doPresign">
+          {{ presignAction === 'download' ? '下载' : '复制链接' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -523,32 +545,78 @@ const formatDateTimeLocal = (ms) => {
   return `${y}-${M}-${D} ${h}:${m}:${s}`
 }
 
-const download = (u, name) => {
+// 预签名有效期选择
+const presignDialogVisible = ref(false)
+const presignTargetUrl = ref('')
+const presignTargetName = ref('')
+const presignAction = ref('download') // 'download' | 'copy'
+const presignExpire = ref(300) // 默认 5 分钟
+const presignLoading = ref(false)
+
+const presignOptions = [
+  { label: '5 分钟', value: 5 * 60 },
+  { label: '10 分钟', value: 10 * 60 },
+  { label: '30 分钟', value: 30 * 60 },
+  { label: '1 天', value: 24 * 60 * 60 },
+  { label: '7 天', value: 7 * 24 * 60 * 60 }
+]
+
+// 直接下载：使用默认有效期（例如 5 分钟）生成预签名并立即打开
+const download = async (u, name) => {
   if (!u) return
-  // 将任何 OSS URL 统一转换为站内代理，附带 download=1 以触发附件下载与解密后的文件名
-  const proxyPrefix = '/file/oss/'
-  let key = ''
   try {
-    const idx = u.indexOf(proxyPrefix)
-    if (idx >= 0) {
-      key = u.substring(idx + proxyPrefix.length)
-    } else {
-      // 从阿里云地址或任意路径中提取 key（首个域名后的路径）
-      const pos = u.indexOf('/', 8)
-      key = pos > 0 ? u.substring(pos + 1) : u
-    }
-  } catch { key = u }
-  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-  const href = `${base}${proxyPrefix}${encodeURI(key)}?download=1`
-  const a = document.createElement('a')
-  a.href = href
-  if (name) a.download = name
-  a.target = '_blank'
-  a.click()
+    const { data } = await api.adminPresignedUrl(projectId, u, 5 * 60, true)
+    const url = data?.url || data
+    if (!url) throw new Error('未返回预签名链接')
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    if (name || filename(u)) a.download = name || filename(u)
+    a.click()
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '下载失败'
+    if (typeof ElMessage !== 'undefined') ElMessage.error(msg)
+  }
 }
 
-const copy = async (text) => {
-  try { await navigator.clipboard.writeText(text) } catch {}
+// 仅在复制时弹窗选择有效期
+const openPresign = (u, name, action) => {
+  if (!u) return
+  presignTargetUrl.value = u
+  presignTargetName.value = name || filename(u)
+  presignAction.value = action || 'download'
+  presignExpire.value = 300
+  presignDialogVisible.value = true
+}
+
+const doPresign = async () => {
+  if (!presignTargetUrl.value) return
+  presignLoading.value = true
+  try {
+    const { data } = await api.adminPresignedUrl(projectId, presignTargetUrl.value, presignExpire.value, true)
+    const url = data?.url || data
+    if (!url) throw new Error('未返回预签名链接')
+    if (presignAction.value === 'download') {
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      if (presignTargetName.value) a.download = presignTargetName.value
+      a.click()
+    } else {
+      try {
+        await navigator.clipboard.writeText(url)
+        if (typeof ElMessage !== 'undefined') ElMessage.success('已复制预签名链接')
+      } catch {
+        if (typeof ElMessage !== 'undefined') ElMessage.error('复制失败，请手动复制')
+      }
+    }
+    presignDialogVisible.value = false
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '获取预签名链接失败'
+    if (typeof ElMessage !== 'undefined') ElMessage.error(msg)
+  } finally {
+    presignLoading.value = false
+  }
 }
 
 // 手动上传

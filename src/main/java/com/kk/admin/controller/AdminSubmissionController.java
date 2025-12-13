@@ -30,6 +30,7 @@ public class AdminSubmissionController {
     private final SubmissionService submissionService;
     private final OssService ossService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final long DEFAULT_EXPIRE_SECONDS = 300L;
 
     // 手动上传（统一入口）：
     // - multipart/form-data: 与用户端一致（projectId, submitter, files）
@@ -245,6 +246,29 @@ public class AdminSubmissionController {
                 "deletedFiles", deletedFiles,
                 "affectedProjects", affectedProjects
         ));
+    }
+
+    // 为管理端返回某个已保存文件的 OSS 预签名直链，由前端自行控制下载/复制。
+    // 入参可以是数据库中保存的 fileUrl（包含 /file/oss/ 前缀），也可以是直接的 OSS key。
+    @GetMapping(path = "/presigned-url")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
+    public Map<String, Object> presignedUrl(@RequestParam Long projectId,
+                                            @RequestParam String fileUrlOrKey,
+                                            @RequestParam(required = false) Long expireSeconds,
+                                            @RequestParam(required = false, defaultValue = "true") boolean download) {
+        long exp = (expireSeconds == null || expireSeconds <= 0) ? DEFAULT_EXPIRE_SECONDS : expireSeconds;
+        String key;
+        // 若包含 /file/oss/ 或 OSS host，则通过 extractObjectKey 解析；否则视为纯 key
+        if (fileUrlOrKey.contains("/file/oss/") || fileUrlOrKey.startsWith("http://") || fileUrlOrKey.startsWith("https://")) {
+            key = ossService.extractObjectKey(fileUrlOrKey);
+        } else {
+            key = fileUrlOrKey;
+        }
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("无效的文件地址或对象 key");
+        }
+        String signed = ossService.generatePresignedUrlByKey(key, download, exp, false);
+        return java.util.Map.of("url", signed, "expireSeconds", exp);
     }
 
     private Object getField(Object target, String name) {

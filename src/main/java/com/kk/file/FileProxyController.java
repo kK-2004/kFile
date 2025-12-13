@@ -27,9 +27,15 @@ public class FileProxyController {
         String marker = "/file/oss/";
         int pos = uri.indexOf(marker);
         String key = pos >= 0 ? uri.substring(pos + marker.length()) : uri;
-        // decode percent-encoded path segments (e.g., %E7%BA%BF...)
+        // decode percent-encoded path segments (e.g., %E7%BA%BF...),
+        // but keep '+' as literal to avoid turning it into space
         try {
-            key = java.net.URLDecoder.decode(key, java.nio.charset.StandardCharsets.UTF_8);
+            if (key != null && !key.isEmpty()) {
+                String toDecode = key;
+                // Prevent '+' in object key from being interpreted as space
+                toDecode = toDecode.replace("+", "%2B");
+                key = java.net.URLDecoder.decode(toDecode, java.nio.charset.StandardCharsets.UTF_8);
+            }
         } catch (Exception ignored) {}
         String filename = extractFilenameFromKey(key);
         boolean forceDownload = "1".equals(request.getParameter("download"));
