@@ -63,6 +63,12 @@ public class AdminSubmissionController {
             if (files == null || files.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
             Project project = projectService.get(projectId);
             String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
+            // 为每次手动上传增加一次性子目录，避免同名文件覆盖
+            String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
+                    .format(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))
+                    + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+            if (!keyPrefix.endsWith("/")) keyPrefix += "/";
+            keyPrefix = keyPrefix + uniq + "/";
             List<String> urls = ossService.uploadWithPrefix(files, keyPrefix);
             return finalizeManualSubmission(project, submitterJson, urls, request);
         } else {
@@ -77,6 +83,12 @@ public class AdminSubmissionController {
             if (pid == null) throw new IllegalArgumentException("projectId 不能为空");
             Project project = projectService.get(pid);
             String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
+            // 为每次手动上传增加一次性子目录，避免同名文件覆盖
+            String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
+                    .format(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))
+                    + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+            if (!keyPrefix.endsWith("/")) keyPrefix += "/";
+            keyPrefix = keyPrefix + uniq + "/";
             String contentType = Optional.ofNullable(request.getContentType()).orElse("application/octet-stream");
             String originalName = Optional.ofNullable(request.getHeader("X-Filename"))
                     .or(() -> Optional.ofNullable(request.getHeader("X-File-Name")))
@@ -159,15 +171,13 @@ public class AdminSubmissionController {
         try {
             List<String> names = new ArrayList<>();
             List<String> fs = objectMapper.readValue(saved.getFileUrls(), objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
-            var codec = ((com.kk.common.FileNameCodec) getField(submissionService, "fileNameCodec"));
             var oss = ((com.kk.oss.OssService) getField(submissionService, "ossService"));
             if (fs != null) {
                 for (String u : fs) {
                     String key = oss.extractObjectKey(u);
                     int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-                    String enc = slash >= 0 ? key.substring(slash + 1) : key;
-                    String name = codec.decrypt(enc);
-                    names.add(name == null || name.isBlank() ? enc : name);
+                    String name = slash >= 0 ? key.substring(slash + 1) : key;
+                    names.add(name);
                 }
             }
             resp.put("fileNames", names);

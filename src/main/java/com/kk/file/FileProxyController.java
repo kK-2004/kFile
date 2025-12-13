@@ -20,7 +20,6 @@ import java.io.InputStream;
 public class FileProxyController {
 
     private final OssService ossService;
-    private final com.kk.common.FileNameCodec fileNameCodec;
 
     @GetMapping("/file/oss/**")
     public ResponseEntity<?> proxy(HttpServletRequest request) {
@@ -32,7 +31,7 @@ public class FileProxyController {
         try {
             key = java.net.URLDecoder.decode(key, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
-        String filename = decryptFilenameFromKey(key);
+        String filename = extractFilenameFromKey(key);
         boolean forceDownload = "1".equals(request.getParameter("download"));
         boolean forceProxy = "1".equals(request.getParameter("proxy"));
 
@@ -111,12 +110,10 @@ public class FileProxyController {
         return builder.body(new InputStreamResource(in));
     }
 
-    private String decryptFilenameFromKey(String key) {
+    private String extractFilenameFromKey(String key) {
         if (key == null || key.isEmpty()) return "file";
         int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-        String enc = slash >= 0 ? key.substring(slash + 1) : key;
-        String name = fileNameCodec.decrypt(enc);
-        return (name == null || name.isBlank()) ? enc : name;
+        return slash >= 0 ? key.substring(slash + 1) : key;
     }
 
     private String httpDate(java.util.Date d) {

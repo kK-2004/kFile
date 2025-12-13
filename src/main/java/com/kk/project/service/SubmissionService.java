@@ -32,7 +32,6 @@ import java.util.*;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GeoIpService geoIpService;
     private final OssProperties ossProperties;
-    private final com.kk.common.FileNameCodec fileNameCodec;
 
     @Transactional
     public Submission submit(Long projectId, String submitterJson, List<MultipartFile> files,
@@ -141,10 +140,10 @@ import java.util.*;
             if (project.getFileSizeLimitBytes() != null && stat.length > project.getFileSizeLimitBytes()) {
                 throw new IllegalArgumentException("文件超出大小限制: " + key);
             }
-            // type by decrypting name
+            // type by filename in key
             int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
             String enc = slash >= 0 ? key.substring(slash + 1) : key;
-            String name = fileNameCodec.decrypt(enc);
+            String name = enc;
             String ext = getExtension(name);
             if (types != null && !types.isEmpty()) {
                 if (!org.springframework.util.StringUtils.hasText(ext) || types.stream().noneMatch(t -> t.equalsIgnoreCase(ext))) {
@@ -491,6 +490,7 @@ import java.util.*;
 
         return outputStream -> {
             try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(outputStream)) {
+                java.util.Set<String> usedNames = new java.util.HashSet<>();
                 for (Submission s : baseList) {
                     List<String> urls;
                     try {
@@ -504,7 +504,7 @@ import java.util.*;
                     }
                     for (String url : toPack) {
                         String key = ossService.extractObjectKey(url);
-                        String entryName = decryptFilenameInPath(trimPrefixForZip(key));
+                        String entryName = buildEntryNameForZip(project, trimPrefixForZip(key), usedNames);
                         try (java.io.InputStream in = ossService.openByKey(key)) {
                             zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
                             in.transferTo(zos);
@@ -543,6 +543,7 @@ import java.util.*;
                     if (!latestMap.containsKey(key)) latestMap.put(key, s);
                 }
                 java.util.List<Submission> baseList = new java.util.ArrayList<>(latestMap.values());
+                java.util.Set<String> usedNames = new java.util.HashSet<>();
                 for (Submission s : baseList) {
                     java.util.List<String> urls;
                     try {
@@ -554,7 +555,7 @@ import java.util.*;
                     }
                     for (String url : toPack) {
                         String key = ossService.extractObjectKey(url);
-                        String entryName = decryptFilenameInPath(trimPrefixForZip(key));
+                        String entryName = buildEntryNameForZip(project, trimPrefixForZip(key), usedNames);
                         try (java.io.InputStream in = ossService.openByKey(key)) {
                             zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
                             in.transferTo(zos);
@@ -579,19 +580,80 @@ import java.util.*;
         return objectKey;
     }
 
-    private String decryptFilenameInPath(String path) {
-        if (path == null || path.isEmpty()) return path;
-        int slash = path.lastIndexOf('/');
-        if (slash < 0) return fileNameCodec.decrypt(path);
-        String dir = path.substring(0, slash + 1);
-        String name = path.substring(slash + 1);
-        String dec = fileNameCodec.decrypt(name);
-        return dir + (dec == null || dec.isBlank() ? name : dec);
+    private String buildEntryNameForZip(Project project, String path, java.util.Set<String> used) {
+        if (path == null) path = "";
+        String key = path.replace('\\', '/');
+        // 拆分路径段
+        String[] parts = key.split("/");
+        java.util.List<String> dirSegs = new java.util.ArrayList<>();
+        String name;
+        String projectSeg = (project == null ? "" : safeSegment(project.getName()));
+        if (parts.length == 0) {
+            name = "file";
+        } else {
+            // 最后一段作为文件名
+            name = parts[parts.length - 1];
+            // 其余作为目录（去掉项目名段和一次性子目录等临时段）
+            for (int i = 0; i < parts.length - 1; i++) {
+                String seg = parts[i];
+                if (seg == null || seg.isEmpty()) continue;
+                // 清理路径穿越
+                seg = seg.replace("..", "");
+                if (seg.isEmpty()) continue;
+                // 跳过项目名段（$project 对应的 safeSegment(project.getName())）
+                if (!projectSeg.isEmpty() && projectSeg.equals(seg)) continue;
+                // 跳过一次性子目录（例如 20251213152252143-e9d23165）
+                if (isOneTimeDirSegment(seg)) continue;
+                dirSegs.add(seg);
+            }
+        }
+        String dir = dirSegs.isEmpty() ? "" : (String.join("/", dirSegs) + "/");
+
+        // 清理文件名中的路径穿越符
+        name = (name == null ? "" : name).replace("..", "");
+
+        // 针对完整路径做重名去重：a/b/file, a/b/file (2) ...
+        String baseName = name;
+        int dot = name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        String candidate = dir + baseName;
+        int i = 2;
+        while (used.contains(candidate)) {
+            name = stem + " (" + i + ")" + ext;
+            candidate = dir + name;
+            i++;
+        }
+        used.add(candidate);
+        return candidate;
     }
 
-    // Expose components for controllers needing filename/key operations
+    // 判断是否为一次性子目录：形如 yyyyMMddHHmmssSSS-xxxxxxxx
+    private boolean isOneTimeDirSegment(String seg) {
+        if (seg == null) return false;
+        String s = seg.trim();
+        int dash = s.indexOf('-');
+        if (dash <= 0) return false;
+        String ts = s.substring(0, dash);
+        String suf = s.substring(dash + 1);
+        // 时间戳部分 17 位数字
+        if (ts.length() != 17) return false;
+        for (int i = 0; i < ts.length(); i++) {
+            if (!Character.isDigit(ts.charAt(i))) return false;
+        }
+        // UUID 前缀部分 8 位十六进制
+        if (suf.length() != 8) return false;
+        for (int i = 0; i < suf.length(); i++) {
+            char c = suf.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Expose component for controllers needing key operations
     public OssService getOssService() { return ossService; }
-    public com.kk.common.FileNameCodec getFileNameCodec() { return fileNameCodec; }
 
     private String safeCsv(String json) {
         if (json == null) return "";

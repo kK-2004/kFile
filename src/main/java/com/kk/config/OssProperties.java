@@ -16,5 +16,4 @@ public class OssProperties {
     private String sk;       // access key secret
     private String bucket;   // bucket name
     private String host;     // https://bucket.oss-cn-xxx.aliyuncs.com/
-    private String filenameSecret; // 用于加解密文件名的密钥
 }

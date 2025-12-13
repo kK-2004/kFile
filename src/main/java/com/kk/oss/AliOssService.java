@@ -39,7 +39,6 @@ import java.util.List;
 public class AliOssService implements OssService {
 
     private final OssProperties properties;
-    private final com.kk.common.FileNameCodec fileNameCodec;
     @org.springframework.beans.factory.annotation.Value("${app.base-path:}")
     private String appBasePath;
     private OSS ossClientPublic;
@@ -131,8 +130,7 @@ public class AliOssService implements OssService {
     public String uploadWithPrefix(MultipartFile file, String keyPrefix) {
         try {
             String originalName = baseName(file.getOriginalFilename());
-            String enc = fileNameCodec.encrypt(originalName);
-            String key = normalizePrefix(keyPrefix) + enc;
+            String key = normalizePrefix(keyPrefix) + originalName;
             putStreamOrMultipart(file, key);
             return normalizeBase(appBasePath) + "/file/oss/" + key;
         } catch (IOException e) {
@@ -210,8 +208,7 @@ public class AliOssService implements OssService {
     @Override
     public String uploadStreamWithPrefix(InputStream in, long size, String contentType, String originalName, String keyPrefix) {
         String original = baseName(originalName);
-        String enc = fileNameCodec.encrypt(original);
-        String key = normalizePrefix(keyPrefix) + enc;
+        String key = normalizePrefix(keyPrefix) + original;
         final long threshold = 5L * 1024 * 1024; // 5MB
         try {
             if (size >= 0 && size < threshold) {
@@ -384,7 +381,7 @@ public class AliOssService implements OssService {
         req.setExpiration(expiration);
         if (forceDownload) {
             // Content-Disposition 通过响应头参数传递
-            String filename = decryptFilenameFromKey(key);
+            String filename = extractFilenameFromKey(key);
             String ascii = filename.replaceAll("[^\\x20-\\x7E]", "_");
             String encoded;
             try {
@@ -468,11 +465,10 @@ public class AliOssService implements OssService {
         return b;
     }
 
-    private String decryptFilenameFromKey(String key) {
+    private String extractFilenameFromKey(String key) {
         if (key == null || key.isEmpty()) return "file";
         int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-        String enc = slash >= 0 ? key.substring(slash + 1) : key;
-        String name = fileNameCodec.decrypt(enc);
-        return (name == null || name.isBlank()) ? enc : name;
+        String name = slash >= 0 ? key.substring(slash + 1) : key;
+        return name;
     }
 }

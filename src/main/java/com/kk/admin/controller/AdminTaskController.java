@@ -1,6 +1,7 @@
 package com.kk.admin.controller;
 
 import com.kk.admin.task.DeleteProjectTaskService;
+import com.kk.project.service.ProjectService;
 import com.kk.security.service.AdminPermissionService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -18,6 +19,7 @@ public class AdminTaskController {
     private final DeleteProjectTaskService deleteTaskService;
     private final com.kk.admin.task.ArchiveTaskService archiveTaskService;
     private final AdminPermissionService adminPermissionService;
+    private final ProjectService projectService;
 
     @PostMapping("/projects/{projectId}/delete-task")
     @PreAuthorize("hasRole('SUPER')")
@@ -81,7 +83,7 @@ public class AdminTaskController {
         return java.util.Map.of("taskId", t.getId(), "status", t.getStatus(), "filename", t.getFilename());
     }
 
-    // 前端打包 ZIP：后端仅返回清单（OSS 预签名直链 + 解密后的文件名）
+    // 前端打包 ZIP：后端仅返回清单（OSS 预签名直链 + 文件名）
     @GetMapping("/projects/{projectId}/archive-manifest")
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
     public java.util.Map<String,Object> archiveManifest(@PathVariable Long projectId,
@@ -111,10 +113,12 @@ public class AdminTaskController {
         map.put("expireSeconds", exp);
         map.put("totalEntries", entries.size());
         map.put("entries", entries);
-        String baseName = "project-" + projectId
-                + ((fk != null && !fk.isBlank() && fv != null && !fv.isBlank()) ? ("-" + fk + "-" + fv) : "")
-                + ".zip";
-        map.put("filename", baseName);
+        com.kk.project.entity.Project p = projectService.get(projectId);
+        String baseName = (p.getName() == null || p.getName().isBlank()) ? ("project-" + projectId) : p.getName().trim();
+        if (fk != null && !fk.isBlank() && fv != null && !fv.isBlank()) {
+            baseName = baseName + "-" + fk + "-" + fv;
+        }
+        map.put("filename", baseName + ".zip");
         return map;
     }
 

@@ -28,7 +28,6 @@ public class ArchiveTaskService {
     private final ProjectRepository projectRepository;
     private final OssService ossService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final com.kk.common.FileNameCodec fileNameCodec;
     private final OssProperties ossProperties;
 
     private final Map<String, Task> tasks = new ConcurrentHashMap<>();
@@ -58,7 +57,7 @@ public class ArchiveTaskService {
         private String key;
         // 预签名直链
         private String url;
-        // 在 ZIP 中显示的路径/文件名（已解密）
+        // 在 ZIP 中显示的路径/文件名
         private String filename;
     }
 
@@ -75,8 +74,11 @@ public class ArchiveTaskService {
         t.setStartedAt(Instant.now().toEpochMilli());
         t.setFieldKey(fieldKey);
         t.setFieldValue(fieldValue);
-        String base = "project-" + projectId + (fieldKey != null && !fieldKey.isBlank() && fieldValue != null && !fieldValue.isBlank() ? ("-" + fieldKey + "-" + fieldValue) : "") + ".zip";
-        t.setFilename(base);
+        String baseName = (p.getName() == null || p.getName().isBlank()) ? ("project-" + projectId) : p.getName().trim();
+        if (fieldKey != null && !fieldKey.isBlank() && fieldValue != null && !fieldValue.isBlank()) {
+            baseName = baseName + "-" + fieldKey + "-" + fieldValue;
+        }
+        t.setFilename(baseName + ".zip");
         tasks.put(t.getId(), t);
         executor.submit(() -> runTask(t));
         return t;
@@ -90,7 +92,7 @@ public class ArchiveTaskService {
 
     /**
      * 仅构建清单：不在服务端打包 ZIP，而是返回
-     * 每个对象的 OSS key、预签名直链以及在压缩包中的解密文件名，由前端自行并发下载与打包。
+     * 每个对象的 OSS key、预签名直链以及在压缩包中的文件名，由前端自行并发下载与打包。
      */
     public java.util.List<ManifestEntry> buildManifest(Long projectId, String fieldKey, String fieldValue, long urlExpireSeconds) {
         Project project = projectRepository.findById(projectId)
@@ -224,26 +226,26 @@ public class ArchiveTaskService {
             if (key.startsWith(p)) key = key.substring(p.length());
         }
 
-        // 2) 拆分目录与文件名，仅解密文件名
-        int slash = key.lastIndexOf('/');
-        String dir = slash >= 0 ? key.substring(0, slash + 1) : "";
-        String enc = slash >= 0 ? key.substring(slash + 1) : key;
-        String dec = fileNameCodec.decrypt(enc);
-        String name = (dec == null || dec.isBlank()) ? enc : dec;
-
-        // 3) 安全：去除路径穿越符号，并保持目录分隔符为 '/'
-        dir = (dir == null ? "" : dir).replace("..", "").replace('\\', '/');
-        // 限制目录层级：仅保留前两级（项目名/第二段），去掉可能用于去重的中间段
-        if (!dir.isEmpty()) {
-            String[] parts = dir.split("/");
-            java.util.List<String> kept = new java.util.ArrayList<>();
-            for (String pseg : parts) {
-                if (pseg == null || pseg.isEmpty()) continue;
-                kept.add(pseg);
-                if (kept.size() >= 2) break;
+        // 2) 拆分目录与文件名，并移除一次性子目录
+        String[] parts = key.split("/");
+        java.util.List<String> dirSegs = new java.util.ArrayList<>();
+        String name;
+        if (parts.length == 0) {
+            name = "file";
+        } else {
+            name = parts[parts.length - 1];
+            for (int i = 0; i < parts.length - 1; i++) {
+                String seg = parts[i];
+                if (seg == null || seg.isEmpty()) continue;
+                seg = seg.replace("..", "");
+                if (seg.isEmpty()) continue;
+                if (isOneTimeDirSegment(seg)) continue;
+                dirSegs.add(seg);
             }
-            dir = kept.isEmpty() ? "" : (String.join("/", kept) + "/");
         }
+        String dir = dirSegs.isEmpty() ? "" : (String.join("/", dirSegs) + "/");
+
+        // 3) 清理文件名中的路径穿越符
         name = (name == null ? "" : name).replace("..", "");
 
         // 4) 重名去重（针对完整路径，改写文件名部分）
@@ -260,5 +262,27 @@ public class ArchiveTaskService {
         }
         used.add(candidate);
         return candidate;
+    }
+
+    // 判断是否为一次性子目录：形如 yyyyMMddHHmmssSSS-xxxxxxxx
+    private boolean isOneTimeDirSegment(String seg) {
+        if (seg == null) return false;
+        String s = seg.trim();
+        int dash = s.indexOf('-');
+        if (dash <= 0) return false;
+        String ts = s.substring(0, dash);
+        String suf = s.substring(dash + 1);
+        if (ts.length() != 17) return false;
+        for (int i = 0; i < ts.length(); i++) {
+            if (!Character.isDigit(ts.charAt(i))) return false;
+        }
+        if (suf.length() != 8) return false;
+        for (int i = 0; i < suf.length(); i++) {
+            char c = suf.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -46,7 +46,7 @@ public class SubmissionController {
         } catch (Exception e) {
             resp.put("submitter", s.getSubmitterInfo());
         }
-        // 返回解密后的文件名列表，不返回文件URL
+        // 返回文件名列表，不返回文件URL
         try {
             List<String> urls = objectMapper.readValue(s.getFileUrls(), new TypeReference<List<String>>(){});
             java.util.List<String> names = new java.util.ArrayList<>();
@@ -54,9 +54,8 @@ public class SubmissionController {
                 for (String u : urls) {
                     String key = submissionService.getOssService().extractObjectKey(u);
                     int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-                    String enc = slash >= 0 ? key.substring(slash + 1) : key;
-                    String name = submissionService.getFileNameCodec().decrypt(enc);
-                    names.add(name == null || name.isBlank() ? enc : name);
+                    String name = slash >= 0 ? key.substring(slash + 1) : key;
+                    names.add(name);
                 }
             }
             resp.put("fileNames", names);
@@ -105,7 +104,7 @@ public class SubmissionController {
         Project p = projectService.get(projectId);
         String submitterJson = toJson(body.getSubmitter());
         String keyPrefix = submissionService.buildUploadPrefix(p, submitterJson);
-        // 一次性子目录，避免覆盖
+        // 一次性子目录，避免覆盖：同一提交者多次上传相同文件名也不会互相覆盖
         String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
                 .format(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))
                 + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
@@ -115,8 +114,7 @@ public class SubmissionController {
         java.util.List<java.util.Map<String,Object>> entries = new java.util.ArrayList<>();
         final int partSize = 10 * 1024 * 1024; // 10MB 建议分片大小
         for (DirectInitRequest.FileMeta fm : body.getFiles()) {
-            String enc = submissionService.getFileNameCodec().encrypt(fm.getName());
-            String key = submissionService.normalizeFullKey(keyPrefix, enc);
+            String key = submissionService.normalizeFullKey(keyPrefix, fm.getName());
             String uploadId = submissionService.getOssService().initiateMultipartUpload(key);
             java.util.Map<String,Object> e = new java.util.HashMap<>();
             e.put("name", fm.getName());
@@ -165,8 +163,7 @@ public class SubmissionController {
         java.util.List<Map<String,Object>> entries = new java.util.ArrayList<>();
         for (DirectInitRequest.FileMeta fm : body.getFiles()) {
             String originalName = fm.getName();
-            String enc = submissionService.getFileNameCodec().encrypt(originalName);
-            String key = submissionService.normalizeFullKey(keyPrefix, enc);
+            String key = submissionService.normalizeFullKey(keyPrefix, originalName);
             long size = Math.max(0L, fm.getSize() == null ? 0L : fm.getSize());
             // 过期时间按文件大小动态设置：至少10分钟，至多2小时；估算速率 64KB/s + 额外 5 分钟冗余
             long estimate = size <= 0 ? 600 : (size / 65536) + 300;
@@ -279,7 +276,11 @@ public class SubmissionController {
                                                              @RequestParam(required = false) String fieldValue) {
         Project p = projectService.get(projectId);
         StreamingResponseBody body = submissionService.archive(p, fieldKey, fieldValue, null);
-        String name = "project-" + projectId + (fieldKey != null && fieldValue != null ? ("-"+fieldKey+"-"+fieldValue): "") + ".zip";
+        String base = (p.getName() == null || p.getName().isBlank()) ? ("project-" + projectId) : p.getName().trim();
+        if (fieldKey != null && !fieldKey.isBlank() && fieldValue != null && !fieldValue.isBlank()) {
+            base = base + "-" + fieldKey + "-" + fieldValue;
+        }
+        String name = base + ".zip";
         // ASCII 回退：header 中的 filename 仅允许 ASCII
         String ascii = name.replaceAll("[^\\x20-\\x7E]", "_");
         String encoded;
@@ -301,7 +302,11 @@ public class SubmissionController {
                                                                                 @RequestParam(required = false) String fieldKey,
                                                                                 @RequestParam(required = false) String fieldValue) {
         Project p = projectService.get(projectId);
-        String name = "project-" + projectId + (fieldKey != null && fieldValue != null ? ("-"+fieldKey+"-"+fieldValue): "") + ".zip";
+        String base = (p.getName() == null || p.getName().isBlank()) ? ("project-" + projectId) : p.getName().trim();
+        if (fieldKey != null && !fieldKey.isBlank() && fieldValue != null && !fieldValue.isBlank()) {
+            base = base + "-" + fieldKey + "-" + fieldValue;
+        }
+        String name = base + ".zip";
         java.io.File file = submissionService.prepareArchiveFile(p, fieldKey, fieldValue, name);
         org.springframework.core.io.FileSystemResource res = new org.springframework.core.io.FileSystemResource(file);
         String ascii = name.replaceAll("[^\\x20-\\x7E]", "_");
@@ -347,7 +352,7 @@ public class SubmissionController {
         resp.put("submitCount", s.getSubmitCount());
         resp.put("expired", s.getExpired());
         resp.put("createdAt", s.getCreatedAt() == null ? null : s.getCreatedAt().toEpochMilli());
-        // 返回解密后的最新一次提交的文件名
+        // 返回最新一次提交的文件名
         resp.put("fileNames", extractDecryptedNames(s));
 
         // 版本链（从新到旧）
@@ -379,9 +384,8 @@ public class SubmissionController {
                 for (String u : urls) {
                     String key = submissionService.getOssService().extractObjectKey(u);
                     int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-                    String enc = slash >= 0 ? key.substring(slash + 1) : key;
-                    String name = submissionService.getFileNameCodec().decrypt(enc);
-                    names.add(name == null || name.isBlank() ? enc : name);
+                    String name = slash >= 0 ? key.substring(slash + 1) : key;
+                    names.add(name);
                 }
             }
             return names;
