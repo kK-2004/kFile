@@ -233,7 +233,7 @@ public class ArchiveTaskService {
         if (parts.length == 0) {
             name = "file";
         } else {
-            name = parts[parts.length - 1];
+            name = ossService.downloadFilenameFromKey(parts[parts.length - 1]);
             for (int i = 0; i < parts.length - 1; i++) {
                 String seg = parts[i];
                 if (seg == null || seg.isEmpty()) continue;

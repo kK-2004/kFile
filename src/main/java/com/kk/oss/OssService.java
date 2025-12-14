@@ -18,6 +18,13 @@ public interface OssService {
 
     default java.io.InputStream openByKey(String key) { throw new UnsupportedOperationException(); }
 
+    // 解析用于下载展示的文件名（兼容历史“加密文件名”对象 key）
+    default String downloadFilenameFromKey(String key) {
+        if (key == null || key.isEmpty()) return "file";
+        int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+        return slash >= 0 ? key.substring(slash + 1) : key;
+    }
+
     // 生成带有效期的下载直链；若实现不支持请抛出 UnsupportedOperationException
     default String generatePresignedUrlByKey(String key, boolean forceDownload, long expireSeconds, boolean preferInternal) {
         throw new UnsupportedOperationException();

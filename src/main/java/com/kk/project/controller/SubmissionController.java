@@ -53,9 +53,7 @@ public class SubmissionController {
             if (urls != null) {
                 for (String u : urls) {
                     String key = submissionService.getOssService().extractObjectKey(u);
-                    int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-                    String name = slash >= 0 ? key.substring(slash + 1) : key;
-                    names.add(name);
+                    names.add(submissionService.getOssService().downloadFilenameFromKey(key));
                 }
             }
             resp.put("fileNames", names);
@@ -394,9 +392,7 @@ public class SubmissionController {
             if (urls != null) {
                 for (String u : urls) {
                     String key = submissionService.getOssService().extractObjectKey(u);
-                    int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-                    String name = slash >= 0 ? key.substring(slash + 1) : key;
-                    names.add(name);
+                    names.add(submissionService.getOssService().downloadFilenameFromKey(key));
                 }
             }
             return names;

@@ -1,8 +1,6 @@
 package com.kk.file;
 
 import com.kk.oss.OssService;
-import com.kk.oss.AliOssService;
-import com.kk.config.OssProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
@@ -37,7 +35,6 @@ public class FileProxyController {
                 key = java.net.URLDecoder.decode(toDecode, java.nio.charset.StandardCharsets.UTF_8);
             }
         } catch (Exception ignored) {}
-        String filename = extractFilenameFromKey(key);
         boolean forceDownload = "1".equals(request.getParameter("download"));
         boolean forceProxy = "1".equals(request.getParameter("proxy"));
 
@@ -49,6 +46,7 @@ public class FileProxyController {
 
         // 兼容：强制通过本站代理（会占用本站带宽）
         com.kk.oss.OssService.ObjectStat stat = ossService.statByKey(key);
+        String filename = ossService.downloadFilenameFromKey(key);
         MediaType mediaType;
         if (stat.contentType != null && !stat.contentType.isBlank()) {
             try { mediaType = MediaType.parseMediaType(stat.contentType); }
@@ -114,12 +112,6 @@ public class FileProxyController {
                    .contentType(mediaType);
         }
         return builder.body(new InputStreamResource(in));
-    }
-
-    private String extractFilenameFromKey(String key) {
-        if (key == null || key.isEmpty()) return "file";
-        int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-        return slash >= 0 ? key.substring(slash + 1) : key;
     }
 
     private String httpDate(java.util.Date d) {

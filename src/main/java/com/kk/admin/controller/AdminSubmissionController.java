@@ -176,9 +176,7 @@ public class AdminSubmissionController {
             if (fs != null) {
                 for (String u : fs) {
                     String key = oss.extractObjectKey(u);
-                    int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
-                    String name = slash >= 0 ? key.substring(slash + 1) : key;
-                    names.add(name);
+                    names.add(oss.downloadFilenameFromKey(key));
                 }
             }
             resp.put("fileNames", names);

@@ -16,4 +16,8 @@ public class OssProperties {
     private String sk;       // access key secret
     private String bucket;   // bucket name
     private String host;     // https://bucket.oss-cn-xxx.aliyuncs.com/
+
+    // legacy: 用于解密历史 OSS 对象 key 中的加密文件名（不再用于新上传）
+    // 配置项保持兼容：oss.filename-secret
+    private String filenameSecret;
 }

@@ -30,6 +30,7 @@ import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 @Slf4j
@@ -379,18 +380,32 @@ public class AliOssService implements OssService {
         OSS client = ossClientPublic;
         GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), key, HttpMethod.GET);
         req.setExpiration(expiration);
-        if (forceDownload) {
-            // Content-Disposition 通过响应头参数传递
-            String filename = extractFilenameFromKey(key);
+        // Content-Disposition 通过响应头参数传递
+        String filename = downloadFilenameFromKey(key);
+        String rawSegment = extractFilenameFromKey(key);
+        boolean legacyEncoded = rawSegment != null && !rawSegment.isBlank() && !rawSegment.equals(filename);
+        if (forceDownload || legacyEncoded) {
             String ascii = filename.replaceAll("[^\\x20-\\x7E]", "_");
             String encoded;
             try {
                 encoded = java.net.URLEncoder.encode(filename, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
             } catch (Exception e) { encoded = ascii; }
-            req.addQueryParameter("response-content-disposition", "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded);
+            String dispo = (forceDownload ? "attachment" : "inline")
+                    + "; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded;
+            req.addQueryParameter("response-content-disposition", dispo);
         }
         java.net.URL url = client.generatePresignedUrl(req);
         return url.toString();
+    }
+
+    @Override
+    public String downloadFilenameFromKey(String key) {
+        String raw = extractFilenameFromKey(key);
+        if (!StringUtils.hasText(raw)) return "file";
+        String decoded = legacyDecryptFilename(raw);
+        // 兜底：避免路径穿越/空文件名
+        String safe = baseName(decoded);
+        return StringUtils.hasText(safe) ? safe : baseName(raw);
     }
 
     @Override
@@ -470,5 +485,37 @@ public class AliOssService implements OssService {
         int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
         String name = slash >= 0 ? key.substring(slash + 1) : key;
         return name;
+    }
+
+    private String legacyDecryptFilename(String encrypted) {
+        if (!StringUtils.hasText(encrypted)) return encrypted;
+        try {
+            if (encrypted.startsWith("f_")) {
+                String b64 = encrypted.substring(2);
+                byte[] enc = Base64.getUrlDecoder().decode(b64);
+                javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding");
+                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, new javax.crypto.spec.SecretKeySpec(legacyKeyBytes(), "AES"));
+                byte[] dec = cipher.doFinal(enc);
+                String s = new String(dec, java.nio.charset.StandardCharsets.UTF_8);
+                return StringUtils.hasText(s) ? s : encrypted;
+            }
+            if (encrypted.startsWith("b_")) {
+                String b64 = encrypted.substring(2);
+                String s = new String(Base64.getUrlDecoder().decode(b64), java.nio.charset.StandardCharsets.UTF_8);
+                return StringUtils.hasText(s) ? s : encrypted;
+            }
+            return encrypted;
+        } catch (Exception e) {
+            return encrypted;
+        }
+    }
+
+    private byte[] legacyKeyBytes() {
+        String secret = properties.getFilenameSecret();
+        if (!StringUtils.hasText(secret)) secret = "default-filename-secret";
+        byte[] src = secret.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] key = new byte[16]; // AES-128
+        for (int i = 0; i < key.length; i++) key[i] = i < src.length ? src[i] : 0;
+        return key;
     }
 }
