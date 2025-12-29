@@ -312,7 +312,12 @@ import java.util.*;
     /**
      * 根据项目配置与提交者字段计算“存储文件名”（保留原扩展名）。
      * 配置结构示例：
-     * { "fields": ["major","class","sid"], "separator": " ", "aliases": { "major": {"计算机":"计"} } }
+     * {
+     *   "fields": ["major","class","sid","course"],
+     *   "separator": " ",
+     *   "aliases": { "major": {"计算机":"计"} },
+     *   "customFields": [{ "key":"course","label":"课程","value":"数据结构" }]
+     * }
      */
     public String computeAutoFileName(Project project, String submitterJson, String originalFilename, int index, int total) {
         AutoFileNamingConfig cfg = parseAutoFileNamingConfig(project);
@@ -325,6 +330,10 @@ import java.util.*;
             if (!StringUtils.hasText(key)) continue;
             String raw = extractFieldValue(submitterJson, key);
             String v = raw == null ? "" : raw.trim();
+            if (!StringUtils.hasText(v)) {
+                String fromCustom = cfg.customFieldValues().getOrDefault(key, "");
+                v = fromCustom == null ? "" : fromCustom.trim();
+            }
             if (!StringUtils.hasText(v)) {
                 throw new IllegalArgumentException("自动命名缺少字段: " + key);
             }
@@ -388,7 +397,27 @@ import java.util.*;
                     aliases.put(fieldKey, one);
                 }
             }
-            return new AutoFileNamingConfig(fields, separator, aliases);
+
+            Map<String, String> customFieldValues = new HashMap<>();
+            Object customRaw = m.get("customFields");
+            if (customRaw instanceof Map<?, ?> cmap) {
+                for (Map.Entry<?, ?> e : cmap.entrySet()) {
+                    String k = e.getKey() == null ? "" : String.valueOf(e.getKey()).trim();
+                    String v = e.getValue() == null ? "" : String.valueOf(e.getValue()).trim();
+                    if (StringUtils.hasText(k) && StringUtils.hasText(v)) customFieldValues.put(k, v);
+                }
+            } else if (customRaw instanceof List<?> arr) {
+                for (Object o : arr) {
+                    if (!(o instanceof Map<?, ?> obj)) continue;
+                    Object kRaw = obj.get("key");
+                    Object vRaw = obj.get("value");
+                    String k = kRaw == null ? "" : String.valueOf(kRaw).trim();
+                    String v = vRaw == null ? "" : String.valueOf(vRaw).trim();
+                    if (StringUtils.hasText(k) && StringUtils.hasText(v)) customFieldValues.put(k, v);
+                }
+            }
+
+            return new AutoFileNamingConfig(fields, separator, aliases, customFieldValues);
         } catch (Exception e) {
             // 配置损坏时：按未启用处理，避免影响提交
             return null;
@@ -415,7 +444,8 @@ import java.util.*;
     private record AutoFileNamingConfig(
             List<String> fields,
             String separator,
-            Map<String, Map<String, String>> aliases
+            Map<String, Map<String, String>> aliases,
+            Map<String, String> customFieldValues
     ) {}
 
     private static class RenamedMultipartFile implements MultipartFile {

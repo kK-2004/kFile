@@ -183,7 +183,7 @@
 
             <div class="form-content">
               <div class="custom-table-wrapper">
-                <el-table :data="expectedFields" row-key="key" class="modern-table" ref="fieldsTable" empty-text="暂无配置，请点击右上方添加">
+                <el-table :data="expectedFields" row-key="_rid" class="modern-table" ref="fieldsTable" empty-text="暂无配置，请点击右上方添加">
                   <el-table-column width="40" align="center">
                     <template #default>
                       <div class="drag-handle-icon">⋮⋮</div>
@@ -269,6 +269,36 @@
                 </el-form-item>
               </div>
 
+              <div class="section-subtitle">管理员自定义字段</div>
+              <div class="custom-table-wrapper">
+                <div class="table-actions">
+                  <el-button type="primary" :icon="Plus" @click="addAutoNameCustomField">添加自定义字段</el-button>
+                  <span class="text-gray">自定义字段不会出现在用户提交表单，可在下方“字段顺序”中引用其 Key。</span>
+                </div>
+                <el-table :data="autoNameCustomFields" class="modern-table" empty-text="暂无自定义字段">
+                  <el-table-column label="Key" min-width="160">
+                    <template #default="{ row }">
+                      <el-input v-model="row.key" placeholder="如: course" class="table-input" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="显示名称" min-width="160">
+                    <template #default="{ row }">
+                      <el-input v-model="row.label" placeholder="如: 课程" class="table-input" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="值（固定）" min-width="200">
+                    <template #default="{ row }">
+                      <el-input v-model="row.value" placeholder="如: 数据结构" class="table-input" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column width="60" align="center">
+                    <template #default="{ $index }">
+                      <el-button link type="danger" :icon="Delete" @click="removeAutoNameCustomField($index)" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+
               <div class="section-subtitle">字段顺序</div>
               <div class="custom-table-wrapper">
                 <div class="table-actions">
@@ -285,10 +315,10 @@
                     <template #default="{ row }">
                       <el-select v-model="row.value" placeholder="选择字段" class="table-input">
                         <el-option
-                            v-for="f in expectedFields"
+                            v-for="f in autoNameFieldOptions"
                             :key="f.key"
                             :value="f.key"
-                            :label="`${f.label} (${f.key})`"
+                            :label="`${f.label} (${f.key})${f.source === 'custom' ? ' [自定义]' : ''}`"
                         />
                       </el-select>
                     </template>
@@ -501,6 +531,8 @@ const typeSelectable = computed(()=>{
   return Array.from(set)
 })
 const expectedFields = ref([])
+let _ridSeed = 1
+const nextRid = () => `rid_${Date.now()}_${_ridSeed++}`
 const pathSegments = ref([]) // 例如: ['$project','studentNo']
 const fieldsTable = ref()
 const segmentsTable = ref()
@@ -530,7 +562,20 @@ const nameFieldsTable = ref()
 const separatorChoice = ref(' ')
 const separatorCustom = ref('')
 const autoAliases = ref({}) // { fieldKey: { option: alias } }
+const autoNameCustomFields = ref([]) // [{ key, label, value }]
 const separatorValue = computed(() => separatorChoice.value === '__custom__' ? (separatorCustom.value ?? '') : separatorChoice.value)
+const autoNameFieldOptions = computed(() => {
+  const out = []
+  for (const f of (expectedFields.value || [])) {
+    if (!f?.key) continue
+    out.push({ key: f.key, label: f.label || f.key, source: 'user' })
+  }
+  for (const f of (autoNameCustomFields.value || [])) {
+    if (!f?.key) continue
+    out.push({ key: f.key, label: f.label || f.key, source: 'custom' })
+  }
+  return out
+})
 const autoNameSelectFields = computed(() => {
   const keys = new Set(autoNameFields.value.map(x => x.value).filter(Boolean))
   return expectedFields.value.filter(f => keys.has(f.key) && (f.type || 'text') === 'select')
@@ -541,8 +586,10 @@ const autoNamePreview = computed(() => {
       .map(x => x.value)
       .filter(Boolean)
       .map(k => {
-        const f = expectedFields.value.find(e => e.key === k)
-        return f ? f.label : k
+        const u = expectedFields.value.find(e => e.key === k)
+        if (u) return u.label || k
+        const c = (autoNameCustomFields.value || []).find(e => e.key === k)
+        return (c && (c.label || c.key)) ? (c.label || c.key) : k
       })
   if (!parts.length) return ''
   return parts.join(sep) + '.ext'
@@ -741,6 +788,7 @@ function applyAutoDetect() {
   try {
     // 1) 生成期望字段
     expectedFields.value = autoFieldPreview.value.map(f => ({
+      _rid: nextRid(),
       key: f.key,
       label: f.key,
       placeholder: '',
@@ -801,6 +849,7 @@ const load = async () => {
   }
   allowedTypes.value = data.allowedFileTypes || []
   expectedFields.value = Array.isArray(data.expectedUserFields) ? data.expectedUserFields.map(f=>({
+    _rid: nextRid(),
     key: f.key,
     label: f.label,
     placeholder: f.placeholder || '',
@@ -841,6 +890,22 @@ const load = async () => {
   autoFileNamingEnabled.value = !!data.autoFileNamingEnabled
   const cfg = (data.autoFileNamingConfig && typeof data.autoFileNamingConfig === 'object') ? data.autoFileNamingConfig : {}
   autoNameFields.value = Array.isArray(cfg.fields) ? cfg.fields.map(v => ({ value: v })) : []
+  if (Array.isArray(cfg.customFields)) {
+    autoNameCustomFields.value = cfg.customFields.map(x => ({
+      key: x?.key == null ? '' : String(x.key),
+      label: x?.label == null ? '' : String(x.label),
+      value: x?.value == null ? '' : String(x.value)
+    }))
+  } else if (cfg.customFields && typeof cfg.customFields === 'object') {
+    // 兼容 map 结构：{ key: value }
+    autoNameCustomFields.value = Object.entries(cfg.customFields).map(([k, v]) => ({
+      key: String(k),
+      label: String(k),
+      value: v == null ? '' : String(v)
+    }))
+  } else {
+    autoNameCustomFields.value = []
+  }
   const sep = cfg.separator == null ? ' ' : String(cfg.separator)
   const presets = new Set([' ', '+', '-', '_', ''])
   if (presets.has(sep)) {
@@ -944,16 +1009,35 @@ const save = async () => {
     // 自动命名文件：组装配置
     payload.autoFileNamingEnabled = !!autoFileNamingEnabled.value
     const nameFields = autoNameFields.value.map(x => x.value).filter(Boolean)
+    // 校验自定义字段
+    const expectedKeySet = new Set(expectedFields.value.map(f => f.key).filter(Boolean))
+    const customKeySet = new Set()
+    const cleanedCustomFields = []
+    for (const f of (autoNameCustomFields.value || [])) {
+      const k = String(f?.key ?? '').trim()
+      const label = String(f?.label ?? '').trim()
+      const val = String(f?.value ?? '').trim()
+      if (!k && !label && !val) continue
+      if (!k || !label) throw new Error('自定义字段的 Key 和 显示名称 不能为空')
+      if (k === '$project') throw new Error('自定义字段 Key 不可为 $project')
+      if (!val) throw new Error('自定义字段值不能为空: ' + k)
+      if (expectedKeySet.has(k)) throw new Error('自定义字段 Key 与用户字段冲突: ' + k)
+      if (customKeySet.has(k)) throw new Error('自定义字段 Key 不可重复: ' + k)
+      customKeySet.add(k)
+      cleanedCustomFields.push({ key: k, label, value: val })
+    }
+    const allNameKeys = new Set([ ...expectedKeySet, ...customKeySet ])
     if (payload.autoFileNamingEnabled) {
       if (!nameFields.length) throw new Error('已开启自动命名，但未配置字段顺序')
       for (const k of nameFields) {
-        if (!expectedFields.value.some(f => f.key === k)) throw new Error('自动命名包含未知字段: ' + k)
+        if (!allNameKeys.has(k)) throw new Error('自动命名包含未知字段: ' + k)
       }
     }
     payload.autoFileNamingConfig = {
       fields: nameFields,
       separator: separatorValue.value ?? '',
-      aliases: autoAliases.value || {}
+      aliases: autoAliases.value || {},
+      customFields: cleanedCustomFields
     }
     // 提交者限制：若开启自动限制，则直接使用已识别的 keys + JSON 列表
     const akeys = Array.isArray(payload.allowedSubmitterKeys) ? payload.allowedSubmitterKeys.filter(Boolean) : []
@@ -1009,6 +1093,7 @@ const save = async () => {
 
 const addField = () => {
   expectedFields.value.push({
+    _rid: nextRid(),
     key: '',
     label: '',
     required: false,
@@ -1022,6 +1107,8 @@ const addSeg = () => { pathSegments.value.push({ value: '$project' }); bindSegDr
 const removeSeg = (idx) => { pathSegments.value.splice(idx, 1); bindSegDrag() }
 const addAutoNameField = () => { autoNameFields.value.push({ value: '' }); bindAutoNameDrag() }
 const removeAutoNameField = (idx) => { autoNameFields.value.splice(idx, 1); bindAutoNameDrag() }
+const addAutoNameCustomField = () => { autoNameCustomFields.value.push({ key: '', label: '', value: '' }) }
+const removeAutoNameCustomField = (idx) => { autoNameCustomFields.value.splice(idx, 1) }
 // 上移/下移由拖拽排序代替
 const auth = useAuthStore()
 onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })

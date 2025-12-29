@@ -515,10 +515,13 @@ const autoNamingHint = computed(() => {
       ? project.value.autoFileNamingConfig
       : {}
   const fields = Array.isArray(cfg.fields) ? cfg.fields.filter(Boolean) : []
+  const customFields = Array.isArray(cfg.customFields) ? cfg.customFields : []
   const sep = cfg.separator == null ? ' ' : String(cfg.separator)
   const labelOf = (k) => {
     const f = (expectedFields.value || []).find(x => x.key === k)
-    return f?.label || k
+    if (f?.label) return f.label
+    const c = customFields.find(x => x && x.key === k)
+    return c?.label || k
   }
   if (!fields.length) {
     return '本项目已开启文件自动命名：上传后文件名将由系统根据填写信息自动生成。'
