@@ -609,38 +609,78 @@ const triggerFileSelect = () => {
   fileInput.value?.click()
 }
 
-const onFileInputChange = (event) => {
-  const filesArr = Array.from(event.target.files || [])
-  filesArr.forEach(file => {
-    // 创建 ElUpload 兼容的文件对象
-    const fileObj = {
+const syncNativeFilesFromFileList = () => {
+  files.value = (fileList.value || [])
+      .map(f => f?.raw || f)
+      .filter(f => f && typeof f.size === 'number')
+}
+
+const getProjectUploadLimit = () => (project.value?.allowMultiFiles ? 10 : 1)
+
+const addSelectedFiles = (incomingFiles) => {
+  if (!incomingFiles || !incomingFiles.length) return
+  if (!project.value?.allowResubmit && latest.value.exists) return
+
+  const limit = getProjectUploadLimit()
+  const allowMulti = !!project.value?.allowMultiFiles
+
+  if (!allowMulti && fileList.value.length >= 1) {
+    ElMessage.warning('当前项目仅支持单文件上传，请先删除已选文件')
+    return
+  }
+
+  const remaining = limit - fileList.value.length
+  if (remaining <= 0) {
+    ElMessage.warning(`最多只能选择 ${limit} 个文件`)
+    return
+  }
+
+  const normalized = (incomingFiles || [])
+      .filter(f => f && typeof f.size === 'number')
+      .slice(0, remaining)
+
+  if (!allowMulti && incomingFiles.length > 1) {
+    ElMessage.warning('当前项目仅支持单文件上传，已自动保留第 1 个文件')
+  } else if (incomingFiles.length > remaining) {
+    ElMessage.warning(`最多只能选择 ${limit} 个文件，已自动忽略超出部分`)
+  }
+
+  normalized.forEach(file => {
+    fileList.value.push({
       name: file.name,
       size: file.size,
       raw: file,
       status: 'ready',
       uid: Date.now() + Math.random()
-    }
-    fileList.value.push(fileObj)
+    })
   })
-  // 同步原生 File 列表
-  files.value = fileList.value
-      .map(f => f?.raw || f)
-      .filter(f => f && typeof f.size === 'number')
+
+  syncNativeFilesFromFileList()
+}
+
+const onFileInputChange = (event) => {
+  const filesArr = Array.from(event.target.files || [])
+  addSelectedFiles(filesArr)
   event.target.value = '' // 清空input
 }
 
 const onFileChange = (file, fileListParam) => {
-  fileList.value = fileListParam
-  files.value = (fileListParam || [])
-      .map(f => f?.raw || f)
-      .filter(f => f && typeof f.size === 'number')
+  // 兜底：即使未来改回使用 ElUpload 作为入口，也要在入栈时限制多文件/数量
+  const nextList = Array.isArray(fileListParam) ? fileListParam : []
+  const limit = getProjectUploadLimit()
+  const trimmed = nextList.slice(0, limit)
+  if (!project.value?.allowMultiFiles && nextList.length > 1) {
+    ElMessage.warning('当前项目仅支持单文件上传，已自动保留第 1 个文件')
+  } else if (nextList.length > limit) {
+    ElMessage.warning(`最多只能选择 ${limit} 个文件，已自动忽略超出部分`)
+  }
+  fileList.value = trimmed
+  syncNativeFilesFromFileList()
 }
 
 const onFileRemove = (file, fileListParam) => {
   fileList.value = fileListParam
-  files.value = (fileListParam || [])
-      .map(f => f?.raw || f)
-      .filter(f => f && typeof f.size === 'number')
+  syncNativeFilesFromFileList()
 }
 
 const removeFile = (index) => {
@@ -665,6 +705,17 @@ const validateFiles = () => {
 
   if (!files.value.length) {
     ElMessage.error('请先选择文件')
+    return false
+  }
+
+  // 多文件能力校验：在真正上传到 OSS 之前先拦截，避免“已上传但未落库”
+  const limit = getProjectUploadLimit()
+  if (files.value.length > limit) {
+    if (!project.value?.allowMultiFiles) {
+      ElMessage.error('当前项目仅支持单文件上传')
+    } else {
+      ElMessage.error(`最多只能上传 ${limit} 个文件`)
+    }
     return false
   }
 
@@ -855,23 +906,8 @@ const handleDrop = (event) => {
   event.preventDefault()
   isDragging.value = false
 
-  if (!project.value?.allowResubmit && latest.value.exists) return
-
   const droppedFiles = Array.from(event.dataTransfer.files || [])
-  droppedFiles.forEach(file => {
-    const fileObj = {
-      name: file.name,
-      size: file.size,
-      raw: file,
-      status: 'ready',
-      uid: Date.now() + Math.random()
-    }
-    fileList.value.push(fileObj)
-  })
-  // 同步原生 File 列表
-  files.value = fileList.value
-      .map(f => f?.raw || f)
-      .filter(f => f && typeof f.size === 'number')
+  addSelectedFiles(droppedFiles)
 }
 
 // 输入变化时重置查询结果展示状态
