@@ -656,7 +656,7 @@ const clearFiles = () => {
 // 校验文件类型/大小与必填项
 const validateFiles = () => {
   // 必填字段
-  for (const field of expectedFields.value || []) {
+  for (const field of visibleExpectedFields.value || []) {
     if (field.required && !submitter.value?.[field.key]) {
       ElMessage.error(`请填写：${field.label || field.key}`)
       return false

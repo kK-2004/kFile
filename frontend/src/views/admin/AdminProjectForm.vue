@@ -518,7 +518,7 @@ const saving = ref(false)
 const form = ref({
   name: '',
   allowResubmit: true,
-  allowMultiFiles: true,
+  allowMultiFiles: false,
   allowOverdue: false,
   userSubmitStatusType: 'info',
   userSubmitStatusText: '',
@@ -953,6 +953,25 @@ onMounted(load)
 watch(expectedFields, () => bindRowDrag(), { deep: true })
 watch(pathSegments, () => bindSegDrag(), { deep: true })
 watch(autoNameFields, () => bindAutoNameDrag(), { deep: true })
+// 当字段改为“非必填”时，自动关闭“显示”
+const requiredSnapshot = new Map()
+watch(expectedFields, () => {
+  const list = expectedFields.value || []
+  const alive = new Set()
+  for (const f of list) {
+    if (!f) continue
+    const rid = f._rid
+    alive.add(rid)
+    const prev = requiredSnapshot.get(rid)
+    const now = !!f.required
+    if (prev === true && now === false) f.display = false
+    requiredSnapshot.set(rid, now)
+  }
+  // 清理已删除行
+  for (const k of requiredSnapshot.keys()) {
+    if (!alive.has(k)) requiredSnapshot.delete(k)
+  }
+}, { deep: true, immediate: true })
 watch([expectedFields, autoNameFields], () => {
   // 别名配置跟随字段/选项变化（仅保留仍存在的字段）
   const current = autoAliases.value || {}

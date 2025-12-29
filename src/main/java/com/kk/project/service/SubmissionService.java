@@ -38,8 +38,8 @@ public class SubmissionService {
                              String ipAddress, String userAgent) {
         Project project = projectService.get(projectId);
         validateWindow(project);
-        validateSubmitterAllowed(project, submitterJson);
         submitterJson = prepareSubmitterJson(project, submitterJson);
+        validateSubmitterAllowed(project, submitterJson);
         List<String> types = projectService.parseTypes(project);
         // validate files before upload
         if (files == null || files.isEmpty()) {
@@ -137,8 +137,8 @@ public class SubmissionService {
     public Submission submitDirectCompleted(Project project, String submitterJson, java.util.List<String> keys,
                                             String ipAddress, String userAgent) {
         validateWindow(project);
-        validateSubmitterAllowed(project, submitterJson);
         submitterJson = prepareSubmitterJson(project, submitterJson);
+        validateSubmitterAllowed(project, submitterJson);
         if (keys == null || keys.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
         if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && keys.size() > 1) {
             throw new IllegalArgumentException("该项目不允许一次上传多个文件");
@@ -217,17 +217,21 @@ public class SubmissionService {
             String keysJson = project.getAllowedSubmitterKeys();
             String listJson = project.getAllowedSubmitterList();
             if (keysJson == null || keysJson.isBlank() || listJson == null || listJson.isBlank()) return; // no restriction
-            java.util.List<String> keys = objectMapper.readValue(keysJson, objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+            java.util.List<String> keys = objectMapper.readValue(
+                    keysJson,
+                    objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class)
+            );
             if (keys == null || keys.isEmpty()) return;
 
             // Normalize submitter values
             JsonNode submitter = objectMapper.readTree(submitterJson == null || submitterJson.isBlank() ? "{}" : submitterJson);
+            JsonNode arr = objectMapper.readTree(listJson);
+
             if (keys.size() == 1) {
                 String k = keys.get(0);
                 String val = submitter != null && submitter.has(k) && !submitter.get(k).isNull() ? submitter.get(k).asText("").trim() : "";
                 if (val.isEmpty()) throw new IllegalStateException("提交者不在允许名单：缺少 " + k);
                 java.util.Set<String> allowed = new java.util.HashSet<>();
-                JsonNode arr = objectMapper.readTree(listJson);
                 if (arr != null && arr.isArray()) {
                     for (JsonNode n : arr) {
                         if (n.isTextual()) {
@@ -246,7 +250,6 @@ public class SubmissionService {
             } else {
                 // composite keys
                 java.util.Set<String> allowed = new java.util.HashSet<>();
-                JsonNode arr = objectMapper.readTree(listJson);
                 if (arr != null && arr.isArray()) {
                     for (JsonNode n : arr) {
                         if (!n.isObject()) continue;
