@@ -25,7 +25,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-    public class SubmissionService {
+public class SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final ProjectService projectService;
     private final OssService ossService;
@@ -39,6 +39,7 @@ import java.util.*;
         Project project = projectService.get(projectId);
         validateWindow(project);
         validateSubmitterAllowed(project, submitterJson);
+        submitterJson = prepareSubmitterJson(project, submitterJson);
         List<String> types = projectService.parseTypes(project);
         // validate files before upload
         if (files == null || files.isEmpty()) {
@@ -137,6 +138,7 @@ import java.util.*;
                                             String ipAddress, String userAgent) {
         validateWindow(project);
         validateSubmitterAllowed(project, submitterJson);
+        submitterJson = prepareSubmitterJson(project, submitterJson);
         if (keys == null || keys.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
         if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && keys.size() > 1) {
             throw new IllegalArgumentException("该项目不允许一次上传多个文件");
@@ -281,6 +283,118 @@ import java.util.*;
     // Expose a safe checker for controller to validate without side effects
     public void assertSubmitterAllowed(Project project, String submitterJson) {
         validateSubmitterAllowed(project, submitterJson);
+    }
+
+    /**
+     * When the project has an allowed submitter list imported from a table (object array),
+     * enrich submitter JSON by matching allowedSubmitterKeys and filling missing fields
+     * (e.g. only provide "studentId", auto-fill "name").
+     */
+    public String prepareSubmitterJson(Project project, String submitterJson) {
+        try {
+            if (project == null) return submitterJson;
+            String keysJson = project.getAllowedSubmitterKeys();
+            String listJson = project.getAllowedSubmitterList();
+            if (keysJson == null || keysJson.isBlank() || listJson == null || listJson.isBlank()) return submitterJson;
+
+            com.fasterxml.jackson.databind.JsonNode submitterNode = objectMapper.readTree(
+                    (submitterJson == null || submitterJson.isBlank()) ? "{}" : submitterJson
+            );
+            if (submitterNode == null || !submitterNode.isObject()) return submitterJson;
+            com.fasterxml.jackson.databind.node.ObjectNode submitterObj = (com.fasterxml.jackson.databind.node.ObjectNode) submitterNode;
+
+            com.fasterxml.jackson.databind.JsonNode arr = objectMapper.readTree(listJson);
+            if (arr == null || !arr.isArray()) return submitterJson;
+
+            // Prefer matching by queryFieldKey (common: 学号/sid) so user can fill only one visible field.
+            java.util.List<String> matchKeys = new java.util.ArrayList<>();
+            if (org.springframework.util.StringUtils.hasText(project.getQueryFieldKey())) {
+                matchKeys.add(project.getQueryFieldKey().trim());
+            } else {
+                java.util.List<String> keys = objectMapper.readValue(
+                        keysJson,
+                        objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class)
+                );
+                if (keys != null) {
+                    for (String k : keys) if (k != null && !k.isBlank()) matchKeys.add(k.trim());
+                }
+            }
+            if (matchKeys.isEmpty()) return submitterJson;
+
+            java.util.Map<String, String> match = new java.util.LinkedHashMap<>();
+            for (String k : matchKeys) {
+                com.fasterxml.jackson.databind.JsonNode v = submitterObj.get(k);
+                String s = v == null || v.isNull() ? "" : v.asText("").trim();
+                if (s.isEmpty()) return submitterJson;
+                match.put(k, s);
+            }
+
+            for (com.fasterxml.jackson.databind.JsonNode row : arr) {
+                if (row == null || !row.isObject()) continue;
+                boolean ok = true;
+                for (java.util.Map.Entry<String, String> e : match.entrySet()) {
+                    com.fasterxml.jackson.databind.JsonNode rv = row.get(e.getKey());
+                    String rs = rv == null || rv.isNull() ? "" : rv.asText("").trim();
+                    if (!e.getValue().equals(rs)) { ok = false; break; }
+                }
+                if (!ok) continue;
+
+                // Merge: only fill missing/blank fields on submitter
+                row.fieldNames().forEachRemaining(fn -> {
+                    if (fn == null || fn.isBlank()) return;
+                    com.fasterxml.jackson.databind.JsonNode cur = submitterObj.get(fn);
+                    String curText = cur == null || cur.isNull() ? "" : cur.asText("").trim();
+                    if (!curText.isEmpty()) return;
+                    com.fasterxml.jackson.databind.JsonNode rv = row.get(fn);
+                    if (rv == null || rv.isNull()) return;
+                    submitterObj.set(fn, rv);
+                });
+                return objectMapper.writeValueAsString(submitterObj);
+            }
+
+            // Fallback: if matching by queryFieldKey failed but allowed keys are configured, try them.
+            try {
+                java.util.List<String> keys = objectMapper.readValue(
+                        keysJson,
+                        objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class)
+                );
+                java.util.Map<String, String> m2 = new java.util.LinkedHashMap<>();
+                if (keys != null) {
+                    for (String k : keys) {
+                        if (k == null || k.isBlank()) continue;
+                        com.fasterxml.jackson.databind.JsonNode v = submitterObj.get(k);
+                        String s = v == null || v.isNull() ? "" : v.asText("").trim();
+                        if (s.isEmpty()) { m2.clear(); break; }
+                        m2.put(k.trim(), s);
+                    }
+                }
+                if (!m2.isEmpty()) {
+                    for (com.fasterxml.jackson.databind.JsonNode row : arr) {
+                        if (row == null || !row.isObject()) continue;
+                        boolean ok = true;
+                        for (java.util.Map.Entry<String, String> e : m2.entrySet()) {
+                            com.fasterxml.jackson.databind.JsonNode rv = row.get(e.getKey());
+                            String rs = rv == null || rv.isNull() ? "" : rv.asText("").trim();
+                            if (!e.getValue().equals(rs)) { ok = false; break; }
+                        }
+                        if (!ok) continue;
+                        row.fieldNames().forEachRemaining(fn -> {
+                            if (fn == null || fn.isBlank()) return;
+                            com.fasterxml.jackson.databind.JsonNode cur = submitterObj.get(fn);
+                            String curText = cur == null || cur.isNull() ? "" : cur.asText("").trim();
+                            if (!curText.isEmpty()) return;
+                            com.fasterxml.jackson.databind.JsonNode rv = row.get(fn);
+                            if (rv == null || rv.isNull()) return;
+                            submitterObj.set(fn, rv);
+                        });
+                        return objectMapper.writeValueAsString(submitterObj);
+                    }
+                }
+            } catch (Exception ignored) {}
+            return submitterJson;
+        } catch (Exception e) {
+            return submitterJson;
+        }
     }
 
     // 构造上传前缀（含项目/提交者字段），末尾带 '/'

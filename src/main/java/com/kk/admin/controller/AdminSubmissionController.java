@@ -63,6 +63,7 @@ public class AdminSubmissionController {
             if (submitterJson == null) submitterJson = "{}";
             if (files == null || files.isEmpty()) throw new IllegalArgumentException("请至少上传一个文件");
             Project project = projectService.get(projectId);
+            submitterJson = submissionService.prepareSubmitterJson(project, submitterJson);
             String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
             // 为每次手动上传增加一次性子目录，避免同名文件覆盖
             String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
@@ -83,6 +84,7 @@ public class AdminSubmissionController {
             if (submitterJson == null) submitterJson = Optional.ofNullable(request.getParameter("submitter")).orElse("{}");
             if (pid == null) throw new IllegalArgumentException("projectId 不能为空");
             Project project = projectService.get(pid);
+            submitterJson = submissionService.prepareSubmitterJson(project, submitterJson);
             String keyPrefix = submissionService.buildUploadPrefix(project, submitterJson);
             // 为每次手动上传增加一次性子目录，避免同名文件覆盖
             String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
@@ -115,7 +117,7 @@ public class AdminSubmissionController {
         // 规范化提交者：尽力解析 JSON 并稳定排序；失败则回退为 {}
         String canonical;
         try {
-            String raw = (submitterJson == null || submitterJson.isBlank()) ? "{}" : submitterJson;
+            String raw = submissionService.prepareSubmitterJson(project, (submitterJson == null || submitterJson.isBlank()) ? "{}" : submitterJson);
             com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(raw);
             // 按键名排序，保持稳定字符串
             java.util.TreeMap<String, com.fasterxml.jackson.databind.JsonNode> map = new java.util.TreeMap<>();

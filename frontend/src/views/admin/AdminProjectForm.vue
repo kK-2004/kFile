@@ -230,6 +230,12 @@
                     </template>
                   </el-table-column>
 
+                  <el-table-column label="显示" width="70" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.display" />
+                    </template>
+                  </el-table-column>
+
                   <el-table-column width="60" align="center">
                     <template #default="{ $index }">
                       <el-button link type="danger" :icon="Delete" @click="removeField($index)" />
@@ -793,6 +799,7 @@ function applyAutoDetect() {
       label: f.key,
       placeholder: '',
       required: true,
+      display: true,
       type: f.type,
       _options: Array.isArray(f.options) ? f.options : []
     }))
@@ -854,6 +861,7 @@ const load = async () => {
     label: f.label,
     placeholder: f.placeholder || '',
     required: !!f.required,
+    display: f.display !== false,
     type: f.type || 'text',
     _options: Array.isArray(f.options) ? f.options : []
   })) : []
@@ -980,6 +988,7 @@ const save = async () => {
       label: f.label,
       placeholder: f.placeholder || '',
       required: !!f.required,
+      display: f.display !== false,
       type: f.type || 'text',
       options: f.type === 'select' ? (Array.isArray(f._options) ? f._options : []) : undefined
     }))
@@ -1097,6 +1106,7 @@ const addField = () => {
     key: '',
     label: '',
     required: false,
+    display: true,
     placeholder: '',
     type: 'text',
     _options: []

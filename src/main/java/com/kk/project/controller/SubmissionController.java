@@ -86,6 +86,7 @@ public class SubmissionController {
         try { submitterJson = objectMapper.writeValueAsString(sub == null ? java.util.Map.of() : sub); }
         catch (Exception e) { return java.util.Map.of("allowed", false, "message", "提交者信息无效"); }
         try {
+            submitterJson = submissionService.prepareSubmitterJson(p, submitterJson);
             submissionService.assertSubmitterAllowed(p, submitterJson);
             return java.util.Map.of("allowed", true);
         } catch (IllegalStateException e) {
@@ -100,7 +101,7 @@ public class SubmissionController {
     @PostMapping(path = "/direct-multipart-init", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> directMultipartInit(@PathVariable Long projectId, @RequestBody DirectInitRequest body) {
         Project p = projectService.get(projectId);
-        String submitterJson = toJson(body.getSubmitter());
+        String submitterJson = submissionService.prepareSubmitterJson(p, toJson(body.getSubmitter()));
         String keyPrefix = submissionService.buildUploadPrefix(p, submitterJson);
         // 一次性子目录，避免覆盖：同一提交者多次上传相同文件名也不会互相覆盖
         String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
@@ -156,7 +157,7 @@ public class SubmissionController {
     @PostMapping(path = "/direct-init", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> directInit(@PathVariable Long projectId, @RequestBody DirectInitRequest body) {
         Project p = projectService.get(projectId);
-        String submitterJson = toJson(body.getSubmitter());
+        String submitterJson = submissionService.prepareSubmitterJson(p, toJson(body.getSubmitter()));
         String keyPrefix = submissionService.buildUploadPrefix(p, submitterJson);
         // 为每次直传增加一次性子目录，避免同名文件覆盖
         String uniq = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")

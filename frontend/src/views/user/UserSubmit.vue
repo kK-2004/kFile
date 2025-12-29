@@ -227,8 +227,8 @@
               </span>
             </div>
 
-            <div v-if="expectedFields.length" class="grid gap-4 mb-6">
-              <div v-for="field in expectedFields" :key="field.key" class="space-y-2 w-full">
+            <div v-if="visibleExpectedFields.length" class="grid gap-4 mb-6">
+              <div v-for="field in visibleExpectedFields" :key="field.key" class="space-y-2 w-full">
                 <label class="block text-sm font-medium text-gray-700">
                   {{ field.label || field.key }}
                   <span v-if="field.required" class="text-red-500 ml-1">*</span>
@@ -548,13 +548,18 @@ const disableSubmit = computed(() => {
   if (hasSubmitterRestriction.value && !isSubmitterAllowed.value) return true
 
   // 检查必填字段
-  for (const field of expectedFields.value) {
+  for (const field of visibleExpectedFields.value) {
     if (field.required && !submitter.value[field.key]) {
       return true
     }
   }
 
   return false
+})
+
+const visibleExpectedFields = computed(() => {
+  const all = Array.isArray(expectedFields.value) ? expectedFields.value : []
+  return all.filter(f => f && f.display !== false)
 })
 
 const allowedKeys = computed(() => Array.isArray(project.value?.allowedSubmitterKeys) ? project.value.allowedSubmitterKeys : [])
@@ -568,7 +573,11 @@ const hasAnyAllowedFilled = computed(() => {
 const hasAllAllowedFilled = computed(() => {
   const keys = allowedKeys.value || []
   if (!keys.length) return false
-  return keys.every(k => String((submitter.value?.[k] ?? '')).trim() !== '')
+  const isHidden = (k) => {
+    const f = (expectedFields.value || []).find(x => x && x.key === k)
+    return f && f.display === false
+  }
+  return keys.every(k => isHidden(k) || String((submitter.value?.[k] ?? '')).trim() !== '')
 })
 let allowCheckTimer = null
 const refreshSubmitterAllowed = async () => {
