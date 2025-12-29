@@ -23,12 +23,13 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.time.Duration;
 import java.util.List;
 
 @Configuration
@@ -38,6 +39,10 @@ public class SecurityConfig {
     private String cors;
     @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}")
     private String issuerUri;
+    @Value("${app.sso.enabled:true}")
+    private boolean ssoEnabled;
+    @Value("${app.sso.jwt.init-retry-seconds:30}")
+    private long ssoJwtInitRetrySeconds;
 
     private final UserAccountService userAccountService;
 
@@ -72,6 +77,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(reg -> reg
                 // 登录与预检放行
                 .requestMatchers("/api/admin/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/sso/status").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // 用户提交页与公开接口：无需认证
                 .requestMatchers(HttpMethod.GET,
@@ -105,10 +111,12 @@ public class SecurityConfig {
                         response.getWriter().write("{\"ok\":true}");
                     } catch (Exception ignored) {}
                 })
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(new SiteJwtAuthConverter(userAccountService)))
             );
+        if (ssoEnabled && issuerUri != null && !issuerUri.isBlank()) {
+            http.oauth2ResourceServer(oauth2 -> oauth2
+                    .jwt(jwt -> jwt.jwtAuthenticationConverter(new SiteJwtAuthConverter(userAccountService)))
+            );
+        }
         return http.build();
     }
 
@@ -138,14 +146,19 @@ public class SecurityConfig {
     // JWT 解码器，叠加 issuer 与 aud 验证（aud 需包含 k-File）
     @Bean
     public JwtDecoder jwtDecoder() {
-        if (issuerUri == null || issuerUri.isBlank()) {
-            // 未配置 issuer 时，使用一个不可用的占位解码器，避免误启用
-            return NimbusJwtDecoder.withJwkSetUri("http://localhost/invalid-jwks").build();
+        if (!ssoEnabled || issuerUri == null || issuerUri.isBlank()) {
+            // 未配置 issuer 时：禁用 SSO（避免启动时尝试 discovery）
+            return token -> { throw new JwtException("SSO disabled"); };
         }
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuerUri).build();
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuerUri);
         OAuth2TokenValidator<Jwt> withAudience = new JwtAudienceValidator("k-File");
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
-        return decoder;
+        OAuth2TokenValidator<Jwt> validator = new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience);
+
+        // 主站 SSO 不可用时熔断：避免应用启动阶段因为 discovery/JWKs 拉取失败而崩溃
+        return new com.kk.security.jwt.CircuitBreakerJwtDecoder(
+                issuerUri,
+                validator,
+                Duration.ofSeconds(Math.max(1, ssoJwtInitRetrySeconds))
+        );
     }
 }

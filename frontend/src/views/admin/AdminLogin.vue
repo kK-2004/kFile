@@ -34,7 +34,7 @@
           </el-button>
         </el-form-item>
         <div class="or-line"><span>或</span></div>
-        <el-button @click="onLoginViaSite" size="large" class="site-button">
+        <el-button @click="onLoginViaSite" size="large" class="site-button" :loading="siteLoading">
           从主站登录（k‑Site）
         </el-button>
       </el-form>
@@ -47,13 +47,33 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage } from 'element-plus'
+import api from '../../api'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAuthStore()
 const form = ref({ username: '', password: '' })
 const loading = ref(false)
+const siteLoading = ref(false)
 const ksiteLoginUrl = import.meta.env.VITE_KSITE_LOGIN_URL || (import.meta.env.VITE_KSITE_BASE ? `${import.meta.env.VITE_KSITE_BASE.replace(/\/$/, '')}/login` : 'http://localhost:8081/login')
+
+const ensureSsoAvailable = async () => {
+  try {
+    const { data } = await api.ssoStatus()
+    if (data?.enabled === false) {
+      ElMessage.warning('主站登录已关闭，请使用用户名密码登录')
+      return false
+    }
+    if (data?.available === false) {
+      ElMessage.error('主站当前为下线状态，请使用其他方式登录')
+      return false
+    }
+    return true
+  } catch (e) {
+    ElMessage.error('主站当前为下线状态，请使用其他方式登录')
+    return false
+  }
+}
 
 const onSubmit = async () => {
   if (!form.value.username || !form.value.password) {
@@ -116,6 +136,8 @@ onMounted(async () => {
 })
 
 const onLoginViaSite = async () => {
+  siteLoading.value = true
+  try {
   // 已有 token 则直接验证并跳转
   const token = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN')
   if (token) {
@@ -138,8 +160,16 @@ const onLoginViaSite = async () => {
       } else {
         // 非管理员站点用户保留在登录页
       }
+      siteLoading.value = false
       return
-    } catch {}
+    } catch {
+      // token 可能失效/主站不可用：先清理再进入登录流程
+      store.setToken(null)
+    }
+  }
+  if (!(await ensureSsoAvailable())) {
+    siteLoading.value = false
+    return
   }
   // 无 token，重定向主站登录，登录后回跳并携带 accessToken
   const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
@@ -148,6 +178,10 @@ const onLoginViaSite = async () => {
   const back = encodeURIComponent(current + redirect)
   // 约定主站支持 redirect 参数并在回跳时追加 accessToken
   window.location.href = `${ksiteLoginUrl}?redirect=${back}`
+  } finally {
+    // 若已跳转该行不会执行；若被阻止则恢复 loading
+    siteLoading.value = false
+  }
 }
 </script>
 

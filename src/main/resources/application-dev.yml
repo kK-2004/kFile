@@ -45,6 +45,10 @@ site:
   base-url: ${KSITE_BASE_URL:http://localhost:8081}
 
 app:
+  sso:
+    enabled: true
+    jwt:
+      init-retry-seconds: 5
   project:
     monthly-limit:
       user: 3

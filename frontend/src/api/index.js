@@ -149,6 +149,7 @@ instance.interceptors.response.use(
 export default {
   // Site auth
   authMe() { return instance.get('/api/auth/me', { timeout: 8000 }) },
+  ssoStatus() { return instance.get('/api/sso/status', { timeout: 2000 }) },
   // Projects
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },

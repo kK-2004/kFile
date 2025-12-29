@@ -37,6 +37,11 @@ server:
 # App-level settings
 app:
   base-path: /kfile
+  sso:
+    enabled: true
+    jwt:
+      # 主站不可用时的重试间隔（秒）；间隔内不会反复请求 /.well-known/openid-configuration
+      init-retry-seconds: 30
   project:
     monthly-limit:
       user: 3
