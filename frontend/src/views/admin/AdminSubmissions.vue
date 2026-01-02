@@ -693,7 +693,7 @@ const groupedContent = computed(() => {
   }
   const groups = []
   for (const [k, list] of map.entries()) {
-    list.sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt))
+    list.sort((a, b) => Number(b?.createdAt ?? 0) - Number(a?.createdAt ?? 0))
     const latest = list[0]
     const latestUrls = parseUrls(latest)
     const latestNames = parseNames(latest)

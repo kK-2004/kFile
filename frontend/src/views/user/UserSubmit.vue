@@ -1,6 +1,30 @@
 <template>
   <div class="min-h-full bg-gray-50/30">
-    <div class="container mx-auto px-4 py-4 max-w-4xl">
+    <!-- 新增：项目不存在时的提示界面 -->
+    <div v-if="notFound" class="min-h-[80vh] flex flex-col items-center justify-center p-4">
+      <div class="bg-white rounded-3xl p-12 text-center max-w-md w-full shadow-sm border border-gray-100">
+        <!-- 404 插图 -->
+        <div class="w-24 h-24 mx-auto mb-6 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+          <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+
+        <h2 class="text-2xl font-bold text-gray-800 mb-3">项目不存在</h2>
+        <p class="text-gray-500 mb-8 leading-relaxed">
+          您访问的项目链接无效或该项目已被发起人删除。<br/>请核对链接后重试。
+        </p>
+
+        <router-link
+            to="/"
+            class="inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-all hover:shadow-lg hover:shadow-blue-500/20 active:transform active:scale-95"
+        >
+          返回首页
+        </router-link>
+      </div>
+    </div>
+
+    <div v-else class="container mx-auto px-4 py-4 max-w-4xl">
 
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
         <div class="px-6 py-4">
@@ -456,6 +480,7 @@ const queryValue = ref('')
 const isDragging = ref(false)
 const uploadRef = ref(null)
 const fileInput = ref(null)
+const notFound = ref(null)
 
 // 计算属性
 const headerTitle = computed(() => {
@@ -593,7 +618,10 @@ const refreshSubmitterAllowed = async () => {
 // 方法
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return ''
-  return new Date(timestamp).toLocaleString('zh-CN')
+  const ms = typeof timestamp === 'number' ? timestamp : Number(timestamp)
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN')
 }
 
 const formatBytes = (bytes) => {
@@ -849,7 +877,8 @@ const queryStatus = async () => {
       expired: !!data.expired,
       fileNames: Array.isArray(data.fileNames) ? data.fileNames : []
     }
-    versions.value = Array.isArray(data.versions) ? data.versions : []
+    const vs = Array.isArray(data.versions) ? data.versions : []
+    versions.value = vs.slice().sort((a, b) => Number(b?.createdAt ?? 0) - Number(a?.createdAt ?? 0))
   } catch (e) {
     ElMessage.error('查询失败')
   } finally {
@@ -877,7 +906,8 @@ const queryStatusByField = async () => {
       expired: !!data.expired,
       fileNames: Array.isArray(data.fileNames) ? data.fileNames : []
     }
-    versions.value = Array.isArray(data.versions) ? data.versions : []
+    const vs = Array.isArray(data.versions) ? data.versions : []
+    versions.value = vs.slice().sort((a, b) => Number(b?.createdAt ?? 0) - Number(a?.createdAt ?? 0))
     queryTried.value = true
   } catch (e) {
     ElMessage.error('查询失败')
@@ -933,8 +963,12 @@ onMounted(async () => {
     // 首次不触发校验，待用户填写后再校验
 
   } catch (error) {
-    console.error('Failed to load project:', error)
-    ElMessage.error('加载项目失败')
+    console.error('Failed to load project:', error.response.data.message)
+    if(error.response.data.message.includes('Project not found')){
+      notFound.value = true
+    }else{
+      ElMessage.error('加载项目失败')
+    }
   } finally {
     loading.value = false
   }

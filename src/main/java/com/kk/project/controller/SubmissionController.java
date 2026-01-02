@@ -374,6 +374,10 @@ public class SubmissionController {
         } else {
             versionsList = java.util.List.of();
         }
+//        // Defensive: ensure response order is always newest -> oldest, even if upstream list isn't sorted.
+//        java.util.List<Submission> sortedVersions = new java.util.ArrayList<>(versionsList == null ? java.util.List.of() : versionsList);
+//        sortedVersions.sort(java.util.Comparator.comparing(Submission::getCreatedAt,
+//                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())).reversed());
         java.util.List<Map<String,Object>> versions = new java.util.ArrayList<>();
         for (Submission it : versionsList) {
             Map<String,Object> v = new java.util.HashMap<>();

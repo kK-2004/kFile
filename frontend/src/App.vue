@@ -175,7 +175,7 @@ const showNewYearElements = computed(() => {
   const startYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
 
   const start = new Date(startYear, 11, 31, 0, 0, 0)      // 12/31 00:00:00
-  const end   = new Date(startYear + 1, 0, 3, 23, 59, 59) // 次年 1/2 23:59:59
+  const end   = new Date(startYear + 1, 0, 3, 23, 59, 59) // 次年 1/3 23:59:59
 
   return now >= start && now <= end
 })
