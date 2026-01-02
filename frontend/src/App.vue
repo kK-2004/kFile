@@ -35,6 +35,8 @@
 <!--      </div>-->
 <!--    </div>-->
 
+    <NewYearElements v-if="showNewYearElements" />
+
     <el-container style="min-height: 100vh;">
       <el-header class="app-header">
         <div class="header-content">
@@ -155,6 +157,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import api from './api'
 import { ElMessage } from 'element-plus'
+import NewYearElements from './components/NewYearElements.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -166,8 +169,20 @@ const isUserSubmit = computed(() => route.path.startsWith('/user/projects/') && 
 const isHome = computed(() => isUserSubmit.value)
 const showAnnouncement = ref(true)
 const isSuper = computed(() => auth.user && (auth.user.role||'').toUpperCase()==='SUPER')
+const showNewYearElements = computed(() => {
+  const now = new Date()
 
-onMounted(() => { if (isAdmin.value && !auth.loaded) auth.loadMe() })
+  const startYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
+
+  const start = new Date(startYear, 11, 31, 0, 0, 0)      // 12/31 00:00:00
+  const end   = new Date(startYear + 1, 0, 3, 23, 59, 59) // 次年 1/2 23:59:59
+
+  return now >= start && now <= end
+})
+
+onMounted(() => {
+  if (isAdmin.value && !auth.loaded) auth.loadMe()
+})
 
 const pwdVisible = ref(false)
 const pwdForm = ref({ currentPassword: '', newPassword: '' })
