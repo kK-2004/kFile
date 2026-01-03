@@ -17,6 +17,17 @@
 
       <div class="filter-section">
         <el-form inline class="filter-form">
+          <el-form-item style="margin-right: 20px; margin-bottom: 0;">
+            <div class="sort-pill" @click="toggleSort" title="点击切换排序顺序">
+              <span class="sort-label">时间</span>
+              <span class="sort-value">{{ latestSortOrder === 'desc' ? '最新' : '最早' }}</span>
+              <div class="sort-icon-wrapper" :class="{ 'is-asc': latestSortOrder === 'asc' }">
+                <svg class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </div>
+            </div>
+          </el-form-item>
           <el-form-item label="字段">
             <el-select v-model="filterKey" placeholder="选择字段" style="width: 200px;">
               <el-option v-for="f in expectedFields" :key="f.key" :label="f.label + ' ('+f.key+')'" :value="f.key" />
@@ -30,18 +41,18 @@
             <el-button @click="resetFilter">重置</el-button>
             <el-button type="success" @click="startArchive(false)">打包</el-button>
             <el-tooltip
-              effect="dark"
-              placement="top"
-              content="仅下载每位提交者的最新一次提交。"
+                effect="dark"
+                placement="top"
+                content="仅下载每位提交者的最新一次提交。"
             >
               <span class="help-icon">?</span>
             </el-tooltip>
             <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="startArchive(true)"
                        style="margin-left: 8px;">按条件打包</el-button>
             <el-tooltip
-              effect="dark"
-              placement="top"
-              content="输入“字段”和“值”后，将按该字段对记录进行前缀匹配，仅下载每位提交者的最新一次提交；若无匹配内容则不可用。"
+                effect="dark"
+                placement="top"
+                content="输入“字段”和“值”后，将按该字段对记录进行前缀匹配，仅下载每位提交者的最新一次提交；若无匹配内容则不可用。"
             >
               <span class="help-icon">?</span>
             </el-tooltip>
@@ -49,7 +60,6 @@
         </el-form>
       </div>
 
-      <!-- 未提交名单弹窗 -->
       <el-dialog v-model="missingVisible" title="未提交名单" width="600px">
         <div v-if="missing.enabled">
           <div class="mb-3 text-sm text-gray-600">共 {{ missing.missingCount || (missing.missing||[]).length }} 条</div>
@@ -68,37 +78,29 @@
 
       <div class="table-container">
         <el-table
-            :data="groupedContent"
+            :data="sortedGroupedContent"
             v-loading="loading"
             height="100%"
             style="width: 100%"
         >
           <el-table-column type="expand">
             <template #default="{ row }">
-              <!-- 时间线风格的版本链 -->
               <div class="timeline-container">
                 <div class="timeline-wrapper">
                   <div v-for="(version, index) in row.versions" :key="version.id" class="timeline-item">
-                    <!-- 时间线连接线 -->
                     <div v-if="index < row.versions.length - 1" class="timeline-line"></div>
 
-                    <!-- 状态图标 -->
                     <div class="timeline-icon" :class="getVersionStatusClass(version, index, row.versions.length)">
-                      <!-- 最新版本 - 绿色勾号 -->
                       <svg v-if="index === 0" class="icon-svg" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                       </svg>
-                      <!-- 历史版本 - 蓝色上传图标 -->
                       <svg v-else-if="index < row.versions.length - 1" class="icon-svg" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
                       </svg>
-                      <!-- 最早版本 - 灰色圆点 -->
                       <div v-else class="timeline-dot"></div>
                     </div>
 
-                    <!-- 版本信息 -->
                     <div class="version-content">
-                      <!-- 版本标题和时间 -->
                       <div class="version-header">
                         <div class="version-title-wrapper">
                           <span class="version-title">
@@ -111,22 +113,18 @@
                         <time class="version-time">{{ formatDateTime(version.createdAt) }}</time>
                       </div>
 
-                      <!-- 文件列表 -->
                       <div v-if="version.files && version.files.length > 0" class="file-list">
                         <div v-for="(file, fileIndex) in version.files" :key="fileIndex" class="file-item">
                           <div class="file-info">
-                            <!-- 文件图标 -->
                             <div class="file-icon">
                               <svg class="file-icon-svg" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
                               </svg>
                             </div>
-                            <!-- 文件名 -->
                             <span class="file-name" @click="download(file.url, file.name)">
                               {{ file.name || filename(file.url) }}
                             </span>
                           </div>
-                          <!-- 操作按钮 -->
                           <div class="file-actions">
                             <button @click="download(file.url, file.name)" class="action-btn action-btn-primary">
                               <svg class="action-icon" fill="currentColor" viewBox="0 0 20 20">
@@ -145,7 +143,6 @@
                         </div>
                       </div>
 
-                      <!-- 无文件提示 -->
                       <div v-else class="no-files">
                         暂无文件
                       </div>
@@ -189,7 +186,6 @@
 
 
     </el-card>
-    <!-- 打包进度窗口 -->
     <el-dialog v-model="archProgressVisible" title="正在打包" width="480px" :close-on-click-modal="false" :close-on-press-escape="false">
       <div v-if="archTask">
         <div style="margin-bottom:8px;">{{ projectName }}</div>
@@ -202,7 +198,6 @@
         <el-button @click="archProgressVisible=false" :disabled="archTask && archTask.status==='RUNNING'">关闭</el-button>
       </template>
     </el-dialog>
-    <!-- 手动上传：按项目配置字段填写（与用户端一致），但不做限制校验 -->
     <el-dialog v-model="manualVisible" title="手动上传（不受项目限制）" width="600px">
       <el-form label-width="120px">
         <template v-if="(manualFields||[]).length">
@@ -230,7 +225,6 @@
       </template>
     </el-dialog>
 
-    <!-- 删除确认 -->
     <el-dialog v-model="delVisible" title="删除该用户所有提交" width="520px">
       <div style="line-height:1.8; margin-bottom: 8px;">
         将按字段「{{ delFieldKey }}」=「{{ delFieldValue }}」删除该用户在本项目的所有提交及其文件。此操作不可恢复。
@@ -245,7 +239,6 @@
       </template>
     </el-dialog>
 
-    <!-- 预签名下载/复制：选择有效期 -->
     <el-dialog v-model="presignDialogVisible" title="生成预签名链接" width="400px">
       <div style="margin-bottom: 12px;">
         目标文件：<span style="font-weight:500;">{{ presignTargetName }}</span>
@@ -290,6 +283,7 @@ const expectedFields = ref([])
 const filterKey = ref('')
 const filterValue = ref('')
 const tableMaxHeight = ref(400)
+const latestSortOrder = ref('desc') // 'desc' | 'asc'
 
 // 动态计算表格最大高度（Element Plus 使用 max-height 时表头为 sticky）
 const calculateTableHeight = () => {
@@ -329,6 +323,11 @@ const load = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 切换排序逻辑
+const toggleSort = () => {
+  latestSortOrder.value = latestSortOrder.value === 'desc' ? 'asc' : 'desc'
 }
 
 onMounted(() => {
@@ -721,6 +720,17 @@ const groupedContent = computed(() => {
       })
     })
   }
+  return groups
+})
+
+// 按每个提交者的“最新提交时间”排序（升序/降序切换）
+const sortedGroupedContent = computed(() => {
+  const groups = (groupedContent.value || []).slice()
+  groups.sort((a, b) => {
+    const av = Number(a?.latestCreatedAt ?? 0)
+    const bv = Number(b?.latestCreatedAt ?? 0)
+    return latestSortOrder.value === 'asc' ? av - bv : bv - av
+  })
   return groups
 })
 
@@ -1131,5 +1141,71 @@ const formatDateTime = (dateTimeStr) => {
   font-weight: 700;
   font-size: 21px;
   padding: 0 4px;
+}
+
+/* --- 新增：简约排序胶囊样式 --- */
+.sort-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 18px; /* 左侧留宽一点，视觉更平衡 */
+  background-color: #f3f4f6;
+  border: 1px solid transparent;
+  border-radius: 9999px; /* 全圆角 */
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  font-size: 14px;
+  height: 32px; /* 固定高度与输入框对齐 */
+  box-sizing: border-box;
+}
+
+.sort-pill:hover {
+  background-color: #e5e7eb;
+  color: #111827;
+}
+
+.sort-pill:active {
+  background-color: #d1d5db;
+  transform: scale(0.98);
+}
+
+.sort-label {
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.sort-value {
+  font-weight: 600;
+  color: #111827;
+  min-width: 32px; /* 防止文字长短变化导致抖动 */
+  text-align: center;
+}
+
+/* 图标容器与动画 */
+.sort-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性旋转动画 */
+  color: #6b7280;
+}
+
+.sort-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* 升序状态：图标旋转180度，颜色高亮 */
+.sort-icon-wrapper.is-asc {
+  transform: rotate(180deg);
+  background-color: #eff6ff;
+  color: #3b82f6;
 }
 </style>

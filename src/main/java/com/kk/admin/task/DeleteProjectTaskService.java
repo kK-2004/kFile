@@ -9,6 +9,7 @@ import com.kk.oss.OssService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,6 +37,8 @@ public class DeleteProjectTaskService {
         private String id;
         private Long projectId;
         private String projectName;
+        private String actor;
+        private String roles;
         private String status; // PENDING, RUNNING, COMPLETED, FAILED
         private int totalFiles;
         private int deletedFiles;
@@ -47,17 +50,25 @@ public class DeleteProjectTaskService {
     public Task get(String id) { return tasks.get(id); }
     public Collection<Task> list() { return tasks.values(); }
 
-    public Task start(Long projectId) {
+    public Task start(Long projectId, Authentication authentication) {
         Project p = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
         Task t = new Task();
         t.setId(UUID.randomUUID().toString());
         t.setProjectId(projectId);
         t.setProjectName(p.getName());
+        t.setActor(com.kk.common.logging.AuditLogUtil.actor(authentication));
+        t.setRoles(com.kk.common.logging.AuditLogUtil.roles(authentication));
         t.setStatus("PENDING");
         t.setStartedAt(Instant.now().toEpochMilli());
         tasks.put(t.getId(), t);
 
+        log.info("BIZ action=PROJECT_DELETE_TASK_REQUEST taskId={} projectId={} projectName={} actor={} roles={}",
+                t.getId(),
+                t.getProjectId(),
+                com.kk.common.logging.AuditLogUtil.safe(t.getProjectName()),
+                t.getActor(),
+                t.getRoles());
         executor.submit(() -> runTask(t));
         return t;
     }
@@ -65,6 +76,12 @@ public class DeleteProjectTaskService {
     private void runTask(Task t) {
         t.setStatus("RUNNING");
         try {
+            log.info("BIZ action=PROJECT_DELETE_TASK_START taskId={} projectId={} projectName={} actor={} roles={}",
+                    t.getId(),
+                    t.getProjectId(),
+                    com.kk.common.logging.AuditLogUtil.safe(t.getProjectName()),
+                    t.getActor(),
+                    t.getRoles());
             Optional<Project> po = projectRepository.findById(t.getProjectId());
             if (po.isEmpty()) throw new IllegalStateException("Project not found");
             Project p = po.get();
@@ -106,10 +123,23 @@ public class DeleteProjectTaskService {
             t.setStatus("COMPLETED");
             t.setEndedAt(Instant.now().toEpochMilli());
             t.setMessage("ok");
+            log.info("BIZ action=PROJECT_DELETE_TASK_DONE taskId={} projectId={} projectName={} totalFiles={} deletedFiles={} actor={}",
+                    t.getId(),
+                    t.getProjectId(),
+                    com.kk.common.logging.AuditLogUtil.safe(t.getProjectName()),
+                    t.getTotalFiles(),
+                    t.getDeletedFiles(),
+                    t.getActor());
         } catch (Exception e) {
             t.setStatus("FAILED");
             t.setEndedAt(Instant.now().toEpochMilli());
             t.setMessage(e.getMessage());
+            log.warn("BIZ action=PROJECT_DELETE_TASK_FAILED taskId={} projectId={} projectName={} msg={} actor={}",
+                    t.getId(),
+                    t.getProjectId(),
+                    com.kk.common.logging.AuditLogUtil.safe(t.getProjectName()),
+                    com.kk.common.logging.AuditLogUtil.safe(e.getMessage()),
+                    t.getActor());
         }
     }
 }

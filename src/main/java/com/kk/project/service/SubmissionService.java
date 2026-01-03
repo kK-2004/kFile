@@ -12,6 +12,7 @@ import com.kk.project.entity.Project;
 import com.kk.project.entity.Submission;
 import com.kk.project.repo.SubmissionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.DigestUtils;
@@ -25,6 +26,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final ProjectService projectService;
@@ -84,6 +86,12 @@ public class SubmissionService {
             filesToUpload = renamed;
         }
 
+        List<String> fileNamesForLog = new ArrayList<>();
+        for (MultipartFile f : filesToUpload) {
+            if (f == null) continue;
+            String n = f.getOriginalFilename();
+            if (n != null && !n.isBlank()) fileNamesForLog.add(n.trim());
+        }
         List<String> urls = ossService.uploadWithPrefix(filesToUpload, keyPrefix);
 
         Submission s = new Submission();
@@ -122,6 +130,15 @@ public class SubmissionService {
             }
         } catch (Exception ignored) {}
         Submission saved = submissionRepository.save(s);
+        log.info("BIZ action=SUBMISSION_UPLOAD projectId={} projectName={} submissionId={} submitterFp={} submitter={} files={} fileCount={} ip={}",
+                project.getId(),
+                com.kk.common.logging.AuditLogUtil.safe(project.getName()),
+                saved.getId(),
+                fingerprint,
+                extractSubmitterDisplay(project, canonicalSubmitter),
+                summarizeList(fileNamesForLog, 10),
+                fileNamesForLog.size(),
+                com.kk.common.logging.AuditLogUtil.safe(ipAddress));
 
         // update project's total submitters metric
         long distinctSubmitters = submissionRepository.countDistinctSubmitters(project);
@@ -206,10 +223,65 @@ public class SubmissionService {
             if (project.getEndAt() != null && now.isAfter(project.getEndAt())) s.setExpired(true);
         } catch (Exception ignored) {}
         Submission saved = submissionRepository.save(s);
+        log.info("BIZ action=SUBMISSION_UPLOAD_DIRECT projectId={} projectName={} submissionId={} submitterFp={} submitter={} files={} fileCount={} ip={}",
+                project.getId(),
+                com.kk.common.logging.AuditLogUtil.safe(project.getName()),
+                saved.getId(),
+                fingerprint,
+                extractSubmitterDisplay(project, canonicalSubmitter),
+                summarizeList(extractFileNamesFromKeys(normalizedKeys), 10),
+                normalizedKeys.size(),
+                com.kk.common.logging.AuditLogUtil.safe(ipAddress));
         long distinctSubmitters = submissionRepository.countDistinctSubmitters(project);
         project.setTotalSubmitters((int) distinctSubmitters);
         enforceRetentionMax(project, fingerprint, 10);
         return saved;
+    }
+
+    private String extractSubmitterDisplay(Project project, String canonicalSubmitterJson) {
+        String key = null;
+        if (project != null) {
+            if (org.springframework.util.StringUtils.hasText(project.getQueryFieldKey())) key = project.getQueryFieldKey();
+            else if (org.springframework.util.StringUtils.hasText(project.getPathFieldKey())) key = project.getPathFieldKey();
+        }
+        if (!org.springframework.util.StringUtils.hasText(key) || !org.springframework.util.StringUtils.hasText(canonicalSubmitterJson)) return "";
+        try {
+            JsonNode node = objectMapper.readTree(canonicalSubmitterJson);
+            JsonNode v = node == null ? null : node.get(key);
+            String val = (v == null || v.isNull()) ? "" : v.asText("");
+            if (!org.springframework.util.StringUtils.hasText(val)) return "";
+            return key + "=" + com.kk.common.logging.AuditLogUtil.safe(val);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private List<String> extractFileNamesFromKeys(List<String> keys) {
+        if (keys == null || keys.isEmpty()) return java.util.List.of();
+        List<String> names = new ArrayList<>();
+        for (String key : keys) {
+            if (!org.springframework.util.StringUtils.hasText(key)) continue;
+            try { names.add(ossService.downloadFilenameFromKey(key)); }
+            catch (Exception ignored) {
+                int slash = Math.max(key.lastIndexOf('/'), key.lastIndexOf('\\'));
+                names.add(slash >= 0 ? key.substring(slash + 1) : key);
+            }
+        }
+        return names;
+    }
+
+    private static String summarizeList(List<String> items, int max) {
+        if (items == null || items.isEmpty()) return "[]";
+        int n = Math.min(max, items.size());
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        for (int i = 0; i < n; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append('"').append(com.kk.common.logging.AuditLogUtil.safe(items.get(i))).append('"');
+        }
+        if (items.size() > n) sb.append(", ...(+").append(items.size() - n).append(')');
+        sb.append(']');
+        return sb.toString();
     }
 
     private void validateSubmitterAllowed(Project project, String submitterJson) {

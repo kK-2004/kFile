@@ -33,3 +33,12 @@ build/
 .vscode/
 
 frontend/node_modules/
+
+# Logs (runtime)
+logs/*.log
+logs/*.log.gz
+logs/*.log.zip
+
+
+## test
+src/main/java/com/kk/test

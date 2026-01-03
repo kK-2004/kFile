@@ -8,6 +8,7 @@ import com.kk.project.dto.UpdateProjectRequest;
 import com.kk.project.repo.ProjectRepository;
 import com.kk.project.repo.SubmissionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -20,6 +21,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProjectService {
     private final ProjectRepository projectRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -116,7 +118,15 @@ public class ProjectService {
         if (creatorSiteUserId != null) {
             p.setCreatorSiteUserId(creatorSiteUserId);
         }
-        return projectRepository.save(p);
+        Project saved = projectRepository.save(p);
+        log.info("BIZ action=PROJECT_CREATE projectId={} projectName={} actor={} roles={} isAdmin={} creatorSiteUserId={}",
+                saved.getId(),
+                com.kk.common.logging.AuditLogUtil.safe(saved.getName()),
+                com.kk.common.logging.AuditLogUtil.actor(authentication),
+                com.kk.common.logging.AuditLogUtil.roles(authentication),
+                isAdmin,
+                creatorSiteUserId);
+        return saved;
     }
 
     public java.util.Map<String, Object> getCreationQuota(org.springframework.security.core.Authentication authentication) {
@@ -250,9 +260,12 @@ public class ProjectService {
     @Transactional
     public void delete(Long id) {
         Project p = get(id);
+        int submissionCount = 0;
+        int fileCount = 0;
         // 先收集并删除 OSS 对象，再删除关联提交记录与项目
         try {
             java.util.List<com.kk.project.entity.Submission> list = submissionRepository.findByProject(p);
+            submissionCount = list == null ? 0 : list.size();
             java.util.List<String> urls = new java.util.ArrayList<>();
             for (com.kk.project.entity.Submission s : list) {
                 try {
@@ -260,10 +273,13 @@ public class ProjectService {
                     if (u != null) urls.addAll(u);
                 } catch (Exception ignored) {}
             }
+            fileCount = urls.size();
             if (!urls.isEmpty()) {
                 try { ossService.deleteByUrls(urls); } catch (Exception e) { /* 忽略OSS删除失败，继续删除DB */ }
             }
         } catch (Exception ignore) {}
+        log.info("BIZ action=PROJECT_DELETE projectId={} projectName={} submissions={} files={}",
+                p.getId(), com.kk.common.logging.AuditLogUtil.safe(p.getName()), submissionCount, fileCount);
         // 删除项目权限，避免外键约束错误
         permRepo.deleteByProject(p);
         submissionRepository.deleteByProject(p);

@@ -8,6 +8,7 @@ import com.kk.project.dto.UpdateProjectRequest;
 import com.kk.project.entity.Project;
 import com.kk.project.service.ProjectService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -16,6 +17,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/projects")
 @RequiredArgsConstructor
+@Slf4j
 public class ProjectController {
     private final ProjectService projectService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -86,7 +88,13 @@ public class ProjectController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('SUPER')")
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, org.springframework.security.core.Authentication authentication) {
+        Project p = projectService.get(id);
+        log.info("BIZ action=PROJECT_DELETE_REQUEST projectId={} projectName={} actor={} roles={}",
+                p.getId(),
+                com.kk.common.logging.AuditLogUtil.safe(p.getName()),
+                com.kk.common.logging.AuditLogUtil.actor(authentication),
+                com.kk.common.logging.AuditLogUtil.roles(authentication));
         projectService.delete(id);
     }
 }

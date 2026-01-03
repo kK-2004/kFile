@@ -10,6 +10,7 @@ import com.kk.project.service.ProjectService;
 import com.kk.project.service.SubmissionService;
 import com.kk.oss.OssService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +24,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/admin/submissions")
 @RequiredArgsConstructor
+@Slf4j
 public class AdminSubmissionController {
     private final SubmissionRepository submissionRepository;
     private final ProjectRepository projectRepository;
@@ -182,6 +184,18 @@ public class AdminSubmissionController {
                 }
             }
             resp.put("fileNames", names);
+            var auth = com.kk.common.logging.AuditLogUtil.currentAuth();
+            log.info("BIZ action=SUBMISSION_UPLOAD_ADMIN projectId={} projectName={} submissionId={} submitterFp={} submitter={} files={} fileCount={} actor={} roles={} ip={}",
+                    project.getId(),
+                    com.kk.common.logging.AuditLogUtil.safe(project.getName()),
+                    saved.getId(),
+                    fp,
+                    extractSubmitterDisplay(project, canonical),
+                    summarizeList(names, 10),
+                    names.size(),
+                    com.kk.common.logging.AuditLogUtil.actor(auth),
+                    com.kk.common.logging.AuditLogUtil.roles(auth),
+                    com.kk.common.logging.AuditLogUtil.safe(ip));
         } catch (Exception ignored) { resp.put("fileNames", java.util.List.of()); }
         return resp;
     }
@@ -241,11 +255,53 @@ public class AdminSubmissionController {
             }
         }
 
+        var auth = com.kk.common.logging.AuditLogUtil.currentAuth();
+        log.info("BIZ action=SUBMISSION_DELETE projectId={} fieldKey={} fieldValue={} deletedSubmissions={} deletedFiles={} affectedProjects={} actor={} roles={}",
+                projectId,
+                com.kk.common.logging.AuditLogUtil.safe(fieldKey),
+                com.kk.common.logging.AuditLogUtil.safe(fieldValue),
+                deletedSubs,
+                deletedFiles,
+                affectedProjects,
+                com.kk.common.logging.AuditLogUtil.actor(auth),
+                com.kk.common.logging.AuditLogUtil.roles(auth));
         return ResponseEntity.ok(Map.of(
                 "deletedSubmissions", deletedSubs,
                 "deletedFiles", deletedFiles,
                 "affectedProjects", affectedProjects
         ));
+    }
+
+    private String extractSubmitterDisplay(Project project, String canonicalSubmitterJson) {
+        String key = null;
+        if (project != null) {
+            if (org.springframework.util.StringUtils.hasText(project.getQueryFieldKey())) key = project.getQueryFieldKey();
+            else if (org.springframework.util.StringUtils.hasText(project.getPathFieldKey())) key = project.getPathFieldKey();
+        }
+        if (!org.springframework.util.StringUtils.hasText(key) || !org.springframework.util.StringUtils.hasText(canonicalSubmitterJson)) return "";
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(canonicalSubmitterJson);
+            com.fasterxml.jackson.databind.JsonNode v = node == null ? null : node.get(key);
+            String val = (v == null || v.isNull()) ? "" : v.asText("");
+            if (!org.springframework.util.StringUtils.hasText(val)) return "";
+            return key + "=" + com.kk.common.logging.AuditLogUtil.safe(val);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static String summarizeList(List<String> items, int max) {
+        if (items == null || items.isEmpty()) return "[]";
+        int n = Math.min(max, items.size());
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        for (int i = 0; i < n; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append('"').append(com.kk.common.logging.AuditLogUtil.safe(items.get(i))).append('"');
+        }
+        if (items.size() > n) sb.append(", ...(+").append(items.size() - n).append(')');
+        sb.append(']');
+        return sb.toString();
     }
 
     // 为管理端返回某个已保存文件的 OSS 预签名直链，由前端自行控制下载/复制。
