@@ -77,4 +77,9 @@ public class GlobalExceptionHandler {
         } catch (Throwable ignored) {}
         return new ResponseEntity<>(new ApiError(msg), HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    @ExceptionHandler(com.kk.util.ratelimit.RateLimitedException.class)
+    public ResponseEntity<ApiError> handleRateLimited(com.kk.util.ratelimit.RateLimitedException ex) {
+        return new ResponseEntity<>(new ApiError(ex.getMessage()), HttpStatus.TOO_MANY_REQUESTS);
+    }
 }

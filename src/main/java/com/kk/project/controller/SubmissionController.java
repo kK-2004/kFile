@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kk.project.entity.Submission;
 import com.kk.project.entity.Project;
 import com.kk.project.service.ProjectService;
+import com.kk.util.ratelimit.RateLimit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpHeaders;
@@ -78,6 +79,7 @@ public class SubmissionController {
     }
 
     // 校验提交者是否允许（不泄露名单，仅返回布尔）
+    @RateLimit(ip = true, capacity = 3, refillRate = 1)
     @PostMapping(path = "/validate", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> validateSubmitter(@PathVariable Long projectId, @RequestBody Map<String,Object> body) {
         Project p = projectService.get(projectId);
@@ -331,6 +333,7 @@ public class SubmissionController {
     }
 
     @GetMapping("/status")
+    @RateLimit(ip = true, capacity = 3, refillRate = 1)
     public Map<String, Object> latestStatus(@PathVariable Long projectId,
                                             @RequestParam(required = false) String submitter,
                                             @RequestParam(required = false) String fieldValue) {

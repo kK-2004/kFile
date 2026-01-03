@@ -238,7 +238,7 @@
             </div>
           </div>
 
-          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div v-if="!project.offline" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div v-if="project.userSubmitStatusText" class="mb-6">
               <span :class="[
                 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
@@ -910,7 +910,7 @@ const queryStatusByField = async () => {
     versions.value = vs.slice().sort((a, b) => Number(b?.createdAt ?? 0) - Number(a?.createdAt ?? 0))
     queryTried.value = true
   } catch (e) {
-    ElMessage.error('查询失败')
+    ElMessage.error(e.response.data.message)
   } finally {
     querying.value = false
   }

@@ -148,18 +148,16 @@
                     <button
                         @click="copyToClipboard"
                         class="ml-4 rounded-lg px-3 py-1.5 text-xs font-medium
-                           bg-blue-100 text-gray-700
-                           hover:bg-blue-200
-                           transition
+                           transition-all
                            border-0 outline-none
                            appearance-none
                            focus:outline-none"
+                                          :class="copied
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-blue-100 text-gray-700 hover:bg-blue-200'"
                     >
-                      复制
+                      {{ copied ? '已复制' : '复制' }}
                     </button>
-
-
-
                   </div>
                 </div>
 

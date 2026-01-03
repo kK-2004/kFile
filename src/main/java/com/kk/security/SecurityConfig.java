@@ -83,7 +83,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,
                         "/api/projects",
                         "/api/projects/*",
-                        "/api/projects/*/submissions/status"
+                        "/api/projects/*/submissions/status",
+                        "/test/*"
                 ).permitAll()
                 .requestMatchers(HttpMethod.POST,
                         "/api/projects/*/submissions",
