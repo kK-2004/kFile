@@ -42,3 +42,6 @@ logs/*.log.zip
 
 ## test
 src/main/java/com/kk/test
+
+docs
+frontend/dist

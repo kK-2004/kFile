@@ -59,6 +59,8 @@ public class ArchiveTaskService {
         private String url;
         // 在 ZIP 中显示的路径/文件名
         private String filename;
+        // 文件大小（字节）
+        private Long size;
     }
 
     public Task get(String id) { return tasks.get(id); }
@@ -137,6 +139,11 @@ public class ArchiveTaskService {
                     me.setKey(key);
                     me.setUrl(signedUrl);
                     me.setFilename(entryName);
+                    try {
+                        me.setSize(ossService.statByKey(key).length);
+                    } catch (Exception ex2) {
+                        log.debug("failed to get size for key {}: {}", key, ex2.getMessage());
+                    }
                     out.add(me);
                 } catch (Exception ex) {
                     log.warn("failed to generate presigned url for key {}: {}", key, ex.getMessage());

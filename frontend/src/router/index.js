@@ -12,6 +12,7 @@ import { useAuthStore } from '../stores/auth'
 
 const routes = [
   { path: '/', component: Hero },
+  { path: '/share', component: () => import('../views/ShareDownload.vue') },
   { path: '/admin', redirect: '/admin/projects' },
   { path: '/user/projects', component: UserProjects },
   { path: '/user/projects/:id', component: UserSubmit, props: true },
@@ -46,9 +47,12 @@ router.beforeEach(async (to) => {
     }
   } catch {}
 
+  // /share 页面不需要登录，跳过会话探测
+  if (to.path === '/share') return true
+
   // 在非登录页正常探测会话；在登录页如果已携带站点 token 也应探测以便自动跳转
   if (to.path !== '/admin/login') {
-    if (!store.loaded) await store.loadMe()
+    try { if (!store.loaded) await store.loadMe() } catch {}
   } else {
     const hasSiteToken = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
     if (!store.loaded && hasSiteToken) {

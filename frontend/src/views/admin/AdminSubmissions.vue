@@ -47,15 +47,18 @@
             >
               <span class="help-icon">?</span>
             </el-tooltip>
+            <el-button type="warning" @click="openArchivePresign(false)" style="margin-left: 8px;">分享链接</el-button>
             <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="startArchive(true)"
                        style="margin-left: 8px;">按条件打包</el-button>
             <el-tooltip
                 effect="dark"
                 placement="top"
-                content="输入“字段”和“值”后，将按该字段对记录进行前缀匹配，仅下载每位提交者的最新一次提交；若无匹配内容则不可用。"
+                content="输入字段和值后，将按该字段对记录进行前缀匹配，仅下载每位提交者的最新一次提交；若无匹配内容则不可用。"
             >
               <span class="help-icon">?</span>
             </el-tooltip>
+            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="openArchivePresign(true)"
+                       style="margin-left: 8px;">按条件分享</el-button>
           </el-form-item>
         </el-form>
       </div>
@@ -239,9 +242,9 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="presignDialogVisible" title="生成预签名链接" width="400px">
+    <el-dialog v-model="presignDialogVisible" :title="presignAction === 'archive' ? '生成打包分享链接' : '生成预签名链接'" width="400px">
       <div style="margin-bottom: 12px;">
-        目标文件：<span style="font-weight:500;">{{ presignTargetName }}</span>
+        {{ presignAction === 'archive' ? '打包范围' : '目标文件' }}：<span style="font-weight:500;">{{ presignTargetName }}</span>
       </div>
       <el-form label-width="80px">
         <el-form-item label="有效期">
@@ -268,6 +271,7 @@ import JSZip from 'jszip'
 import api from '../../api'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -341,7 +345,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', calculateTableHeight)
 })
 
-// 当前项目名称（若未加载到项目则回退为“项目 {id}”）
+// 当前项目名称（若未加载到项目则回退为"项目 {id}"）
 const projectName = computed(() => project.value?.name || `项目 ${projectId}`)
 
 // 字段 label 映射，用于提交者信息中将 key 显示为 label
@@ -548,9 +552,10 @@ const formatDateTimeLocal = (ms) => {
 const presignDialogVisible = ref(false)
 const presignTargetUrl = ref('')
 const presignTargetName = ref('')
-const presignAction = ref('download') // 'download' | 'copy'
+const presignAction = ref('download') // 'download' | 'copy' | 'archive'
 const presignExpire = ref(300) // 默认 5 分钟
 const presignLoading = ref(false)
+const presignArchiveByFilter = ref(false)
 
 const presignOptions = [
   { label: '5 分钟', value: 5 * 60 },
@@ -588,31 +593,67 @@ const openPresign = (u, name, action) => {
   presignDialogVisible.value = true
 }
 
+// 打包分享：打开 presign dialog（archive 模式）
+const openArchivePresign = (byFilter = false) => {
+  presignTargetUrl.value = ''
+  presignTargetName.value = byFilter
+    ? `按 ${filterKey.value}=${filterValue.value} 筛选`
+    : '项目全部文件'
+  presignAction.value = 'archive'
+  presignArchiveByFilter.value = byFilter
+  presignExpire.value = 3600
+  presignDialogVisible.value = true
+}
+
 const doPresign = async () => {
-  if (!presignTargetUrl.value) return
+  if (!presignTargetUrl.value && presignAction.value !== 'archive') return
   presignLoading.value = true
   try {
-    const { data } = await api.adminPresignedUrl(projectId, presignTargetUrl.value, presignExpire.value, true)
-    const url = data?.url || data
-    if (!url) throw new Error('未返回预签名链接')
-    if (presignAction.value === 'download') {
-      const a = document.createElement('a')
-      a.href = url
-      a.target = '_blank'
-      if (presignTargetName.value) a.download = presignTargetName.value
-      a.click()
-    } else {
+    if (presignAction.value === 'archive') {
+      // 打包分享：调用 archive-manifest，将 manifest 编码为分享链接
+      const params = presignArchiveByFilter.value
+        ? { fieldKey: filterKey.value, fieldValue: filterValue.value }
+        : {}
+      const { data } = await api.adminArchiveManifest(projectId, params.fieldKey, params.fieldValue, presignExpire.value)
+      const entries = data?.entries || []
+      if (!entries.length) { ElMessage.warning('没有可分享的文件'); presignLoading.value = false; return }
+      const shareData = {
+        n: data.filename || `project-${projectId}.zip`,
+        e: entries.map(e => ({ u: e.url, f: e.filename, s: e.size })),
+        exp: Math.floor(Date.now() / 1000) + presignExpire.value
+      }
+      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(shareData))))
+      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+      const shareUrl = `${window.location.origin}${base}/share?d=${encodeURIComponent(encoded)}`
       try {
-        await navigator.clipboard.writeText(url)
-        if (typeof ElMessage !== 'undefined') ElMessage.success('已复制预签名链接')
+        await navigator.clipboard.writeText(shareUrl)
+        ElMessage.success('已复制分享链接')
       } catch {
-        if (typeof ElMessage !== 'undefined') ElMessage.error('复制失败，请手动复制')
+        ElMessage.error('复制失败，请手动复制')
+      }
+    } else {
+      const { data } = await api.adminPresignedUrl(projectId, presignTargetUrl.value, presignExpire.value, true)
+      const url = data?.url || data
+      if (!url) throw new Error('未返回预签名链接')
+      if (presignAction.value === 'download') {
+        const a = document.createElement('a')
+        a.href = url
+        a.target = '_blank'
+        if (presignTargetName.value) a.download = presignTargetName.value
+        a.click()
+      } else {
+        try {
+          await navigator.clipboard.writeText(url)
+          ElMessage.success('已复制预签名链接')
+        } catch {
+          ElMessage.error('复制失败，请手动复制')
+        }
       }
     }
     presignDialogVisible.value = false
   } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '获取预签名链接失败'
-    if (typeof ElMessage !== 'undefined') ElMessage.error(msg)
+    ElMessage.error(msg)
   } finally {
     presignLoading.value = false
   }
@@ -622,7 +663,7 @@ const doPresign = async () => {
 const manualVisible = ref(false)
 // 管理端：按项目配置字段填写，构造对象；不强制 required，允许留空
 const manualSubmitter = ref({})
-// 管理端优先使用 allowedSubmitterKeys 作为关键字段（与“未提交名单”一致），否则回退 expectedFields
+// 管理端优先使用 allowedSubmitterKeys 作为关键字段（与"未提交名单"一致），否则回退 expectedFields
 // 管理端手动上传与用户端保持一致：按 expectedUserFields 渲染（含下拉/placeholder）
 const manualFields = computed(() => expectedFields.value || [])
 const manualFiles = ref([])
@@ -723,7 +764,7 @@ const groupedContent = computed(() => {
   return groups
 })
 
-// 按每个提交者的“最新提交时间”排序（升序/降序切换）
+// 按每个提交者的"最新提交时间"排序（升序/降序切换）
 const sortedGroupedContent = computed(() => {
   const groups = (groupedContent.value || []).slice()
   groups.sort((a, b) => {
@@ -734,7 +775,7 @@ const sortedGroupedContent = computed(() => {
   return groups
 })
 
-// 是否存在按条件过滤后的结果，用于控制“按条件打包”按钮可用性
+// 是否存在按条件过滤后的结果，用于控制"按条件打包"按钮可用性
 const hasFilteredResult = computed(() => {
   if (!filterKey.value || !filterValue.value) return false
   return groupedContent.value.length > 0

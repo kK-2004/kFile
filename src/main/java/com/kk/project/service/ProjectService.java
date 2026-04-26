@@ -45,6 +45,10 @@ public class ProjectService {
             try {
                 creatorSiteUserId = Long.parseLong(jwtAuth.getToken().getSubject());
             } catch (Exception ignored) {}
+        } else if (authentication != null) {
+            for (GrantedAuthority ga : authentication.getAuthorities()) {
+                if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
+            }
         }
         if (!isAdmin && creatorSiteUserId != null) {
             java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC);

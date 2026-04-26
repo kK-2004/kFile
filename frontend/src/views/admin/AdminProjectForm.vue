@@ -82,16 +82,20 @@
                   </el-input>
                 </el-form-item>
                 <el-form-item label="文件扩展名白名单">
-                  <el-select
-                      v-model="allowedTypes"
-                      multiple
-                      filterable
-                      allow-create
-                      default-first-option
-                      placeholder="所有类型 (或输入 pdf, zip...)"
-                  >
-                    <el-option v-for="t in typeSelectable" :key="t" :value="t" :label="`.${t}`" />
-                  </el-select>
+                  <div style="width:100%;">
+                    <el-select
+                        v-model="allowedTypes"
+                        multiple
+                        filterable
+                        allow-create
+                        default-first-option
+                        :disabled="!isSuperUser"
+                        :placeholder="isSuperUser ? '留空允许所有类型，或输入 pdf, zip...' : '仅管理员可修改'"
+                    >
+                      <el-option v-for="t in typeSelectable" :key="t" :value="t" :label="`.${t}`" />
+                    </el-select>
+                    <div v-if="isSuperUser" style="font-size:12px;color:#86868b;margin-top:4px;">留空表示允许所有文件类型</div>
+                  </div>
                 </el-form-item>
               </div>
             </div>
@@ -939,7 +943,12 @@ const load = async () => {
 
 // 配额显示（仅新建页且非 SUPER 显示）
 const quota = ref(null)
-const showUserQuota = computed(() => auth.user && (auth.user.role||'').toUpperCase() !== 'SUPER' && !isEdit.value)
+const isSuperUser = computed(() => {
+  if (!auth.user) return false
+  const role = (auth.user.role || '').toUpperCase()
+  return role === 'SUPER' || role === 'ADMIN' || auth.user.mode === 'local'
+})
+const showUserQuota = computed(() => auth.user && !isSuperUser.value && !isEdit.value)
 const quotaDisplay = computed(() => {
   const q = quota.value || {}
   const limit = q?.unlimited ? '不限' : (q?.limit ?? '-')
