@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # ==================== 配置变量 ====================
-APP_NAME=${APP_NAME:-KFile}
-IMAGE_NAME=${IMAGE_NAME:-kfile_i}
+APP_NAME=${APP_NAME:-KFile-v2}
+IMAGE_NAME=${IMAGE_NAME:-kfile-v2_i}
 CONTAINER_NAME=${CONTAINER_NAME:-$APP_NAME}
 CONTAINER_PORT=${CONTAINER_PORT:-8081}
 HOST_PORT=${HOST_PORT:-8081}
@@ -52,16 +52,6 @@ log_info "数据库地址: ${SPRING_DATASOURCE_URL}"
 if [[ -z "${OSS_AK}" ]] || [[ -z "${OSS_SK}" ]]; then
   log_error "OSS_AK 和 OSS_SK 环境变量必须设置（通过 Jenkins Credentials 注入）"
   exit 1
-fi
-# ==================== 部署前端 ====================
-log_info "=== 部署前端静态文件 ==="
-FRONTEND_DIST_DIR=${FRONTEND_DIST_DIR:-frontend/dist}
-WEB_ROOT=${WEB_ROOT:-/var/www/k-File}
-if [[ -d "${FRONTEND_DIST_DIR}" ]]; then
-  rsync -av --delete "${FRONTEND_DIST_DIR}/" "${WEB_ROOT}/"
-  log_info "前端文件已同步到 ${WEB_ROOT}"
-else
-  log_warn "前端 dist 目录不存在: ${FRONTEND_DIST_DIR}，跳过前端部署"
 fi
 
 # ==================== 停止旧容器 ====================
@@ -167,7 +157,6 @@ else
   log_info "没有需要清理的旧镜像"
 fi
 
-# ==================== 最终报告 ====================
 log_info "=========================================="
 log_info "✅ 部署成功！"
 log_info "应用名称: ${APP_NAME}"
@@ -175,6 +164,5 @@ log_info "容器名称: ${CONTAINER_NAME}"
 log_info "镜像版本: ${IMAGE_NAME}:${BUILD_NUMBER}"
 log_info "后端 API: http://127.0.0.1:${HOST_PORT}/api/admin/auth/me"
 log_info "健康检查: http://127.0.0.1:${HOST_PORT}/actuator/health"
-log_info "前端页面: 由服务器 Nginx 服务 (${WEB_ROOT})"
 log_info "查看日志: docker logs -f ${CONTAINER_NAME}"
 log_info "=========================================="

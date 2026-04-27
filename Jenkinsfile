@@ -2,10 +2,11 @@ pipeline {
     agent any
 
     environment {
-        OSS_AK     = credentials('aliyun-oss-ak')
-        OSS_SK     = credentials('aliyun-oss-sk')
-        DB_USER    = credentials('kfile-db-username')
-        DB_PASS    = credentials('kfile-db-password')
+        APP_NAME  = 'KFile-v2'
+        OSS_AK  = credentials('aliyun-oss-ak')
+        OSS_SK  = credentials('aliyun-oss-sk')
+        DB_USER = credentials('kfile-db-username')
+        DB_PASS = credentials('kfile-db-password')
     }
 
     triggers {
@@ -15,12 +16,12 @@ pipeline {
     stages {
         stage('Deploy') {
             when {
-                branch 'main'
+//                 branch 'main'        // 如果是普通流水线（非多分支），改用下面这行：
+                expression { env.GIT_BRANCH == 'origin/main' }
             }
             steps {
                 sh '''#!/usr/bin/env bash
                     set -e
-
                     chmod +x deploy.sh
                     ./deploy.sh
                 '''
@@ -36,7 +37,9 @@ pipeline {
             echo '部署失败，请检查日志'
         }
         always {
-            cleanWs()
+            node('') {
+                cleanWs()
+            }
         }
     }
 }
