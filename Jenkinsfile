@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME  = 'KFile-v2'
-        OSS_AK  = credentials('aliyun-oss-ak')
-        OSS_SK  = credentials('aliyun-oss-sk')
-        DB_USER = credentials('kfile-db-username')
-        DB_PASS = credentials('kfile-db-password')
+        APP_NAME                      = 'KFile-v2'
+        OSS_AK                        = credentials('aliyun-oss-ak')
+        OSS_SK                        = credentials('aliyun-oss-sk')
+        SPRING_DATASOURCE_USERNAME     = credentials('kfile-db-username')
+        SPRING_DATASOURCE_PASSWORD     = credentials('kfile-db-password')
     }
 
     triggers {
