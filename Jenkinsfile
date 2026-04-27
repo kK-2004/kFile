@@ -13,34 +13,17 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build Frontend') {
-            steps {
-                dir('frontend') {
-                    sh 'npm install'
-                    sh 'npm run build'
-                }
-            }
-        }
-
         stage('Deploy') {
             when {
                 branch 'main'
             }
             steps {
-                sh """#!/bin/bash
-                    export OSS_AK='${OSS_AK}'
-                    export OSS_SK='${OSS_SK}'
-                    export SPRING_DATASOURCE_USERNAME='${DB_USER}'
-                    export SPRING_DATASOURCE_PASSWORD='${DB_PASS}'
+                sh '''#!/usr/bin/env bash
+                    set -e
+
                     chmod +x deploy.sh
                     ./deploy.sh
-                """
+                '''
             }
         }
     }
