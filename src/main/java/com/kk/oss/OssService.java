@@ -51,7 +51,6 @@ public interface OssService {
         throw new UnsupportedOperationException();
     }
 
-    // 根据对象 key 构造站点代理访问路径（/file/oss/{key}，带上 app.base-path 如有）
     default String proxyUrlByKey(String key) { throw new UnsupportedOperationException(); }
 
     // ===== Direct multipart (browser) support =====

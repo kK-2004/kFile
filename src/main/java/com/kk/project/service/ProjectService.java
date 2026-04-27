@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,34 +35,10 @@ public class ProjectService {
     @Transactional
     public Project create(CreateProjectRequest req, Authentication authentication) {
         // 对普通站点用户施加每月创建上限（默认3个）
-        Long creatorSiteUserId = null;
         boolean isAdmin = false;
-        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
-            for (GrantedAuthority ga : jwtAuth.getAuthorities()) {
-                String a = ga.getAuthority();
-                if ("ROLE_SUPER".equals(a) || "ROLE_SITE_ADMIN".equals(a)) { isAdmin = true; break; }
-            }
-            try {
-                creatorSiteUserId = Long.parseLong(jwtAuth.getToken().getSubject());
-            } catch (Exception ignored) {}
-        } else if (authentication != null) {
+        if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
                 if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
-            }
-        }
-        if (!isAdmin && creatorSiteUserId != null) {
-            java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC);
-            java.time.ZonedDateTime start = now.withDayOfMonth(1).toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC);
-            java.time.ZonedDateTime end = start.plusMonths(1);
-            int createdCount = projectRepository.countByCreatorSiteUserIdAndCreatedAtBetween(
-                    creatorSiteUserId,
-                    start.toInstant(),
-                    end.toInstant()
-            );
-            int monthlyLimit = java.util.Optional.ofNullable(appConfigService.getInt(com.kk.common.service.AppConfigService.KEY_USER_MONTHLY_LIMIT))
-                    .orElse(userMonthlyCreateLimitDefault);
-            if (monthlyLimit > 0 && createdCount >= monthlyLimit) {
-                throw new IllegalStateException("普通用户每月最多创建 " + monthlyLimit + " 个项目");
             }
         }
         Project p = new Project();
@@ -119,31 +95,19 @@ public class ProjectService {
         p.setUserSubmitStatusText(req.getUserSubmitStatusText());
         p.setQueryFieldKey(req.getQueryFieldKey());
         p.setTotalSubmitters(0);
-        if (creatorSiteUserId != null) {
-            p.setCreatorSiteUserId(creatorSiteUserId);
-        }
         Project saved = projectRepository.save(p);
-        log.info("BIZ action=PROJECT_CREATE projectId={} projectName={} actor={} roles={} isAdmin={} creatorSiteUserId={}",
+        log.info("BIZ action=PROJECT_CREATE projectId={} projectName={} actor={} roles={} isAdmin={}",
                 saved.getId(),
                 com.kk.common.logging.AuditLogUtil.safe(saved.getName()),
                 com.kk.common.logging.AuditLogUtil.actor(authentication),
                 com.kk.common.logging.AuditLogUtil.roles(authentication),
-                isAdmin,
-                creatorSiteUserId);
+                isAdmin);
         return saved;
     }
 
     public java.util.Map<String, Object> getCreationQuota(org.springframework.security.core.Authentication authentication) {
         boolean isAdmin = false;
-        Long siteUserId = null;
-        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
-            for (GrantedAuthority ga : jwtAuth.getAuthorities()) {
-                String a = ga.getAuthority();
-                if ("ROLE_SUPER".equals(a) || "ROLE_SITE_ADMIN".equals(a)) { isAdmin = true; break; }
-            }
-            try { siteUserId = Long.parseLong(jwtAuth.getToken().getSubject()); } catch (Exception ignored) {}
-        } else if (authentication != null) {
-            // 本地管理员会话视为管理员
+        if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
                 if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
             }
@@ -154,9 +118,6 @@ public class ProjectService {
         java.time.ZonedDateTime end = start.plusMonths(1);
 
         int used = 0;
-        if (siteUserId != null) {
-            used = projectRepository.countByCreatorSiteUserIdAndCreatedAtBetween(siteUserId, start.toInstant(), end.toInstant());
-        }
         int monthlyLimit = java.util.Optional.ofNullable(appConfigService.getInt(com.kk.common.service.AppConfigService.KEY_USER_MONTHLY_LIMIT))
                 .orElse(userMonthlyCreateLimitDefault);
         boolean unlimited = isAdmin || monthlyLimit <= 0;
@@ -196,12 +157,7 @@ public class ProjectService {
     public Project update(Long id, UpdateProjectRequest req, Authentication authentication) {
         Project p = get(id);
         boolean isAdmin = false;
-        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
-            for (GrantedAuthority ga : jwtAuth.getAuthorities()) {
-                String a = ga.getAuthority();
-                if ("ROLE_SUPER".equals(a) || "ROLE_SITE_ADMIN".equals(a)) { isAdmin = true; break; }
-            }
-        } else if (authentication != null) {
+        if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
                 if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
             }

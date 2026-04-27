@@ -33,47 +33,22 @@
             登录
           </el-button>
         </el-form-item>
-        <div class="or-line"><span>或</span></div>
-        <el-button @click="onLoginViaSite" size="large" class="site-button" :loading="siteLoading">
-          从主站登录（k‑Site）
-        </el-button>
       </el-form>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage } from 'element-plus'
-import api from '../../api'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAuthStore()
 const form = ref({ username: '', password: '' })
 const loading = ref(false)
-const siteLoading = ref(false)
-const ksiteLoginUrl = import.meta.env.VITE_KSITE_LOGIN_URL || (import.meta.env.VITE_KSITE_BASE ? `${import.meta.env.VITE_KSITE_BASE.replace(/\/$/, '')}/login` : 'http://localhost:8081/login')
-
-const ensureSsoAvailable = async () => {
-  try {
-    const { data } = await api.ssoStatus()
-    if (data?.enabled === false) {
-      ElMessage.warning('主站登录已关闭，请使用用户名密码登录')
-      return false
-    }
-    if (data?.available === false) {
-      ElMessage.error('主站当前为下线状态，请使用其他方式登录')
-      return false
-    }
-    return true
-  } catch (e) {
-    ElMessage.error('主站当前为下线状态，请使用其他方式登录')
-    return false
-  }
-}
 
 const onSubmit = async () => {
   if (!form.value.username || !form.value.password) {
@@ -84,103 +59,19 @@ const onSubmit = async () => {
   try {
     await store.login(form.value.username, form.value.password)
     const raw = route.query.redirect || '/admin/projects'
-    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
     let target = String(raw)
-    // 规范化：移除 base 前缀，确保是应用内路径
     try {
       if (target.startsWith('http://') || target.startsWith('https://')) {
         const url = new URL(target)
         target = url.pathname + url.search + url.hash
       }
     } catch {}
-    if (base && target.startsWith(base + '/')) target = target.slice(base.length)
     router.replace(target)
   } catch (e) {
     const msg = e?.response?.data?.message || '登录失败'
     ElMessage.error(msg)
   } finally {
     loading.value = false
-  }
-}
-
-// 处理从主站回跳（accessToken 可能被路由守卫吃掉），或已有主站 token 的场景
-onMounted(async () => {
-  const qpToken = route.query.accessToken
-  const savedToken = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
-  if (typeof qpToken === 'string' && qpToken) store.setToken(qpToken)
-  if (qpToken || savedToken) {
-    try {
-      await store.loadMe()
-      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-      const normalize = (input) => {
-        let t = String(input || '')
-        try { if (/^https?:/i.test(t)) { const u = new URL(t); t = u.pathname + u.search + u.hash } } catch {}
-        if (base && t.startsWith(base + '/')) t = t.slice(base.length)
-        if (!t) t = '/'
-        return t
-      }
-      const raw = route.query.redirect || ''
-      const t0 = normalize(raw)
-      const role = String(store.user?.role || '').toUpperCase()
-      if (store.user?.mode === 'local') {
-        router.replace(normalize(raw || '/admin/projects'))
-      } else if (store.user?.mode === 'site' && (role === 'ADMIN' || role === 'SUPER')) {
-        router.replace('/admin/projects')
-      } else {
-        // 站点普通用户：不自动跳走，保留在登录页
-      }
-    } catch (e) {
-      ElMessage.error('主站登录校验失败')
-    }
-  }
-})
-
-const onLoginViaSite = async () => {
-  siteLoading.value = true
-  try {
-  // 已有 token 则直接验证并跳转
-  const token = store.token || localStorage.getItem('KSITE_ACCESS_TOKEN')
-  if (token) {
-    try {
-      await store.loadMe()
-      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-      const normalize = (input) => {
-        let t = String(input || '')
-        try { if (/^https?:/i.test(t)) { const u = new URL(t); t = u.pathname + u.search + u.hash } } catch {}
-        if (base && t.startsWith(base + '/')) t = t.slice(base.length)
-        if (!t) t = '/'
-        return t
-      }
-      const raw = route.query.redirect || ''
-      const role = String(store.user?.role || '').toUpperCase()
-      if (store.user?.mode === 'local') {
-        router.replace(normalize(raw || '/admin/projects'))
-      } else if (store.user?.mode === 'site' && (role === 'ADMIN' || role === 'SUPER')) {
-        router.replace('/admin/projects')
-      } else {
-        // 非管理员站点用户保留在登录页
-      }
-      siteLoading.value = false
-      return
-    } catch {
-      // token 可能失效/主站不可用：先清理再进入登录流程
-      store.setToken(null)
-    }
-  }
-  if (!(await ensureSsoAvailable())) {
-    siteLoading.value = false
-    return
-  }
-  // 无 token，重定向主站登录，登录后回跳并携带 accessToken
-  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-  const current = window.location.origin + base + '/admin/login'
-  const redirect = route.query.redirect ? `?redirect=${encodeURIComponent(route.query.redirect)}` : ''
-  const back = encodeURIComponent(current + redirect)
-  // 约定主站支持 redirect 参数并在回跳时追加 accessToken
-  window.location.href = `${ksiteLoginUrl}?redirect=${back}`
-  } finally {
-    // 若已跳转该行不会执行；若被阻止则恢复 loading
-    siteLoading.value = false
   }
 }
 </script>
@@ -190,7 +81,6 @@ const onLoginViaSite = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Prevent page scroll: viewport minus header(64) and main padding(24+24) */
   height: calc(100vh - 112px);
   min-height: calc(100vh - 112px);
   padding: 10px;
@@ -262,17 +152,6 @@ const onLoginViaSite = async () => {
   background: var(--kf-primary-hover, #66b1ff);
 }
 
-.or-line { display:flex; align-items:center; gap:8px; margin: 6px 0 12px; }
-.or-line::before, .or-line::after { content:''; flex:1; height:1px; background:#eee; }
-.or-line span { color:#999; font-size:12px; }
-
-.site-button {
-  width: 100%;
-  height: 44px;
-  border-radius: 10px;
-}
-
-/* 响应式优化 */
 @media (max-width: 480px) {
   .login-card {
     border-radius: 12px;

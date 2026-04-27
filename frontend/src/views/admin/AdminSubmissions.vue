@@ -242,24 +242,35 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="presignDialogVisible" :title="presignAction === 'archive' ? '生成打包分享链接' : '生成预签名链接'" width="400px">
+    <el-dialog v-model="presignDialogVisible" :title="presignAction === 'archive' ? '生成打包分享链接' : '生成预签名链接'" width="480px">
       <div style="margin-bottom: 12px;">
         {{ presignAction === 'archive' ? '打包范围' : '目标文件' }}：<span style="font-weight:500;">{{ presignTargetName }}</span>
       </div>
       <el-form label-width="80px">
         <el-form-item label="有效期">
-          <el-radio-group v-model="presignExpire">
+          <el-radio-group v-model="presignExpire" :disabled="!!presignResultUrl">
             <el-radio-button v-for="opt in presignOptions" :key="opt.value" :label="opt.value">
               {{ opt.label }}
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>
+      <div v-if="presignResultUrl && isSafari" style="margin-top:8px;">
+        <el-input :model-value="presignResultUrl" readonly>
+          <template #append>
+            <el-button @click="copyPresignResult">复制</el-button>
+          </template>
+        </el-input>
+      </div>
       <template #footer>
-        <el-button @click="presignDialogVisible=false" :disabled="presignLoading">取消</el-button>
-        <el-button type="primary" :loading="presignLoading" @click="doPresign">
-          {{ presignAction === 'download' ? '下载' : '复制链接' }}
-        </el-button>
+        <template v-if="presignResultUrl && isSafari">
+          <el-button @click="presignResultUrl='';presignDialogVisible=false">关闭</el-button>
+        </template>
+        <template v-else>
+          <el-button @click="presignDialogVisible=false" :disabled="presignLoading">取消</el-button>
+          <el-button v-if="presignAction==='download'" type="primary" :loading="presignLoading" @click="doPresign">下载</el-button>
+          <el-button v-else type="primary" :loading="presignLoading" @click="doPresign">{{ isSafari ? '获取链接' : '复制链接' }}</el-button>
+        </template>
       </template>
     </el-dialog>
   </div>
@@ -272,6 +283,7 @@ import api from '../../api'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage } from 'element-plus'
+import { copyText, isSafari } from '../../utils/clipboard'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -556,6 +568,7 @@ const presignAction = ref('download') // 'download' | 'copy' | 'archive'
 const presignExpire = ref(300) // 默认 5 分钟
 const presignLoading = ref(false)
 const presignArchiveByFilter = ref(false)
+const presignResultUrl = ref('')
 
 const presignOptions = [
   { label: '5 分钟', value: 5 * 60 },
@@ -590,10 +603,10 @@ const openPresign = (u, name, action) => {
   presignTargetName.value = name || filename(u)
   presignAction.value = action || 'download'
   presignExpire.value = 300
+  presignResultUrl.value = ''
   presignDialogVisible.value = true
 }
 
-// 打包分享：打开 presign dialog（archive 模式）
 const openArchivePresign = (byFilter = false) => {
   presignTargetUrl.value = ''
   presignTargetName.value = byFilter
@@ -602,6 +615,7 @@ const openArchivePresign = (byFilter = false) => {
   presignAction.value = 'archive'
   presignArchiveByFilter.value = byFilter
   presignExpire.value = 3600
+  presignResultUrl.value = ''
   presignDialogVisible.value = true
 }
 
@@ -609,53 +623,73 @@ const doPresign = async () => {
   if (!presignTargetUrl.value && presignAction.value !== 'archive') return
   presignLoading.value = true
   try {
+    let url = ''
     if (presignAction.value === 'archive') {
-      // 打包分享：调用 archive-manifest，将 manifest 编码为分享链接
       const params = presignArchiveByFilter.value
         ? { fieldKey: filterKey.value, fieldValue: filterValue.value }
         : {}
       const { data } = await api.adminArchiveManifest(projectId, params.fieldKey, params.fieldValue, presignExpire.value)
       const entries = data?.entries || []
       if (!entries.length) { ElMessage.warning('没有可分享的文件'); presignLoading.value = false; return }
-      const shareData = {
-        n: data.filename || `project-${projectId}.zip`,
-        e: entries.map(e => ({ u: e.url, f: e.filename, s: e.size })),
-        exp: Math.floor(Date.now() / 1000) + presignExpire.value
-      }
-      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(shareData))))
+      const { data: shareData } = await api.adminCreateShare(projectId, {
+        filename: data.filename || `project-${projectId}.zip`,
+        entries: entries.map(e => ({ u: e.url, f: e.filename, s: e.size })),
+        expireSeconds: presignExpire.value
+      })
       const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-      const shareUrl = `${window.location.origin}${base}/share?d=${encodeURIComponent(encoded)}`
-      try {
-        await navigator.clipboard.writeText(shareUrl)
-        ElMessage.success('已复制分享链接')
-      } catch {
-        ElMessage.error('复制失败，请手动复制')
-      }
+      url = `${window.location.origin}${base}/share?s=${shareData.code}`
     } else {
       const { data } = await api.adminPresignedUrl(projectId, presignTargetUrl.value, presignExpire.value, true)
-      const url = data?.url || data
+      url = data?.url || data
       if (!url) throw new Error('未返回预签名链接')
-      if (presignAction.value === 'download') {
-        const a = document.createElement('a')
-        a.href = url
-        a.target = '_blank'
-        if (presignTargetName.value) a.download = presignTargetName.value
-        a.click()
-      } else {
-        try {
-          await navigator.clipboard.writeText(url)
-          ElMessage.success('已复制预签名链接')
-        } catch {
-          ElMessage.error('复制失败，请手动复制')
-        }
-      }
     }
-    presignDialogVisible.value = false
+
+    if (presignAction.value === 'download') {
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      if (presignTargetName.value) a.download = presignTargetName.value
+      a.click()
+      presignDialogVisible.value = false
+    } else if (isSafari) {
+      presignResultUrl.value = url
+    } else {
+      try {
+        await navigator.clipboard.writeText(url)
+        ElMessage.success('已复制到剪贴板')
+      } catch {
+        try { copyText(url); ElMessage.success('已复制到剪贴板') }
+        catch { ElMessage.error('复制失败，请手动复制') }
+      }
+      presignDialogVisible.value = false
+    }
   } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '获取预签名链接失败'
     ElMessage.error(msg)
   } finally {
     presignLoading.value = false
+  }
+}
+
+const copyPresignResult = () => {
+  if (!presignResultUrl.value) return
+  const ta = document.createElement('textarea')
+  ta.value = presignResultUrl.value
+  ta.setAttribute('readonly', '')
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none'
+  document.body.appendChild(ta)
+  ta.focus()
+  ta.setSelectionRange(0, ta.value.length)
+  let ok = false
+  try { ok = document.execCommand('copy') } catch {}
+  document.body.removeChild(ta)
+  if (ok) {
+    ElMessage.success('已复制到剪贴板')
+  } else {
+    navigator.clipboard.writeText(presignResultUrl.value).then(
+      () => ElMessage.success('已复制到剪贴板'),
+      () => ElMessage.error('复制失败，请手动选中链接复制')
+    )
   }
 }
 

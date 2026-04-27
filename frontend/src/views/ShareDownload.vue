@@ -1,12 +1,16 @@
 <template>
   <div class="share-page">
     <!-- error state -->
-    <div v-if="error" class="error-card">
-      <div class="error-icon-wrap">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <div v-if="error" class="error-fullscreen">
+      <div class="error-card" :class="errorClass">
+        <div class="error-icon-wrap">
+          <svg v-if="errorType === 'expired'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <svg v-else-if="errorType === 'notfound'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <h2 class="error-title">{{ errorTitle }}</h2>
+        <p class="error-text">{{ error }}</p>
       </div>
-      <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#1d1d1f;">无法加载分享内容</h2>
-      <p class="error-text">{{ error }}</p>
     </div>
 
     <template v-else-if="shareData">
@@ -117,6 +121,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import JSZip from 'jszip'
+import api from '../api'
 
 const shareData = ref(null)
 const error = ref('')
@@ -128,24 +133,47 @@ const showAllFiles = ref(false)
 const now = ref(Date.now())
 let timer = null
 
-onMounted(() => {
+onMounted(async () => {
   timer = setInterval(() => { now.value = Date.now() }, 1000)
   try {
     const params = new URLSearchParams(window.location.search)
+    const s = params.get('s')
     const d = params.get('d')
-    if (!d) { error.value = '无效的分享链接'; return }
-    // encodeURIComponent 已在编码端处理了 +/= 等，URLSearchParams.get 会自动解码
-    // 直接 atob 即可
-    const json = decodeURIComponent(escape(atob(d)))
-    const parsed = JSON.parse(json)
-    if (!parsed.e || !Array.isArray(parsed.e) || parsed.e.length === 0) {
-      error.value = '分享数据无效'
+    if (s) {
+      try {
+        const { data } = await api.getShare(s)
+        if (!data?.entries || !Array.isArray(data.entries) || data.entries.length === 0) {
+          error.value = '分享数据无效'
+          return
+        }
+        shareData.value = {
+          n: data.filename || 'download.zip',
+          e: data.entries.map(e => ({ u: e.u || e.url, f: e.f || e.filename, s: e.s ?? e.size })),
+          exp: data.expireAt ? Math.floor(data.expireAt / 1000) : null
+        }
+      } catch (e) {
+        if (e?.response?.status === 410) {
+          error.value = '分享链接已过期'
+        } else if (e?.response?.status === 404) {
+          error.value = '分享链接不存在'
+        } else {
+          error.value = '加载分享数据失败'
+        }
+        return
+      }
+    } else if (d) {
+      const json = decodeURIComponent(escape(atob(d)))
+      const parsed = JSON.parse(json)
+      if (!parsed.e || !Array.isArray(parsed.e) || parsed.e.length === 0) {
+        error.value = '分享数据无效'
+        return
+      }
+      shareData.value = parsed
+    } else {
+      error.value = '无效的分享链接'
       return
     }
-    shareData.value = parsed
-    console.log('[ShareDownload] parsed shareData:', JSON.stringify(parsed).slice(0, 500))
   } catch (e) {
-    console.error('[ShareDownload] parse error:', e)
     error.value = '分享链接解析失败: ' + (e?.message || '')
   }
 })
@@ -156,6 +184,18 @@ const expired = computed(() => {
   const exp = shareData.value?.exp
   if (!exp) return false
   return now.value / 1000 >= exp
+})
+
+const errorType = computed(() => {
+  if (error.value.includes('过期')) return 'expired'
+  if (error.value.includes('不存在') || error.value.includes('无效')) return 'notfound'
+  return 'error'
+})
+
+const errorTitle = computed(() => {
+  if (errorType.value === 'expired') return '链接已过期'
+  if (errorType.value === 'notfound') return '链接不存在'
+  return '无法加载分享内容'
 })
 
 const expireText = computed(() => {
@@ -305,24 +345,33 @@ const startDownload = async () => {
 }
 
 /* ── error ── */
+.error-fullscreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
 .error-card {
   max-width: 420px;
-  margin: 120px auto 0;
+  width: 100%;
   background: var(--surface);
   border-radius: 16px;
   padding: 48px 36px;
   text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
 }
 .error-icon-wrap {
   width: 52px; height: 52px;
   border-radius: 50%;
-  background: #fef2f2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
 }
+.error-card.expired .error-icon-wrap { background: #fffbeb; }
+.error-card.notfound .error-icon-wrap { background: #f3f4f6; }
+.error-card.error .error-icon-wrap { background: #fef2f2; }
+.error-title { margin: 0 0 8px; font-size: 18px; font-weight: 600; color: #1d1d1f; }
 .error-text { color: var(--text-muted); font-size: 15px; margin: 0; }
 
 /* ── hero ── */

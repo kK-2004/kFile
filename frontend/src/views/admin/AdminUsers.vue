@@ -67,6 +67,7 @@ import { ref, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
+import { copyText } from '../../utils/clipboard'
 
 const users = ref([])
 const projects = ref([])
@@ -127,7 +128,7 @@ const savePerms = async () => {
 const resetPwd = async (row) => {
   try {
     const { data } = await api.adminResetPassword(row.id)
-    await navigator.clipboard.writeText(data.newPassword)
+    await copyText(data.newPassword)
     ElMessage.success('已重置并复制新密码：' + data.newPassword)
   } catch (e) {
     const msg = e?.response?.data?.message || '重置失败'

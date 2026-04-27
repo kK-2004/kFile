@@ -179,6 +179,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { copyText } from '../utils/clipboard'
 
 const showBetaModal = ref(false)
 const contactQQ = '2604159440'
@@ -186,9 +187,8 @@ const copied = ref(false)
 
 const copyToClipboard = async () => {
   try {
-    await navigator.clipboard.writeText(contactQQ)
+    await copyText(contactQQ)
     copied.value = true
-    // 2秒后重置复制状态
     setTimeout(() => {
       copied.value = false
     }, 2000)

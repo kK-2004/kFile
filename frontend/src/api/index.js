@@ -1,14 +1,8 @@
 import axios from 'axios'
 
-// 1) 由 Vite 的 BASE_URL 推导出子路径（vite.config.js 已设 base: '/kfile/'）
-const baseFromVite = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-
-// 2) 允许通过 VITE_API_BASE 覆盖；
-//    dev 环境默认使用 ''（让 Vite 代理 '/api' 生效），prod 回退到 baseFromVite('/kfile')
 const apiBase = (typeof import.meta.env.VITE_API_BASE !== 'undefined')
   ? import.meta.env.VITE_API_BASE
-  : (import.meta.env.DEV ? '' : baseFromVite)
-
+  : (import.meta.env.DEV ? '' : '')
 
 const instance = axios.create({
   baseURL: apiBase,
@@ -16,74 +10,6 @@ const instance = axios.create({
   withCredentials: true
 })
 
-// Attach Bearer token when appropriate
-// - 管理端 API：若有主站 token 注入 Bearer；否则回退 Cookie 会话（用于本地管理员）
-// - 用户端/项目相关 API：一律注入 Bearer（主站登录）
-instance.interceptors.request.use((config) => {
-  try {
-    const rawUrl = config?.url || ''
-    // 规范化为 pathname，尽量兼容绝对/相对 URL
-    let path = rawUrl
-    try { path = new URL(rawUrl, window.location.origin).pathname } catch {}
-    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-    if (base && path.startsWith(base)) path = path.slice(base.length)
-
-    const method = String(config.method || 'get').toLowerCase()
-    const isAdminAuth = path.startsWith('/api/admin/auth/')
-    const isAdminApi = path.startsWith('/api/admin/')
-    const isProjectsQuota = path === '/api/projects/quota'
-    const isAuthMe = path === '/api/auth/me'
-    const isProjectsCreateOrModify = path === '/api/projects' ? (method !== 'get') : (/^\/api\/projects\//.test(path) && ['post','put','delete','patch'].includes(method))
-    // Submissions endpoints classification
-    const reProjectId = '[^/]+'
-    const isSubmissionList = new RegExp(`^/api/projects/${reProjectId}/submissions$`).test(path) && method === 'get'
-    const isProjectAdminOps = (
-      method === 'get' && new RegExp(`^/api/projects/${reProjectId}/submissions/(export|archive|archive-prepared)$`).test(path)
-    )
-
-    // 1) 管理员认证接口：不注入 Bearer
-    if (isAdminAuth) {
-      if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-      config.withCredentials = false
-      return config
-    }
-
-    // 2) 管理端 API：优先 Bearer，否则回退 Cookie 会话
-    if (isAdminApi) {
-      const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
-      if (token) {
-        config.headers = config.headers || {}
-        config.headers['Authorization'] = `Bearer ${token}`
-        config.withCredentials = false
-      } else {
-        if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-        config.withCredentials = true
-      }
-      return config
-    }
-
-    // 3) 用户相关受保护接口：一律注入 Bearer（不回退 Cookie）
-    const needBearer = isAuthMe || isProjectsQuota || isProjectsCreateOrModify || isSubmissionList || isProjectAdminOps || path.startsWith('/api/projects')
-    if (needBearer) {
-      const token = localStorage.getItem('KSITE_ACCESS_TOKEN') || localStorage.getItem('accessToken')
-      if (token) {
-        config.headers = config.headers || {}
-        config.headers['Authorization'] = `Bearer ${token}`
-      } else {
-        if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-      }
-      config.withCredentials = false
-      return config
-    }
-
-    // 其余默认不注入 Bearer，不携带 Cookie
-    if (config.headers) { delete config.headers['Authorization']; delete config.headers['authorization'] }
-    config.withCredentials = false
-  } catch {}
-  return config
-})
-
-// Global response interceptor: redirect on 401 with X-Redirect
 instance.interceptors.response.use(
   (res) => res,
   (error) => {
@@ -91,11 +17,8 @@ instance.interceptors.response.use(
       const status = error?.response?.status
       let redirect = error?.response?.headers?.['x-redirect']
       if (status === 401 && redirect) {
-        // 根据原请求路径决定是否跳转（避免公共接口/用户页被误导向）
         let path = ''
         try { path = new URL(error?.config?.url || '', window.location.origin).pathname } catch { path = String(error?.config?.url || '') }
-        const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-        if (base && path.startsWith(base)) path = path.slice(base.length)
 
         const method = String(error?.config?.method || 'get').toLowerCase()
         const isAdminAuth = path.startsWith('/api/admin/auth/')
@@ -111,29 +34,21 @@ instance.interceptors.response.use(
         )
         const isProjectAdminOps = (method === 'get' && new RegExp(`^/api/projects/${reProjectId}/submissions/(export|archive|archive-prepared)$`).test(path))
         const isProjectPublicGet = /^\/api\/projects/.test(path) && method === 'get' && path !== '/api/projects/quota' && !isSubmissionList && !isProjectAdminOps
-        // 这些请求不应触发跳转：公共接口
         if (isPublicSubmissions || isProjectPublicGet) {
           return Promise.reject(error)
         }
 
-        // 如果当前页面是用户端或首页，即便命中了管理端接口的 401 也不要跳转，避免循环
         let currentPath = ''
         try { currentPath = new URL(window.location.href).pathname } catch { currentPath = window.location.pathname || '' }
-        if (base && currentPath.startsWith(base)) currentPath = currentPath.slice(base.length)
         const onUserOrHome = currentPath === '/' || currentPath.startsWith('/user')
         if (onUserOrHome) {
           return Promise.reject(error)
         }
 
-        // 仅对需要后台登录态的管理端接口触发重定向（排除 /api/admin/auth/me 探测）
         if ((isAdminAuth || isAdminApi) && !isAdminMe) {
           if (!/^https?:/i.test(redirect)) {
             let r = redirect
-            if (r.startsWith('/')) {
-              if (!r.startsWith(base + '/')) r = base + r
-            } else {
-              r = base + '/' + r
-            }
+            if (!r.startsWith('/')) r = '/' + r
             redirect = r
           }
           const to = redirect + (redirect.includes('?') ? '&' : '?') + 'redirect=' + encodeURIComponent(window.location.pathname + window.location.search)
@@ -147,10 +62,6 @@ instance.interceptors.response.use(
 )
 
 export default {
-  // Site auth
-  authMe() { return instance.get('/api/auth/me', { timeout: 8000 }) },
-  ssoStatus() { return instance.get('/api/sso/status', { timeout: 2000 }) },
-  // Projects
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },
   adminGetProject(id) { return instance.get(`/api/admin/projects/${id}`) },
@@ -158,7 +69,6 @@ export default {
   createProject(data) { return instance.post('/api/projects', data) },
   updateProject(id, data) { return instance.put(`/api/projects/${id}`, data) },
 
-  // Submissions
   pageSubmissions(projectId, page = 0, size = 20) {
     return instance.get(`/api/projects/${projectId}/submissions`, { params: { page, size } })
   },
@@ -172,7 +82,6 @@ export default {
     return instance.get(`/api/projects/${projectId}/submissions/archive`, { params, responseType: 'blob' })
   },
   latestStatus(projectId, params) {
-    // params can be: { submitter: string } or { fieldValue: string }
     const p = typeof params === 'string' ? { submitter: params } : (params || {})
     return instance.get(`/api/projects/${projectId}/submissions/status`, { params: p, responseType: 'json' })
   },
@@ -181,15 +90,13 @@ export default {
   },
   submit(projectId, submitter, files, config = {}) {
     const totalSize = (files || []).reduce((s, f) => s + (f?.size || 0), 0)
-    const threshold = 50 * 1024 * 1024 // 50MB
+    const threshold = 50 * 1024 * 1024
 
-    // 若总大小超过阈值，自动走直传 OSS 流程
     if (totalSize > threshold) {
       const filesMeta = Array.from(files || []).map(f => ({ name: f.name, contentType: f.type || 'application/octet-stream', size: f.size || 0 }))
       return this.directInit(projectId, submitter, filesMeta).then(res => {
         const entries = res?.data?.entries || res?.entries || []
         if (!entries.length) throw new Error('直传初始化失败：未返回任何条目')
-        // 顺序上传每个文件（如需并发可后续优化）
         return entries.reduce((p, entry, idx) => {
           const file = files[idx]
           return p.then(() => this.directPut(entry.putUrl, file, config.onUploadProgress))
@@ -200,7 +107,6 @@ export default {
       })
     }
 
-    // 否则继续走表单上传，并将超时设为 0（不限时）
     const fd = new FormData()
     fd.append('submitter', JSON.stringify(submitter || {}))
     for (const f of files) fd.append('files', f)
@@ -210,7 +116,6 @@ export default {
     })
   },
 
-  // 直传初始化/完成
   directInit(projectId, submitter, filesMeta) {
     return instance.post(`/api/projects/${projectId}/submissions/direct-init`, {
       submitter,
@@ -220,17 +125,14 @@ export default {
   directComplete(projectId, submitter, keys) {
     return instance.post(`/api/projects/${projectId}/submissions/direct-complete`, { submitter, keys })
   },
-  // 直传 PUT（签名 URL 为绝对地址）
   directPut(putUrl, file, onUploadProgress) {
     return axios.put(putUrl, file, {
       headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      // 大文件上传时间不可预估，禁用超时由浏览器网络栈控制
       timeout: 0,
       onUploadProgress
     })
   },
 
-  // 分片直传：初始化、签名分片、完成合并
   directMultipartInit(projectId, submitter, filesMeta) {
     return instance.post(`/api/projects/${projectId}/submissions/direct-multipart-init`, {
       submitter,
@@ -248,9 +150,10 @@ export default {
     })
   },
 
-  // Admin auth
   adminLogin(username, password) { return instance.post('/api/admin/auth/login', { username, password }) },
   adminMe() { return instance.get('/api/admin/auth/me') }
+  ,adminCreateShare(projectId, payload) { return instance.post(`/api/admin/projects/${projectId}/share`, payload) }
+  ,getShare(code) { return instance.get(`/api/share/${code}`) }
   ,adminListUsers() { return instance.get('/api/admin/users') }
   ,adminCreateUser(payload) { return instance.post('/api/admin/users', payload) }
   ,adminListUserProjects(userId) { return instance.get(`/api/admin/users/${userId}/projects`) }
@@ -277,9 +180,6 @@ export default {
   ,adminGetConfig() { return instance.get('/api/admin/config') }
   ,adminUpdateConfig(payload) { return instance.put('/api/admin/config', payload) }
 
-  // Prepared ZIP（带 Content-Length）
-  
-  // Admin submissions tools
   ,adminManualUpload(projectId, submitter, files, config = {}) {
     const fd = new FormData()
     fd.append('projectId', projectId)

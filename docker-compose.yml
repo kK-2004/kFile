@@ -1,0 +1,26 @@
+services:
+  kfile:
+    image: crpi-g3stl1c9yrlh5x39.cn-beijing.personal.cr.aliyuncs.com/kk09/kfile:latest
+    container_name: KFile
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - TZ=Asia/Shanghai
+      - LOG_PATH=/app/logs
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME:-kfile}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-123456}
+    networks:
+      - common-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 40s
+      retries: 3
+
+networks:
+  common-net:
+    external: true

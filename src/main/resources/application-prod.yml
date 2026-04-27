@@ -1,6 +1,6 @@
 env:
   name: prod
-  cors: https://ksite.xin
+  cors: https://file.ksite.xin
 
 spring:
   datasource:
@@ -22,26 +22,14 @@ spring:
       enabled: true
       max-file-size: 2048MB
       max-request-size: 2048MB
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: https://ksite.xin/auth
 
 server:
   tomcat:
     max-swallow-size: -1
     max-http-form-post-size: -1
-  port: 8086
+  port: 8081
 
-# App-level settings
 app:
-  base-path: /kfile
-  sso:
-    enabled: true
-    jwt:
-      # 主站不可用时的重试间隔（秒）；间隔内不会反复请求 /.well-known/openid-configuration
-      init-retry-seconds: 30
   project:
     monthly-limit:
       user: 3
@@ -49,6 +37,3 @@ app:
 geoip:
   enabled: ${GEOIP_ENABLED:false}
   mmdbPath: ${GEOIP_MMDB_PATH:}
-
-site:
-  base-url: ${KSITE_BASE_URL:https://ksite.xin}

@@ -3,7 +3,6 @@ package com.kk.common.logging;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.util.StringJoiner;
 
@@ -20,12 +19,6 @@ public final class AuditLogUtil {
 
     public static String actor(Authentication auth) {
         if (auth == null) return "anonymous";
-        if (auth instanceof JwtAuthenticationToken jwt) {
-            String sub = null;
-            try { sub = jwt.getToken() == null ? null : jwt.getToken().getSubject(); } catch (Exception ignored) {}
-            String name = safe(auth.getName());
-            return "jwt:" + (sub == null ? name : sub);
-        }
         return safe(auth.getName());
     }
 
@@ -44,4 +37,3 @@ public final class AuditLogUtil {
         return s.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
     }
 }
-

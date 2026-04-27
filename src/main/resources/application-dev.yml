@@ -28,11 +28,6 @@ spring:
       enabled: true
       max-file-size: 2048MB
       max-request-size: 2048MB
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: http://localhost:8081
 
 geoip:
   enabled: ${GEOIP_ENABLED:false}
@@ -41,14 +36,7 @@ geoip:
 oss:
   type: ali
 
-site:
-  base-url: ${KSITE_BASE_URL:http://localhost:8081}
-
 app:
-  sso:
-    enabled: true
-    jwt:
-      init-retry-seconds: 5
   project:
     monthly-limit:
       user: 3

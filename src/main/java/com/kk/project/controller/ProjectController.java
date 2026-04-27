@@ -24,15 +24,10 @@ public class ProjectController {
     private final com.kk.security.service.AdminPermissionService adminPermissionService;
 
     @PostMapping
-    @PreAuthorize("hasRole('SUPER') or hasAuthority('ROLE_SITE_USER') or hasAuthority('ROLE_SITE_ADMIN')")
+    @PreAuthorize("hasRole('SUPER')")
     public ProjectResponse create(@RequestBody CreateProjectRequest req,
                                   org.springframework.security.core.Authentication authentication) {
         Project p = projectService.create(req, authentication);
-        // 如果是站点用户，自动授予自己管理权限
-        if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth) {
-            String sub = jwtAuth.getToken().getSubject();
-            try { adminPermissionService.grantForSiteUser(p.getId(), Long.parseLong(sub)); } catch (Exception ignored) {}
-        }
         List<String> types = projectService.parseTypes(p);
         Object expected = null;
         try {
@@ -68,7 +63,7 @@ public class ProjectController {
     }
 
     @GetMapping("/quota")
-    @PreAuthorize("hasAuthority('ROLE_SITE_USER') or hasAuthority('ROLE_SITE_ADMIN') or hasRole('SUPER')")
+    @PreAuthorize("hasRole('SUPER')")
     public java.util.Map<String, Object> quota(org.springframework.security.core.Authentication authentication) {
         return projectService.getCreationQuota(authentication);
     }

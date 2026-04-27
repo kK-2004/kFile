@@ -40,8 +40,6 @@ import java.util.List;
 public class AliOssService implements OssService {
 
     private final OssProperties properties;
-    @org.springframework.beans.factory.annotation.Value("${app.base-path:}")
-    private String appBasePath;
     private OSS ossClientPublic;
     private OSS ossClientInternal;
 
@@ -112,7 +110,7 @@ public class AliOssService implements OssService {
             }
             String objectKey = keyPrefix + datePath + "/" + md5 + (ext.isEmpty() ? "" : "." + ext);
             putStreamOrMultipart(file, objectKey);
-            return normalizeBase(appBasePath) + "/file/oss/" + objectKey;
+            return "/file/oss/" + objectKey;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
         }
@@ -133,7 +131,7 @@ public class AliOssService implements OssService {
             String originalName = baseName(file.getOriginalFilename());
             String key = normalizePrefix(keyPrefix) + originalName;
             putStreamOrMultipart(file, key);
-            return normalizeBase(appBasePath) + "/file/oss/" + key;
+            return "/file/oss/" + key;
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file", e);
         }
@@ -221,7 +219,7 @@ public class AliOssService implements OssService {
             } else {
                 multipartUploadFromStream(in, key);
             }
-            return normalizeBase(appBasePath) + "/file/oss/" + key;
+            return "/file/oss/" + key;
         } catch (Exception ex) {
             log.error("OSS上传失败: bucket={}, key={}, msg={}", properties.getBucket(), key, ex.getMessage(), ex);
             throw new IllegalStateException("文件上传失败，请联系管理员", ex);
@@ -459,7 +457,7 @@ public class AliOssService implements OssService {
 
     @Override
     public String proxyUrlByKey(String key) {
-        return normalizeBase(appBasePath) + "/file/oss/" + key;
+        return "/file/oss/" + key;
     }
 
     private String getExtension(String filename) {
@@ -468,16 +466,6 @@ public class AliOssService implements OssService {
                 ;
         if (idx < 0 || idx == filename.length() - 1) return "";
         return filename.substring(idx + 1).toLowerCase();
-    }
-
-    private String normalizeBase(String base) {
-        if (base == null || base.isBlank()) return "";
-        String b = base.trim();
-        if (!b.startsWith("/")) b = "/" + b;
-        if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
-        // root path should be empty string
-        if ("/".equals(b)) return "";
-        return b;
     }
 
     private String extractFilenameFromKey(String key) {

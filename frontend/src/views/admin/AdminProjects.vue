@@ -122,6 +122,7 @@ import { onMounted, ref, computed } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
+import { copyText } from '../../utils/clipboard'
 
 const auth = useAuthStore()
 onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })
@@ -208,7 +209,7 @@ const toggleOffline = async (row, v) => {
 }
 
 const copy = async (text) => {
-  try { await navigator.clipboard.writeText(text); ElMessage.success('已复制') }
+  try { await copyText(text); ElMessage.success('已复制') }
   catch { ElMessage.error('复制失败') }
 }
 

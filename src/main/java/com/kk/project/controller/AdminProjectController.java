@@ -41,16 +41,6 @@ public class AdminProjectController {
         boolean isSuper = auth.getAuthorities().stream().anyMatch(a -> "ROLE_SUPER".equals(a.getAuthority()));
         if (isSuper) {
             projects = projectService.list();
-        } else if (auth instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth) {
-            String sub = jwtAuth.getToken().getSubject();
-            java.util.List<ProjectPermission> list;
-            try {
-                list = permRepo.findBySiteUserId(Long.parseLong(sub));
-            } catch (Exception e) {
-                list = java.util.List.of();
-            }
-            projects = new ArrayList<>();
-            for (ProjectPermission pp : list) projects.add(pp.getProject());
         } else {
             AdminUser user = userRepo.findByUsername(auth.getName()).orElse(null);
             List<ProjectPermission> list = user == null ? List.of() : permRepo.findByUser(user);
