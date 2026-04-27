@@ -16,7 +16,11 @@ DOCKER_NETWORK=${DOCKER_NETWORK:-common-net}
 # 数据库配置（设置默认值或从 Jenkins 环境变量读取）
 SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
 SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME:-kfile}
-SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-123456}
+SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-}
+
+# OSS 配置（Jenkins 必须提供）
+OSS_AK=${OSS_AK:-}
+OSS_SK=${OSS_SK:-}
 
 # Jenkins BUILD_NUMBER fallback
 BUILD_NUMBER=${BUILD_NUMBER:-local-$(date +%Y%m%d%H%M%S)}
@@ -44,6 +48,11 @@ log_info "构建号: ${BUILD_NUMBER}"
 log_info "Maven Profile: ${MAVEN_PROFILE}"
 log_info "数据库地址: ${SPRING_DATASOURCE_URL}"
 
+# ==================== 必需变量检查 ====================
+if [[ -z "${OSS_AK}" ]] || [[ -z "${OSS_SK}" ]]; then
+  log_error "OSS_AK 和 OSS_SK 环境变量必须设置（通过 Jenkins Credentials 注入）"
+  exit 1
+fi
 # ==================== 部署前端 ====================
 log_info "=== 部署前端静态文件 ==="
 FRONTEND_DIST_DIR=${FRONTEND_DIST_DIR:-frontend/dist}
@@ -108,6 +117,8 @@ run_args=(
   -e SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL}"
   -e SPRING_DATASOURCE_USERNAME="${SPRING_DATASOURCE_USERNAME}"
   -e SPRING_DATASOURCE_PASSWORD="${SPRING_DATASOURCE_PASSWORD}"
+  -e OSS_AK="${OSS_AK}"
+  -e OSS_SK="${OSS_SK}"
 )
 [[ -n "${DOCKER_NETWORK}" ]] && run_args+=(--network "${DOCKER_NETWORK}")
 
