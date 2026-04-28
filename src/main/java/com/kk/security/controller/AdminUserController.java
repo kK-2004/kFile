@@ -9,6 +9,7 @@ import com.kk.security.repo.ProjectPermissionRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -96,6 +97,7 @@ public class AdminUserController {
 
     @DeleteMapping("/{userId}")
     @PreAuthorize("hasRole('SUPER')")
+    @Transactional
     public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
         AdminUser u = userRepo.findById(userId).orElseThrow();
         if ("SUPER".equalsIgnoreCase(u.getRole())) {

@@ -34,13 +34,13 @@ const projects = ref([])
 const loading = ref(false)
 const auth = useAuthStore()
 
-const hasAdmin = computed(() => !!auth.user && auth.user.mode === 'local')
+const hasAdmin = computed(() => !!auth.user)
 
 const load = async () => {
   loading.value = true
   try {
     if (!auth.loaded) await auth.loadMe()
-    if (!auth.user || auth.user.mode !== 'local') { projects.value = []; return }
+    if (!auth.user) { projects.value = []; return }
     try {
       const { data } = await api.adminListProjects()
       projects.value = data

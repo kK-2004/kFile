@@ -38,7 +38,8 @@ public class ProjectService {
         boolean isAdmin = false;
         if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
-                if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
+                String a = ga.getAuthority();
+                if ("ROLE_SUPER".equals(a) || "ROLE_ADMIN".equals(a)) { isAdmin = true; break; }
             }
         }
         Project p = new Project();
@@ -159,7 +160,8 @@ public class ProjectService {
         boolean isAdmin = false;
         if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
-                if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
+                String a = ga.getAuthority();
+                if ("ROLE_SUPER".equals(a) || "ROLE_ADMIN".equals(a)) { isAdmin = true; break; }
             }
         }
         if (req.getName() != null) p.setName(req.getName());

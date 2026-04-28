@@ -946,7 +946,7 @@ const quota = ref(null)
 const isSuperUser = computed(() => {
   if (!auth.user) return false
   const role = (auth.user.role || '').toUpperCase()
-  return role === 'SUPER' || role === 'ADMIN' || auth.user.mode === 'local'
+  return role === 'SUPER' || role === 'ADMIN'
 })
 const showUserQuota = computed(() => auth.user && !isSuperUser.value && !isEdit.value)
 const quotaDisplay = computed(() => {
