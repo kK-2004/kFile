@@ -575,7 +575,8 @@ const presignOptions = [
   { label: '10 分钟', value: 10 * 60 },
   { label: '30 分钟', value: 30 * 60 },
   { label: '1 天', value: 24 * 60 * 60 },
-  { label: '7 天', value: 7 * 24 * 60 * 60 }
+  { label: '7 天', value: 7 * 24 * 60 * 60 },
+  { label: '1 个月', value: 30 * 24 * 60 * 60 }
 ]
 
 // 直接下载：使用默认有效期（例如 5 分钟）生成预签名并立即打开

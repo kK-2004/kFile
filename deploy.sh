@@ -33,6 +33,76 @@ log_info(){ echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn(){ echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error(){ echo -e "${RED}[ERROR]${NC} $1"; }
 
+is_backend_related_change() {
+  local file="$1"
+  case "${file}" in
+    src/*|pom.xml|mvnw|mvnw.cmd|.mvn/*|Dockerfile|.dockerignore|docker-compose.yml|deploy.sh|Jenkinsfile)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+should_deploy_backend() {
+  if [[ "${FORCE_BACKEND_DEPLOY:-false}" == "true" ]]; then
+    log_info "FORCE_BACKEND_DEPLOY=true，跳过变更路径检查"
+    return 0
+  fi
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log_warn "当前目录不是 Git 工作区，无法判断变更范围，继续部署"
+    return 0
+  fi
+
+  local head_commit="${GIT_COMMIT:-}"
+  if [[ -z "${head_commit}" ]]; then
+    head_commit=$(git rev-parse HEAD)
+  fi
+
+  local base_commit=""
+  local candidate
+  for candidate in "${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-}" "${GIT_PREVIOUS_COMMIT:-}"; do
+    if [[ -n "${candidate}" ]] && git cat-file -e "${candidate}^{commit}" 2>/dev/null; then
+      base_commit="${candidate}"
+      break
+    fi
+  done
+
+  if [[ -z "${base_commit}" ]]; then
+    if git rev-parse "${head_commit}^" >/dev/null 2>&1; then
+      base_commit="${head_commit}^"
+    else
+      log_warn "无法找到可对比的上一提交，可能是首次构建，继续部署"
+      return 0
+    fi
+  fi
+
+  log_info "检查后端变更范围: ${base_commit}..${head_commit}"
+
+  local changed_files
+  changed_files=$(git diff --name-only "${base_commit}" "${head_commit}" || true)
+  if [[ -z "${changed_files}" ]]; then
+    log_info "本次提交范围没有文件变化，跳过后端镜像构建与容器重启"
+    return 1
+  fi
+
+  log_info "本次变更文件:"
+  printf '%s\n' "${changed_files}"
+
+  local file
+  while IFS= read -r file; do
+    if is_backend_related_change "${file}"; then
+      log_info "检测到后端/镜像相关变更: ${file}"
+      return 0
+    fi
+  done <<< "${changed_files}"
+
+  log_info "未检测到后端/镜像相关变更，跳过镜像构建、容器重启和 Nginx 重载"
+  return 1
+}
+
 # ==================== 分支验证 ====================
 log_info "=== 验证分支 ==="
 CURRENT_REF=${ref:-}
@@ -47,6 +117,15 @@ log_info "当前用户: $(whoami)"
 log_info "构建号: ${BUILD_NUMBER}"
 log_info "Maven Profile: ${MAVEN_PROFILE}"
 log_info "数据库地址: ${SPRING_DATASOURCE_URL}"
+
+# ==================== 后端变更检查 ====================
+log_info "=== 检查是否需要部署后端 ==="
+if ! should_deploy_backend; then
+  log_info "=========================================="
+  log_info "跳过后端部署：本次推送未修改后端或镜像构建相关文件"
+  log_info "=========================================="
+  exit 0
+fi
 
 # ==================== 必需变量检查 ====================
 if [[ -z "${OSS_AK}" ]] || [[ -z "${OSS_SK}" ]]; then
