@@ -135,12 +135,31 @@
             autocomplete="current-password"
           />
         </el-form-item>
-        <el-form-item label="新密码">
+        <el-form-item label="新密码" :error="newPwdError">
           <el-input
             v-model="pwdForm.newPassword"
             type="password"
             autocomplete="new-password"
-          />
+            @input="onNewPwdInput"
+          >
+            <template #suffix>
+              <el-icon v-if="newPwdStatus === 'ok'" style="color:#67c23a"><CircleCheckFilled /></el-icon>
+              <el-icon v-else-if="newPwdStatus === 'fail'" style="color:#f56c6c"><CircleCloseFilled /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="确认新密码" :error="confirmError">
+          <el-input
+            v-model="pwdForm.confirmPassword"
+            type="password"
+            autocomplete="new-password"
+            @input="onConfirmInput"
+          >
+            <template #suffix>
+              <el-icon v-if="confirmStatus === 'ok'" style="color:#67c23a"><CircleCheckFilled /></el-icon>
+              <el-icon v-else-if="confirmStatus === 'fail'" style="color:#f56c6c"><CircleCloseFilled /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -157,6 +176,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import api from './api'
 import { ElMessage } from 'element-plus'
+import { CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import NewYearElements from './components/NewYearElements.vue'
 
 const route = useRoute()
@@ -185,8 +205,55 @@ onMounted(() => {
 })
 
 const pwdVisible = ref(false)
-const pwdForm = ref({ currentPassword: '', newPassword: '' })
-const openChangePwd = () => { pwdForm.value = { currentPassword:'', newPassword:'' }; pwdVisible.value = true }
+const pwdForm = ref({ currentPassword: '', newPassword: '', confirmPassword: '' })
+const newPwdStatus = ref('')
+const newPwdError = ref('')
+const confirmStatus = ref('')
+const confirmError = ref('')
+let newPwdTimer = null
+let confirmTimer = null
+
+const onNewPwdInput = () => {
+  newPwdStatus.value = ''
+  newPwdError.value = ''
+  clearTimeout(newPwdTimer)
+  const val = pwdForm.value.newPassword
+  if (!val) { onConfirmInput(); return }
+  newPwdTimer = setTimeout(() => {
+    if (val.length < 6) {
+      newPwdStatus.value = 'fail'
+      newPwdError.value = '密码长度至少6位'
+    } else {
+      newPwdStatus.value = 'ok'
+      newPwdError.value = ''
+    }
+    onConfirmInput()
+  }, 400)
+}
+
+const onConfirmInput = () => {
+  confirmStatus.value = ''
+  confirmError.value = ''
+  clearTimeout(confirmTimer)
+  const { newPassword, confirmPassword } = pwdForm.value
+  if (!confirmPassword) return
+  confirmTimer = setTimeout(() => {
+    if (newPassword !== confirmPassword) {
+      confirmStatus.value = 'fail'
+      confirmError.value = '两次输入的密码不一致'
+    } else {
+      confirmStatus.value = 'ok'
+      confirmError.value = ''
+    }
+  }, 400)
+}
+
+const openChangePwd = () => {
+  pwdForm.value = { currentPassword:'', newPassword:'', confirmPassword:'' }
+  newPwdStatus.value = ''; newPwdError.value = ''
+  confirmStatus.value = ''; confirmError.value = ''
+  pwdVisible.value = true
+}
 const changePwd = async () => {
   try {
     await api.adminChangePassword(pwdForm.value.currentPassword, pwdForm.value.newPassword)

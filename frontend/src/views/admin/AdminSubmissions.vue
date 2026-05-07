@@ -867,8 +867,9 @@ const formatDateTime = (dateTimeStr) => {
   try {
     const date = new Date(dateTimeStr)
     const now = new Date()
-    const diffMs = now - date
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const diffDays = Math.round((todayStart - dateStart) / (1000 * 60 * 60 * 24))
 
     if (diffDays === 0) {
       return '今天 ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })

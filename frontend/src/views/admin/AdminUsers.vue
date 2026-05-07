@@ -126,13 +126,18 @@ const savePerms = async () => {
   } catch { ElMessage.error('保存失败') }
 }
 const resetPwd = async (row) => {
+  let data
   try {
-    const { data } = await api.adminResetPassword(row.id)
-    await copyText(data.newPassword)
-    ElMessage.success('已重置并复制新密码：' + data.newPassword)
+    ;({ data } = await api.adminResetPassword(row.id))
   } catch (e) {
-    const msg = e?.response?.data?.message || '重置失败'
-    ElMessage.error(msg)
+    ElMessage.error(e?.response?.data?.message || '重置失败')
+    return
+  }
+  try {
+    await copyText(data.newPassword)
+    ElMessage({ message: '已重置并复制新密码：' + data.newPassword, type: 'success', duration: 0, showClose: true })
+  } catch {
+    ElMessage({ message: '已重置，新密码：' + data.newPassword + '（请手动复制）', type: 'success', duration: 0, showClose: true })
   }
 }
 const delUser = async (row) => {

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ==================== 配置变量 ====================
 APP_NAME=${APP_NAME:-KFile-v2}
-IMAGE_NAME=${IMAGE_NAME:-kfile-v2_i}
+IMAGE_NAME=${IMAGE_NAME:-kfile-v2}
 CONTAINER_NAME=${CONTAINER_NAME:-$APP_NAME}
 CONTAINER_PORT=${CONTAINER_PORT:-8081}
 HOST_PORT=${HOST_PORT:-8081}
