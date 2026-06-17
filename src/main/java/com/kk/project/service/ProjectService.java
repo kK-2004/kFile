@@ -27,6 +27,7 @@ public class ProjectService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SubmissionRepository submissionRepository;
     private final com.kk.security.repo.ProjectPermissionRepository permRepo;
+    private final com.kk.security.repo.AdminUserRepository adminUserRepository;
     private final com.kk.oss.OssService ossService;
     private final com.kk.common.service.AppConfigService appConfigService;
     @Value("${app.project.monthly-limit.user:3}")
@@ -97,6 +98,7 @@ public class ProjectService {
         p.setQueryFieldKey(req.getQueryFieldKey());
         p.setTotalSubmitters(0);
         Project saved = projectRepository.save(p);
+        grantCreatorPermissionIfAdmin(saved, authentication);
         log.info("BIZ action=PROJECT_CREATE projectId={} projectName={} actor={} roles={} isAdmin={}",
                 saved.getId(),
                 com.kk.common.logging.AuditLogUtil.safe(saved.getName()),
@@ -104,6 +106,27 @@ public class ProjectService {
                 com.kk.common.logging.AuditLogUtil.roles(authentication),
                 isAdmin);
         return saved;
+    }
+
+    private void grantCreatorPermissionIfAdmin(Project project, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) return;
+        boolean isAdmin = false;
+        boolean isSuper = false;
+        for (GrantedAuthority ga : authentication.getAuthorities()) {
+            String authority = ga.getAuthority();
+            if ("ROLE_SUPER".equals(authority)) isSuper = true;
+            if ("ROLE_ADMIN".equals(authority)) isAdmin = true;
+        }
+        if (!isAdmin || isSuper) return;
+
+        adminUserRepository.findByUsername(authentication.getName()).ifPresent(user -> {
+            if (Boolean.FALSE.equals(user.getEnabled())) return;
+            if (permRepo.findByUserAndProject(user, project).isPresent()) return;
+            com.kk.security.entity.ProjectPermission permission = new com.kk.security.entity.ProjectPermission();
+            permission.setUser(user);
+            permission.setProject(project);
+            permRepo.save(permission);
+        });
     }
 
     public java.util.Map<String, Object> getCreationQuota(org.springframework.security.core.Authentication authentication) {

@@ -24,7 +24,7 @@ public class ProjectController {
     private final com.kk.security.service.AdminPermissionService adminPermissionService;
 
     @PostMapping
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('SUPER') or hasRole('ADMIN')")
     public ProjectResponse create(@RequestBody CreateProjectRequest req,
                                   org.springframework.security.core.Authentication authentication) {
         Project p = projectService.create(req, authentication);
