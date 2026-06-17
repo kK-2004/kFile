@@ -5,6 +5,8 @@ import AdminSubmissions from '../views/admin/AdminSubmissions.vue'
 import AdminLogin from '../views/admin/AdminLogin.vue'
 import AdminUsers from '../views/admin/AdminUsers.vue'
 import AdminSettings from '../views/admin/AdminSettings.vue'
+import AdminMcpAuthorize from '../views/admin/AdminMcpAuthorize.vue'
+import AdminTemplates from '../views/admin/AdminTemplates.vue'
 import UserProjects from '../views/user/UserProjects.vue'
 import Hero from '../views/Hero.vue'
 import UserSubmit from '../views/user/UserSubmit.vue'
@@ -24,6 +26,8 @@ const routes = [
   { path: '/admin/login', component: AdminLogin }
   ,{ path: '/admin/users', component: AdminUsers }
   ,{ path: '/admin/settings', component: AdminSettings }
+  ,{ path: '/admin/mcp/authorize', component: AdminMcpAuthorize }
+  ,{ path: '/admin/templates', component: AdminTemplates }
 ]
 
 const router = createRouter({

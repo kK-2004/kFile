@@ -28,10 +28,12 @@ public class AdminConfigController {
         Long totalQuota = appConfigService.getLong(AppConfigService.KEY_USER_TOTAL_QUOTA_BYTES);
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
         java.util.List<String> types = appConfigService.getStringList(AppConfigService.KEY_USER_ALLOWED_FILE_TYPES);
+        java.util.List<String> mcpRedirectPrefixes = appConfigService.getStringList(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_PREFIXES);
         return Map.of(
                 "monthlyLimitUser", monthly,
                 "userTotalQuotaBytes", totalQuota,
-                "allowedFileTypes", types
+                "allowedFileTypes", types,
+                "mcpRedirectPrefixes", mcpRedirectPrefixes
         );
     }
 
@@ -58,6 +60,14 @@ public class AdminConfigController {
                 return ResponseEntity.badRequest().body(Map.of("message", "allowedFileTypes 非法"));
             }
         }
+        if (req.getMcpRedirectPrefixes() != null) {
+            try {
+                String json = objectMapper.writeValueAsString(req.getMcpRedirectPrefixes());
+                appConfigService.setRaw(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_PREFIXES, json);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("message", "mcpRedirectPrefixes 非法"));
+            }
+        }
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -66,5 +76,6 @@ public class AdminConfigController {
         private Integer monthlyLimitUser; // 每月新建项目上限（USER）
         private Long userTotalQuotaBytes;    // USER总存储配额（字节）
         private List<String> allowedFileTypes; // USER可用文件扩展名白名单
+        private List<String> mcpRedirectPrefixes; // MCP 授权回调 redirect_uri 白名单前缀
     }
 }

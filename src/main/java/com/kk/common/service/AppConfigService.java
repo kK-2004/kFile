@@ -18,6 +18,9 @@ public class AppConfigService {
     public static final String KEY_USER_MAX_FILE_SIZE_BYTES = "USER_MAX_FILE_SIZE_BYTES"; // legacy, not used
     public static final String KEY_USER_TOTAL_QUOTA_BYTES = "USER_TOTAL_QUOTA_BYTES";
     public static final String KEY_USER_ALLOWED_FILE_TYPES = "USER_ALLOWED_FILE_TYPES";
+    // MCP 授权回调 redirect_uri 允许的前缀白名单（JSON 数组或逗号分隔）。空列表=拒绝全部。
+    // 例：["http://localhost:","https://file.example.com/"]
+    public static final String KEY_MCP_REDIRECT_ALLOWED_PREFIXES = "MCP_REDIRECT_ALLOWED_PREFIXES";
 
     private final ConfigRepository repo;
     private final ObjectMapper objectMapper = new ObjectMapper();

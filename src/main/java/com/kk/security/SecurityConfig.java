@@ -42,7 +42,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationProvider authenticationProvider,
+                                           McpTokenAuthFilter mcpTokenAuthFilter) throws Exception {
         http
             .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
             .cors(c -> {})
@@ -54,6 +55,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(reg -> reg
                 .requestMatchers("/api/admin/auth/**").permitAll()
+                .requestMatchers("/api/mcp/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/share/*").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(HttpMethod.GET,
@@ -73,9 +75,11 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers("/mcp/**", "/api/mcp/**").authenticated()
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider)
+            .addFilterBefore(mcpTokenAuthFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .logout(logout -> logout

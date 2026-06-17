@@ -2,7 +2,7 @@ package com.kk.share.controller;
 
 import com.kk.share.entity.ShareLink;
 import com.kk.share.repo.ShareLinkRepository;
-import com.kk.util.Base62Util;
+import com.kk.share.service.ShareLinkService;
 import lombok.Data;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,48 +12,30 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 public class ShareController {
 
     private final ShareLinkRepository shareLinkRepository;
+    private final ShareLinkService shareLinkService;
 
-    public ShareController(ShareLinkRepository shareLinkRepository) {
+    public ShareController(ShareLinkRepository shareLinkRepository, ShareLinkService shareLinkService) {
         this.shareLinkRepository = shareLinkRepository;
+        this.shareLinkService = shareLinkService;
     }
 
     @PostMapping("/api/admin/projects/{projectId}/share")
     @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #projectId)")
     public ResponseEntity<?> createShare(@PathVariable Long projectId, @RequestBody CreateShareRequest req) {
-        if (req.getEntries() == null || req.getEntries().isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "entries 不能为空"));
-        }
-        long expireSeconds = req.getExpireSeconds() != null && req.getExpireSeconds() > 0
-                ? req.getExpireSeconds() : 300;
-
-        String code = Base62Util.encode(UUID.randomUUID());
-
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        String dataJson;
         try {
-            dataJson = mapper.writeValueAsString(Map.of(
-                    "filename", req.getFilename() != null ? req.getFilename() : "download.zip",
-                    "entries", req.getEntries()
-            ));
+            ShareLinkService.CreatedShare share = shareLinkService.create(
+                    projectId, req.getFilename(), req.getEntries(), req.getExpireSeconds());
+            return ResponseEntity.ok(Map.of("code", share.code(), "expireAt", share.expireAt()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "序列化失败"));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "创建分享链接失败"));
         }
-
-        ShareLink link = new ShareLink();
-        link.setCode(code);
-        link.setProjectId(projectId);
-        link.setData(dataJson);
-        link.setCreatedAt(Instant.now());
-        link.setExpireAt(Instant.now().plusSeconds(expireSeconds));
-        shareLinkRepository.save(link);
-
-        return ResponseEntity.ok(Map.of("code", code, "expireAt", link.getExpireAt().toEpochMilli()));
     }
 
     @GetMapping("/api/share/{code}")

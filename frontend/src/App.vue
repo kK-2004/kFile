@@ -81,6 +81,14 @@
                     class="nav-btn"
                     text
                     v-if="isSuper"
+                    @click="$router.push('/admin/templates')"
+                >
+                  模板管理
+                </el-button>
+                <el-button
+                    class="nav-btn"
+                    text
+                    v-if="isSuper"
                     @click="$router.push('/admin/users')"
                 >
                   管理员与权限

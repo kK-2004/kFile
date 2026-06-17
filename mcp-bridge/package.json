@@ -1,0 +1,39 @@
+{
+  "name": "@kk-2004/kfile-mcp",
+  "version": "0.1.0",
+  "description": "stdio MCP server that bridges local MCP clients to a k-File SSE MCP server, with automatic OAuth-style token management.",
+  "license": "MIT",
+  "author": "kk",
+  "type": "module",
+  "bin": {
+    "kfile-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "kfile",
+    "k-file",
+    "sse",
+    "stdio",
+    "bridge"
+  ]
+}

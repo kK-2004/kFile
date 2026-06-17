@@ -54,23 +54,86 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <!-- 可用模板分配（仅 SUPER 可见） -->
+        <div v-if="isSuper" style="margin-top: 20px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: var(--kf-text-primary);">可用模板</div>
+          <el-table :data="templates">
+            <el-table-column prop="id" label="ID" width="80"/>
+            <el-table-column prop="name" label="模板名称"/>
+            <el-table-column label="已授权" width="100">
+              <template #default="{row}">
+                <el-switch v-model="row._allowed"/>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
         <div style="margin-top: 12px; text-align: right;">
           <el-button type="primary" @click="savePerms">保存</el-button>
         </div>
       </div>
     </el-drawer>
+
+    <!-- MCP 访问令牌管理 -->
+    <el-card style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>MCP 访问令牌</span>
+        </div>
+      </template>
+
+      <div style="margin-bottom: 12px; font-size:13px; color:var(--kf-text-sub,#888);">
+        令牌由 Agent 引导用户在浏览器授权后签发（回调地址 redirect_uri 由 Agent 提供，须命中系统设置里的回调白名单）。此处仅查看与吊销已签发的令牌。
+      </div>
+
+      <el-table :data="tokens" v-loading="tokensLoading" empty-text="暂无令牌">
+        <el-table-column prop="id" label="ID" width="80"/>
+        <el-table-column prop="username" label="用户"/>
+        <el-table-column label="创建时间" width="180">
+          <template #default="{row}">{{ formatTs(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="过期时间" width="180">
+          <template #default="{row}">{{ formatTs(row.expiresAt) }}</template>
+        </el-table-column>
+        <el-table-column label="最近使用" width="180">
+          <template #default="{row}">{{ formatTs(row.lastUsedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{row}">
+            <el-tag :type="row.revoked ? 'info' : 'success'">{{ row.revoked ? '已吊销' : '有效' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="{row}">
+            <el-popconfirm title="确定吊销该令牌？" @confirm="revokeToken(row)">
+              <template #reference>
+                <el-button size="small" type="danger" :disabled="row.revoked">吊销</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </el-card>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
 import { copyText } from '../../utils/clipboard'
 
+const auth = useAuthStore()
+const isSuper = computed(() => {
+  const r = (auth.user?.role || '').toUpperCase()
+  return r === 'SUPER'
+})
+
 const users = ref([])
 const projects = ref([])
+const templates = ref([])
 const loading = ref(false)
 
 const showCreate = ref(false)
@@ -79,6 +142,11 @@ const form = ref({ username: '', password: '', role: 'ADMIN' })
 const showPerm = ref(false)
 const currentUser = ref(null)
 let original = new Set()
+let originalTemplates = new Set()
+
+// MCP 令牌
+const tokens = ref([])
+const tokensLoading = ref(false)
 
 const loadUsers = async () => {
   loading.value = true
@@ -93,7 +161,43 @@ const loadProjects = async () => {
   projects.value = data.map(p => ({ ...p, _allowed: false }))
 }
 
-onMounted(() => { loadUsers(); loadProjects() })
+const loadTemplates = async () => {
+  // 仅 SUPER 能看到全部模板用于分配；列表接口本身限 SUPER
+  if (!isSuper.value) return
+  try {
+    const { data } = await api.adminListTemplates()
+    templates.value = (data || []).map(t => ({ ...t, _allowed: false }))
+  } catch {}
+}
+
+const loadTokens = async () => {
+  tokensLoading.value = true
+  try {
+    const { data } = await api.mcpListTokens()
+    tokens.value = data || []
+  } catch { tokens.value = [] }
+  finally { tokensLoading.value = false }
+}
+
+const formatTs = (ts) => ts ? new Date(ts).toLocaleString() : '-'
+
+const revokeToken = async (row) => {
+  try {
+    await api.mcpRevokeToken(row.id)
+    ElMessage.success('已吊销')
+    await loadTokens()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '吊销失败')
+  }
+}
+
+onMounted(async () => {
+  if (!auth.loaded) await auth.loadMe()
+  loadUsers()
+  loadProjects()
+  loadTokens()
+  await loadTemplates()
+})
 
 const openCreate = () => { form.value = { username:'', password:'', role:'ADMIN' }; showCreate.value = true }
 
@@ -111,16 +215,33 @@ const openPerm = async (row) => {
   const { data } = await api.adminListUserProjects(row.id)
   original = new Set(data)
   projects.value = projects.value.map(p => ({ ...p, _allowed: original.has(p.id) }))
+  // 模板分配：SUPER 才能看到/操作
+  if (isSuper.value) {
+    try {
+      const { data: tids } = await api.adminListUserTemplates(row.id)
+      originalTemplates = new Set(tids || [])
+      templates.value = templates.value.map(t => ({ ...t, _allowed: originalTemplates.has(t.id) }))
+    } catch { originalTemplates = new Set() }
+  }
   showPerm.value = true
 }
 
 const savePerms = async () => {
   try {
+    // 项目权限
     const now = new Set(projects.value.filter(p => p._allowed).map(p => p.id))
     const grants = [...now].filter(id => !original.has(id))
     const revokes = [...original].filter(id => !now.has(id))
     for (const id of grants) await api.adminGrantProject(currentUser.value.id, id)
     for (const id of revokes) await api.adminRevokeProject(currentUser.value.id, id)
+    // 模板权限（仅 SUPER）
+    if (isSuper.value) {
+      const nowT = new Set(templates.value.filter(t => t._allowed).map(t => t.id))
+      const grantsT = [...nowT].filter(id => !originalTemplates.has(id))
+      const revokesT = [...originalTemplates].filter(id => !nowT.has(id))
+      for (const id of grantsT) await api.adminGrantTemplate(currentUser.value.id, id)
+      for (const id of revokesT) await api.adminRevokeTemplate(currentUser.value.id, id)
+    }
     ElMessage.success('已保存权限')
     showPerm.value = false
   } catch { ElMessage.error('保存失败') }

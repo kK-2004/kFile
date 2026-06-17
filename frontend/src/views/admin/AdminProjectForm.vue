@@ -26,6 +26,31 @@
       <div class="content-wrapper">
         <el-form :model="form" label-position="top" class="project-form">
 
+          <!-- 使用模板（仅新建项目时显示） -->
+          <div v-if="!isEdit" class="form-section card-style template-bar">
+            <div class="form-content" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+              <span class="switch-label" style="white-space:nowrap;">使用模板</span>
+              <el-select
+                v-model="selectedTemplateId"
+                placeholder="不使用模板"
+                clearable
+                style="width:320px;"
+                @change="onTemplateChange"
+              >
+                <el-option :value="null" label="不使用模板" />
+                <el-option v-for="t in usableTemplates" :key="t.id" :value="t.id" :label="t.name" />
+              </el-select>
+              <span style="font-size:12px;color:#86868b;">选择后自动回填可复用字段，名称/时间/大小/扩展名仍需填写</span>
+              <el-button
+                v-if="isSuperUser"
+                type="primary"
+                plain
+                style="margin-left:auto;"
+                @click="openSaveTemplate"
+              >保存为模板</el-button>
+            </div>
+          </div>
+
           <div class="form-section card-style">
             <div class="section-header">
               <div class="header-text">
@@ -502,6 +527,22 @@
         </template>
       </el-dialog>
 
+      <!-- 保存为模板（仅 SUPER，新建项目时） -->
+      <el-dialog v-model="saveTemplateDialogVisible" title="保存为模板" width="500px" class="modern-dialog">
+        <div class="dialog-content">
+          <p class="dialog-desc">将当前填写的可复用字段保存为模板（名称、时间、文件大小、扩展名不会保存）。</p>
+          <el-form label-position="top">
+            <el-form-item label="模板名称">
+              <el-input v-model="newTemplateName" placeholder="如：课程作业收集" />
+            </el-form-item>
+          </el-form>
+        </div>
+        <template #footer>
+          <el-button @click="saveTemplateDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmSaveTemplate">保存</el-button>
+        </template>
+      </el-dialog>
+
     </div>
   </div>
 </template>
@@ -535,6 +576,12 @@ const form = ref({
 })
 const allowedTypes = ref([])
 const fileSizeLimitMB = ref(null)
+
+// ===== 模板（仅新建项目）=====
+const usableTemplates = ref([])      // 当前用户可用模板
+const selectedTemplateId = ref(null) // 选中的模板 id，null=不使用
+const saveTemplateDialogVisible = ref(false)
+const newTemplateName = ref('')
 const typeOptions = ['doc','docx','zip','rar','7z','pdf','txt']
 const typeSelectable = computed(()=>{
   const set = new Set([ ...typeOptions, ...allowedTypes.value.filter(Boolean) ])
@@ -840,26 +887,20 @@ const listPlaceholder = computed(() => {
   return `请输入 JSON 数组，例如：\n[\n  { "${keys[0]||'field'}": "v1"${keys.length>1?`, "${keys[1]}": "w1"`:''} }\n] (${hint})`
 })
 
-const load = async () => {
-  if (!isEdit.value) return
-  // 管理端使用 admin 接口，避免公共接口的敏感信息裁剪
-  const { data } = await api.adminGetProject(route.params.id)
-  form.value = {
-    id: data.id,
-    name: data.name,
-    allowResubmit: data.allowResubmit,
-    allowMultiFiles: data.allowMultiFiles != null ? data.allowMultiFiles : true,
-    allowOverdue: data.allowOverdue || false,
-    userSubmitStatusType: data.userSubmitStatusType || 'info',
-    userSubmitStatusText: data.userSubmitStatusText || '',
-    queryFieldKey: data.queryFieldKey || '',
-    fileSizeLimitBytes: data.fileSizeLimitBytes,
-    startAt: data.startAt,
-    endAt: data.endAt,
-    offline: data.offline || false
-  }
-  allowedTypes.value = data.allowedFileTypes || []
-  expectedFields.value = Array.isArray(data.expectedUserFields) ? data.expectedUserFields.map(f=>({
+// 从模板/项目数据还原表单（含独立 ref）。编辑页 load() 与模板回填共用。
+// data 形状与 ProjectResponse / ProjectTemplateResponse 一致（只含可复用字段时其余为 undefined）。
+function applyTemplateData(data) {
+  if (!data) return
+  // 基本开关型可复用字段（不覆盖 name/时间/大小/扩展名）
+  form.value.allowResubmit = data.allowResubmit != null ? data.allowResubmit : true
+  form.value.allowMultiFiles = data.allowMultiFiles != null ? data.allowMultiFiles : false
+  form.value.allowOverdue = !!data.allowOverdue
+  form.value.userSubmitStatusType = data.userSubmitStatusType || 'info'
+  form.value.userSubmitStatusText = data.userSubmitStatusText || ''
+  form.value.queryFieldKey = data.queryFieldKey || ''
+  form.value.pathFieldKey = data.pathFieldKey || ''
+  // 收集字段
+  expectedFields.value = Array.isArray(data.expectedUserFields) ? data.expectedUserFields.map(f => ({
     _rid: nextRid(),
     key: f.key,
     label: f.label,
@@ -869,36 +910,28 @@ const load = async () => {
     type: f.type || 'text',
     _options: Array.isArray(f.options) ? f.options : []
   })) : []
-  form.value.pathFieldKey = data.pathFieldKey || ''
-  pathSegments.value = Array.isArray(data.pathSegments) ? data.pathSegments.map(v=>({value:v}))
-      : (data.pathFieldKey ? [{value:data.pathFieldKey}] : [{value:'$project'}])
-  if (data.fileSizeLimitBytes && Number.isFinite(data.fileSizeLimitBytes)) {
-    fileSizeLimitMB.value = +(data.fileSizeLimitBytes / (1024 * 1024)).toFixed(2)
-  } else {
-    fileSizeLimitMB.value = null
-  }
-  // 限定提交者：载入已有配置
+  // 路径层级
+  pathSegments.value = Array.isArray(data.pathSegments)
+    ? data.pathSegments.map(v => ({ value: v }))
+    : (data.pathFieldKey ? [{ value: data.pathFieldKey }] : [{ value: '$project' }])
+  // 提交者限制
   form.value.allowedSubmitterKeys = Array.isArray(data.allowedSubmitterKeys) ? data.allowedSubmitterKeys : []
-  const hasSingleKey = (form.value.allowedSubmitterKeys||[]).length === 1
+  const hasSingleKey = (form.value.allowedSubmitterKeys || []).length === 1
   if (data.allowedSubmitterList != null) {
-    try {
-      const v = data.allowedSubmitterList
-      if (hasSingleKey && Array.isArray(v) && v.every(x => typeof x === 'string')) {
-        listMode.value = 'csv'
-        listText.value = v.join(',')
-      } else {
-        listMode.value = 'json'
-        listText.value = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
-      }
-    } catch {}
+    const v = data.allowedSubmitterList
+    if (hasSingleKey && Array.isArray(v) && v.every(x => typeof x === 'string')) {
+      listMode.value = 'csv'
+      listText.value = v.join(',')
+    } else {
+      listMode.value = 'json'
+      listText.value = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+    }
   } else {
     listMode.value = hasSingleKey ? 'csv' : 'json'
     listText.value = ''
   }
-  // 根据后端状态同步开关（存在 keys 且存在名单即视为已限制）
   autoRestrict.value = (Array.isArray(form.value.allowedSubmitterKeys) && form.value.allowedSubmitterKeys.length > 0 && data.allowedSubmitterList != null)
-
-  // 自动命名：载入配置
+  // 自动命名
   autoFileNamingEnabled.value = !!data.autoFileNamingEnabled
   const cfg = (data.autoFileNamingConfig && typeof data.autoFileNamingConfig === 'object') ? data.autoFileNamingConfig : {}
   autoNameFields.value = Array.isArray(cfg.fields) ? cfg.fields.map(v => ({ value: v })) : []
@@ -909,32 +942,153 @@ const load = async () => {
       value: x?.value == null ? '' : String(x.value)
     }))
   } else if (cfg.customFields && typeof cfg.customFields === 'object') {
-    // 兼容 map 结构：{ key: value }
-    autoNameCustomFields.value = Object.entries(cfg.customFields).map(([k, v]) => ({
-      key: String(k),
-      label: String(k),
-      value: v == null ? '' : String(v)
-    }))
+    autoNameCustomFields.value = Object.entries(cfg.customFields).map(([k, v]) => ({ key: String(k), label: String(k), value: v == null ? '' : String(v) }))
   } else {
     autoNameCustomFields.value = []
   }
   const sep = cfg.separator == null ? ' ' : String(cfg.separator)
   const presets = new Set([' ', '+', '-', '_', ''])
-  if (presets.has(sep)) {
-    separatorChoice.value = sep
-    separatorCustom.value = ''
-  } else {
-    separatorChoice.value = '__custom__'
-    separatorCustom.value = sep
-  }
+  if (presets.has(sep)) { separatorChoice.value = sep; separatorCustom.value = '' }
+  else { separatorChoice.value = '__custom__'; separatorCustom.value = sep }
   autoAliases.value = (cfg.aliases && typeof cfg.aliases === 'object') ? cfg.aliases : {}
-  // 确保每个 select 字段都有 alias map
   for (const sf of autoNameSelectFields.value) {
     if (!autoAliases.value[sf.key] || typeof autoAliases.value[sf.key] !== 'object') autoAliases.value[sf.key] = {}
     for (const opt of (sf._options || [])) {
       if (autoAliases.value[sf.key][opt] == null) autoAliases.value[sf.key][opt] = ''
     }
   }
+}
+
+// 重置表单到新建初始状态（切换/取消模板时避免残留）
+function resetFormForNew() {
+  form.value = {
+    name: '', allowResubmit: true, allowMultiFiles: false, allowOverdue: false,
+    userSubmitStatusType: 'info', userSubmitStatusText: '', queryFieldKey: '',
+    fileSizeLimitBytes: null, startAt: null, endAt: null, offline: false, allowedSubmitterKeys: []
+  }
+  allowedTypes.value = []
+  fileSizeLimitMB.value = null
+  expectedFields.value = []
+  pathSegments.value = [{ value: '$project' }]
+  listMode.value = 'csv'
+  listText.value = ''
+  autoRestrict.value = false
+  showAdvanced.value = false
+  autoFileNamingEnabled.value = false
+  autoNameFields.value = []
+  autoNameCustomFields.value = []
+  autoAliases.value = {}
+  separatorChoice.value = ' '
+  separatorCustom.value = ''
+}
+
+function onTemplateChange(templateId) {
+  resetFormForNew()
+  if (templateId == null) return
+  const tpl = usableTemplates.value.find(t => t.id === templateId)
+  if (!tpl) return
+  applyTemplateData(tpl)
+  ElMessage.success(`已套用模板：${tpl.name}`)
+}
+
+const openSaveTemplate = () => {
+  newTemplateName.value = ''
+  saveTemplateDialogVisible.value = true
+}
+
+// 收集当前表单的可复用字段为模板 payload（排除 name/时间/大小/扩展名）
+function buildTemplatePayload(name) {
+  const keys = new Set()
+  for (const f of expectedFields.value) {
+    if (!f.key || !f.label) throw new Error('期望字段的 Key 和 显示名称 不能为空')
+    if (keys.has(f.key)) throw new Error('期望字段 Key 不可重复: ' + f.key)
+    keys.add(f.key)
+  }
+  const segs = pathSegments.value.map(s => s.value).filter(Boolean)
+  const expectedUserFields = expectedFields.value.map(f => ({
+    key: f.key, label: f.label, placeholder: f.placeholder || '', required: !!f.required,
+    display: f.display !== false, type: f.type || 'text',
+    options: f.type === 'select' ? (Array.isArray(f._options) ? f._options : []) : undefined
+  }))
+  let allowedSubmitterList = null
+  const akeys = Array.isArray(form.value.allowedSubmitterKeys) ? form.value.allowedSubmitterKeys.filter(Boolean) : []
+  if (autoRestrict.value && akeys.length > 0 && listText.value && listText.value.trim()) {
+    const parsed = JSON.parse(listText.value || '[]')
+    if (!Array.isArray(parsed)) throw new Error('名单必须是 JSON 数组')
+    allowedSubmitterList = parsed
+  } else if (akeys.length > 0) {
+    if (listMode.value === 'csv') {
+      allowedSubmitterList = (listText.value || '').split(',').map(s => s.trim()).filter(Boolean)
+    } else if (listText.value && listText.value.trim()) {
+      allowedSubmitterList = JSON.parse(listText.value || '[]')
+    }
+  }
+  const nameFields = autoNameFields.value.map(x => x.value).filter(Boolean)
+  return {
+    name,
+    expectedUserFields,
+    pathFieldKey: form.value.pathFieldKey || null,
+    pathSegments: segs.length ? segs : null,
+    userSubmitStatusType: form.value.userSubmitStatusType,
+    userSubmitStatusText: form.value.userSubmitStatusText,
+    queryFieldKey: form.value.queryFieldKey,
+    allowedSubmitterKeys: akeys.length ? akeys : null,
+    allowedSubmitterList,
+    autoFileNamingEnabled: !!autoFileNamingEnabled.value,
+    autoFileNamingConfig: {
+      fields: nameFields,
+      separator: (separatorChoice.value === '__custom__' ? (separatorCustom.value ?? '') : separatorChoice.value) ?? '',
+      aliases: autoAliases.value || {},
+      customFields: (autoNameCustomFields.value || []).map(f => ({ key: f.key, label: f.label, value: f.value })).filter(f => f.key && f.label && f.value)
+    },
+    allowResubmit: form.value.allowResubmit,
+    allowMultiFiles: form.value.allowMultiFiles,
+    allowOverdue: form.value.allowOverdue
+  }
+}
+
+const confirmSaveTemplate = async () => {
+  try {
+    if (!newTemplateName.value || !newTemplateName.value.trim()) {
+      ElMessage.warning('请输入模板名称'); return
+    }
+    const payload = buildTemplatePayload(newTemplateName.value.trim())
+    await api.adminCreateTemplate(payload)
+    ElMessage.success('已保存为模板')
+    saveTemplateDialogVisible.value = false
+    // 刷新可用模板列表
+    try { const { data } = await api.adminListUsableTemplates(); usableTemplates.value = data || [] } catch {}
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '保存模板失败'
+    ElMessage.error(msg)
+  }
+}
+
+const load = async () => {
+  if (!isEdit.value) return
+  // 管理端使用 admin 接口，避免公共接口的敏感信息裁剪
+  const { data } = await api.adminGetProject(route.params.id)
+  // 项目特有字段（编辑时直接载入；这些字段不进模板）
+  form.value = {
+    id: data.id,
+    name: data.name,
+    fileSizeLimitBytes: data.fileSizeLimitBytes,
+    startAt: data.startAt,
+    endAt: data.endAt,
+    offline: data.offline || false,
+    // 可复用字段交给 applyTemplateData 还原（与模板回填共用同一逻辑）
+    allowResubmit: true, allowMultiFiles: false, allowOverdue: false,
+    userSubmitStatusType: 'info', userSubmitStatusText: '', queryFieldKey: '',
+    pathFieldKey: '', allowedSubmitterKeys: []
+  }
+  allowedTypes.value = data.allowedFileTypes || []
+  if (data.fileSizeLimitBytes && Number.isFinite(data.fileSizeLimitBytes)) {
+    fileSizeLimitMB.value = +(data.fileSizeLimitBytes / (1024 * 1024)).toFixed(2)
+  } else {
+    fileSizeLimitMB.value = null
+  }
+  // 可复用字段还原（编辑页与模板回填共用）
+  applyTemplateData(data)
   // 绑定拖拽（初次加载后）
   bindRowDrag()
   bindSegDrag()
@@ -1149,7 +1303,12 @@ const addAutoNameCustomField = () => { autoNameCustomFields.value.push({ key: ''
 const removeAutoNameCustomField = (idx) => { autoNameCustomFields.value.splice(idx, 1) }
 // 上移/下移由拖拽排序代替
 const auth = useAuthStore()
-onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })
+// 新建项目时加载可用模板（编辑页不需要）
+const loadUsableTemplates = async () => {
+  if (isEdit.value) return
+  try { const { data } = await api.adminListUsableTemplates(); usableTemplates.value = data || [] } catch {}
+}
+onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota(); await loadUsableTemplates() })
 
 function bindRowDrag() {
   nextTick(() => {

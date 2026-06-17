@@ -6,6 +6,8 @@ import com.kk.security.entity.AdminUser;
 import com.kk.security.entity.ProjectPermission;
 import com.kk.security.repo.AdminUserRepository;
 import com.kk.security.repo.ProjectPermissionRepository;
+import com.kk.template.entity.ProjectTemplate;
+import com.kk.template.service.ProjectTemplateService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,12 +24,16 @@ public class AdminUserController {
     private final ProjectRepository projectRepo;
     private final ProjectPermissionRepository permRepo;
     private final PasswordEncoder encoder;
+    private final ProjectTemplateService templateService;
 
-    public AdminUserController(AdminUserRepository userRepo, ProjectRepository projectRepo, ProjectPermissionRepository permRepo, PasswordEncoder encoder) {
+    public AdminUserController(AdminUserRepository userRepo, ProjectRepository projectRepo,
+                               ProjectPermissionRepository permRepo, PasswordEncoder encoder,
+                               ProjectTemplateService templateService) {
         this.userRepo = userRepo;
         this.projectRepo = projectRepo;
         this.permRepo = permRepo;
         this.encoder = encoder;
+        this.templateService = templateService;
     }
 
     @GetMapping
@@ -93,6 +99,33 @@ public class AdminUserController {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 12; i++) sb.append(chars.charAt(r.nextInt(chars.length())));
         return sb.toString();
+    }
+
+    // ===== 模板使用授权（仅 SUPER）=====
+
+    @PostMapping("/{userId}/templates/{templateId}")
+    @PreAuthorize("hasRole('SUPER')")
+    public ResponseEntity<?> grantTemplate(@PathVariable Long userId, @PathVariable Long templateId) {
+        AdminUser u = userRepo.findById(userId).orElseThrow();
+        ProjectTemplate t = templateService.get(templateId);
+        templateService.grant(u, t);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{userId}/templates/{templateId}")
+    @PreAuthorize("hasRole('SUPER')")
+    public ResponseEntity<?> revokeTemplate(@PathVariable Long userId, @PathVariable Long templateId) {
+        AdminUser u = userRepo.findById(userId).orElseThrow();
+        ProjectTemplate t = templateService.get(templateId);
+        templateService.revoke(u, t);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{userId}/templates")
+    @PreAuthorize("hasRole('SUPER')")
+    public List<Long> listUserTemplates(@PathVariable Long userId) {
+        AdminUser u = userRepo.findById(userId).orElseThrow();
+        return templateService.listAssignedTemplateIds(u);
     }
 
     @DeleteMapping("/{userId}")

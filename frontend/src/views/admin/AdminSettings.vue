@@ -21,6 +21,11 @@
         </el-select>
         <div class="hint">留空表示不限制类型；匹配时忽略大小写，可不带点</div>
       </el-form-item>
+      <el-form-item label="MCP 授权回调白名单">
+        <el-select v-model="mcpPrefixes" multiple filterable allow-create default-first-option placeholder="输入允许的前缀，如: http://localhost:、" style="width:100%">
+        </el-select>
+        <div class="hint">MCP 网页授权的 redirect_uri 必须命中以下前缀之一；留空表示拒绝全部回调（最安全）。例如 http://localhost:、https://file.example.com/</div>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
       </el-form-item>
@@ -36,6 +41,7 @@ import { ElMessage } from 'element-plus'
 const form = ref({ monthlyLimitUser: null, userTotalQuotaBytes: null, allowedFileTypes: [] })
 const quotaGB = ref(null)
 const types = ref([])
+const mcpPrefixes = ref([])
 const typeSelectable = computed(()=> Array.from(new Set([...(types.value||[])])))
 const saving = ref(false)
 
@@ -45,6 +51,7 @@ const load = async () => {
     form.value.monthlyLimitUser = data.monthlyLimitUser ?? null
     form.value.userTotalQuotaBytes = data.userTotalQuotaBytes ?? null
     types.value = Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : []
+    mcpPrefixes.value = Array.isArray(data.mcpRedirectPrefixes) ? data.mcpRedirectPrefixes : []
     quotaGB.value = (data.userTotalQuotaBytes === null || data.userTotalQuotaBytes === undefined)
       ? null
       : Math.round(Number(data.userTotalQuotaBytes)/1024/1024/1024)
@@ -58,7 +65,8 @@ const save = async () => {
     const payload = {
       monthlyLimitUser: form.value.monthlyLimitUser ?? null,
       userTotalQuotaBytes: (quotaGB.value && quotaGB.value > 0) ? Math.round(Number(quotaGB.value) * 1024 * 1024 * 1024) : 0,
-      allowedFileTypes: (types.value || []).map(s => String(s||'').replace(/^\./,''))
+      allowedFileTypes: (types.value || []).map(s => String(s||'').replace(/^\./,'')),
+      mcpRedirectPrefixes: (mcpPrefixes.value || []).map(s => String(s||'').trim()).filter(Boolean)
     }
     if (payload.userTotalQuotaBytes === 0) payload.userTotalQuotaBytes = null
     await api.adminUpdateConfig(payload)

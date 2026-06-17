@@ -180,6 +180,22 @@ export default {
   ,adminGetConfig() { return instance.get('/api/admin/config') }
   ,adminUpdateConfig(payload) { return instance.put('/api/admin/config', payload) }
 
+  // ===== 项目模板 =====
+  ,adminListTemplates() { return instance.get('/api/admin/templates') }
+  ,adminListUsableTemplates() { return instance.get('/api/admin/templates/usable') }
+  ,adminCreateTemplate(payload) { return instance.post('/api/admin/templates', payload) }
+  ,adminUpdateTemplate(id, payload) { return instance.put(`/api/admin/templates/${id}`, payload) }
+  ,adminDeleteTemplate(id) { return instance.delete(`/api/admin/templates/${id}`) }
+  ,adminListUserTemplates(userId) { return instance.get(`/api/admin/users/${userId}/templates`) }
+  ,adminGrantTemplate(userId, templateId) { return instance.post(`/api/admin/users/${userId}/templates/${templateId}`) }
+  ,adminRevokeTemplate(userId, templateId) { return instance.delete(`/api/admin/users/${userId}/templates/${templateId}`) }
+
+  // ===== MCP 长期令牌 =====
+  ,mcpLogin(username, password) { return instance.post('/api/mcp/login', { username, password }) }
+  ,mcpAuthorize(redirectUri) { return instance.post('/api/mcp/authorize', { redirect_uri: redirectUri }) }
+  ,mcpListTokens() { return instance.get('/api/mcp/tokens') }
+  ,mcpRevokeToken(id) { return instance.delete(`/api/mcp/tokens/${id}`) }
+
   ,adminManualUpload(projectId, submitter, files, config = {}) {
     const fd = new FormData()
     fd.append('projectId', projectId)
