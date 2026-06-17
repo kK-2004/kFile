@@ -61,6 +61,16 @@ public class ArchiveTaskService {
         private String filename;
         // 文件大小（字节）
         private Long size;
+        // 以下字段用于在不打包、仅查看提交名单的场景回填提交者信息（urlExpireSeconds<=0 调用方可读）。
+        // 既有打包/分享调用方只读 key/url/filename/size，多余字段被忽略，向后兼容。
+        // 归属提交者指纹（与去重 key 一致）
+        private String submitterFingerprint;
+        // 该提交者最新提交的 submitterInfo（解析后的 JSON 对象）
+        private Object submitterInfo;
+        // 该提交者最新提交时间（epoch 毫秒）
+        private Long createdAt;
+        // 该提交者累计提交次数
+        private Integer submitCount;
     }
 
     public Task get(String id) { return tasks.get(id); }
@@ -118,6 +128,8 @@ public class ArchiveTaskService {
         List<Submission> list = new ArrayList<>(latestMap.values());
         java.util.Set<String> usedNames = new java.util.HashSet<>();
         java.util.List<ManifestEntry> out = new java.util.ArrayList<>();
+        // urlExpireSeconds<=0 表示调用方不需要预签名下载链接（如仅查看提交名单），跳过预签名生成。
+        boolean needUrl = urlExpireSeconds > 0;
         for (Submission s : list) {
             List<String> urls;
             try {
@@ -128,26 +140,39 @@ public class ArchiveTaskService {
             if (!Boolean.TRUE.equals(project.getAllowMultiFiles()) && !urls.isEmpty()) {
                 toPack = List.of(urls.get(urls.size() - 1));
             }
+            // 解析一次 submitterInfo，供回填到每个 entry
+            Object submitterInfo = null;
+            try {
+                submitterInfo = objectMapper.readTree(s.getSubmitterInfo());
+            } catch (Exception ignored) {}
             for (String url : toPack) {
                 if (url == null || url.isBlank()) continue;
                 String key = ossService.extractObjectKey(url);
                 if (key == null || key.isBlank()) continue;
                 String entryName = buildEntryName(key, usedNames);
-                try {
-                    String signedUrl = ossService.generatePresignedUrlByKey(key, true, urlExpireSeconds, false);
-                    ManifestEntry me = new ManifestEntry();
-                    me.setKey(key);
-                    me.setUrl(signedUrl);
-                    me.setFilename(entryName);
+                String signedUrl = null;
+                if (needUrl) {
                     try {
-                        me.setSize(ossService.statByKey(key).length);
-                    } catch (Exception ex2) {
-                        log.debug("failed to get size for key {}: {}", key, ex2.getMessage());
+                        signedUrl = ossService.generatePresignedUrlByKey(key, true, urlExpireSeconds, false);
+                    } catch (Exception ex) {
+                        log.warn("failed to generate presigned url for key {}: {}", key, ex.getMessage());
+                        continue;
                     }
-                    out.add(me);
-                } catch (Exception ex) {
-                    log.warn("failed to generate presigned url for key {}: {}", key, ex.getMessage());
                 }
+                ManifestEntry me = new ManifestEntry();
+                me.setKey(key);
+                me.setUrl(signedUrl);
+                me.setFilename(entryName);
+                try {
+                    me.setSize(ossService.statByKey(key).length);
+                } catch (Exception ex2) {
+                    log.debug("failed to get size for key {}: {}", key, ex2.getMessage());
+                }
+                me.setSubmitterFingerprint(s.getSubmitterFingerprint());
+                me.setSubmitterInfo(submitterInfo);
+                me.setCreatedAt(s.getCreatedAt() == null ? null : s.getCreatedAt().toEpochMilli());
+                me.setSubmitCount(s.getSubmitCount());
+                out.add(me);
             }
         }
         return out;

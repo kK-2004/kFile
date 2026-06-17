@@ -260,10 +260,13 @@ public class McpProjectTools {
     }
 
     // ====================================================================
-    // list_missing_submitters：某项目未提交名单
+    // list_missing_submitters：某项目未提交名单（仅适用于已配置名单的项目）
     // ====================================================================
     @Tool(name = "list_missing_submitters", description =
-            "查询某项目尚未提交的允许提交者名单（基于 allowedSubmitterKeys/List 与已提交记录）。" +
+            "查询某项目【尚未提交】的允许提交者名单。" +
+            "【仅适用于已配置允许提交名单（allowedSubmitterKeys/List）的项目】：系统会拿名单与已提交记录比对，算出谁还没交。" +
+            "若项目未配置名单，本工具返回 {enabled:false, message:'未配置允许提交名单'}，此时无法判断未提交者。" +
+            "【要看实际已提交情况（人数/名单/文件）请改用 list_project_submissions】，该工具不依赖名单配置、适用于所有项目。" +
             "需对该项目有管理权限（SUPER 或被分配该项目的 ADMIN），否则返回权限错误。" +
             "建议先用 list_my_projects + ask_user_choice 让用户选定 projectId。")
     public Map<String, Object> listMissingSubmitters(
@@ -274,6 +277,64 @@ public class McpProjectTools {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权管理该项目");
         }
         return projectQueryService.missingAllowed(projectId);
+    }
+
+    // ====================================================================
+    // list_project_submissions：某项目实际已提交名单（按提交者去重，适用所有项目）
+    // ====================================================================
+    @Tool(name = "list_project_submissions", description =
+            "列出某项目的实际提交名单：按提交者去重（每人仅保留最新一次有效提交），" +
+            "返回每个提交者的 submitterInfo、文件名与每个文件的 OSS 实际大小（字节）。" +
+            "用于回答“有多少人提交了/谁提交了”，适用于所有项目，不依赖项目是否配置允许提交名单。" +
+            "【何时用哪个工具】：本工具用于查看实际已提交情况；" +
+            "list_missing_submitters 仅适用于已配置 allowedSubmitterKeys/List 名单的项目、用于查未提交者，未配置名单时该工具返回 enabled=false。" +
+            "可选 fieldKey/fieldValue 按提交者字段前缀过滤。需对该项目有管理权限（SUPER 或被分配该项目的 ADMIN）。" +
+            "注意：返回文件大小需逐个查询 OSS，提交人数多时较慢；不带下载链接，需打包下载请改用 create_archive_download_link。" +
+            "建议先用 list_my_projects + ask_user_choice 让用户选定 projectId。")
+    public Map<String, Object> listProjectSubmissions(
+            @ToolParam(description = "项目 ID") Long projectId,
+            @ToolParam(description = "可选：按提交者字段过滤的字段 key（如 queryFieldKey）", required = false) String fieldKey,
+            @ToolParam(description = "可选：按提交者字段过滤的字段值前缀", required = false) String fieldValue
+    ) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!adminPermissionService.canManageProject(auth, projectId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权查看该项目提交名单");
+        }
+        String fk = blankToNull(fieldKey);
+        String fv = blankToNull(fieldValue);
+        // urlExpireSeconds=0：跳过预签名生成，只保留文件名/大小/提交者信息
+        List<ArchiveTaskService.ManifestEntry> entries = archiveTaskService.buildManifest(projectId, fk, fv, 0);
+        // entries 已按 submitterFingerprint 去重；多文件项目同一提交者会产生多条 entry
+        Map<String, Map<String, Object>> grouped = new java.util.LinkedHashMap<>();
+        for (ArchiveTaskService.ManifestEntry e : entries) {
+            String fp = e.getSubmitterFingerprint();
+            if (fp == null || fp.isBlank()) fp = String.valueOf(e.getKey());
+            Map<String, Object> grp = grouped.computeIfAbsent(fp, k -> {
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("submitterInfo", e.getSubmitterInfo());
+                m.put("submitCount", e.getSubmitCount());
+                m.put("createdAt", e.getCreatedAt());
+                m.put("files", new ArrayList<Map<String, Object>>());
+                return m;
+            });
+            Map<String, Object> fileEntry = new java.util.LinkedHashMap<>();
+            fileEntry.put("filename", e.getFilename());
+            fileEntry.put("size", e.getSize() == null ? 0L : e.getSize());
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> files = (List<Map<String, Object>>) grp.get("files");
+            files.add(fileEntry);
+        }
+        Project p = projectService.get(projectId);
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("kind", "project_submissions");
+        out.put("projectId", projectId);
+        out.put("projectName", p.getName());
+        out.put("totalSubmitters", grouped.size());
+        out.put("filtered", fk != null || fv != null);
+        out.put("fieldKey", fk == null ? "" : fk);
+        out.put("fieldValue", fv == null ? "" : fv);
+        out.put("submitters", new ArrayList<>(grouped.values()));
+        return out;
     }
 
     // ====================================================================

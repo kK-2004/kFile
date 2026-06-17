@@ -95,16 +95,18 @@
 
 ## 授权流程（在 agent 内完成，无需手动跑终端）
 
-配置好后重启客户端。bridge 启动时**不阻塞**，且**立即列出全部工具**（kfile_login、kfile_logout + k-File 业务工具）。agent 一开始就能看到完整能力清单——未登录时调用真实工具会返回"请先 kfile_login"。
+配置好后重启客户端。bridge 启动时**不阻塞**，启动即暴露 `kfile_login` / `kfile_logout`；登录成功后，bridge 转发 k-File 后端的完整工具清单（tools/list），agent 自动看到所有业务工具——**未登录时调用真实工具会返回"请先 kfile_login"**。
 
 整体功能说明通过 MCP 的 server `instructions` 字段一次性传达给 agent（不重复写在每个工具描述里）。
 
+> **工具清单来自后端**：bridge 不再硬编码业务工具的名称/描述/参数，全部由 k-File 后端 `listTools()` 动态返回。后端新增或修改工具后，重启 bridge（或重连）即可生效，**无需发新版 npm**。
+
 ### 首次使用 / 令牌过期
 
-1. bridge 启动，所有工具可见。
+1. bridge 启动，仅 login/logout 可见。
 2. 调用 `kfile_login` → bridge 起本地回调 + 打开浏览器到 `<KFILE_AUTH_HOST>/admin/mcp/authorize`。
 3. 浏览器登录（若未登录）→ 点「授权并跳转」。
-4. 令牌通过 `?token=` 回调到本地，保存到 `~/.kfile-mcp/token.json`，bridge 连接 SSE。
+4. 令牌通过 `?token=` 回调到本地，保存到 `~/.kfile-mcp/token.json`，bridge 连接 SSE 并拉取后端工具清单。
 5. 之后即可调用 k-File 工具。
 
 ### 之后使用
@@ -125,19 +127,20 @@ bridge 启动时若发现已存令牌，会**静默自动连接**，无需再调
 
 ## 可用工具
 
-bridge 启动即列出全部工具（整体功能见 server instructions）：
+`kfile_login` 与 `kfile_logout` 由 bridge 本地提供（未登录也可见）。其余业务工具登录后由 k-File 后端动态返回（tools/list），以下为当前后端提供的典型工具（以后端实际返回为准）：
 
-| 工具 | 用途 |
-|---|---|
-| `kfile_login` | 授权登录（开浏览器），成功后可调用其他工具 |
-| `kfile_logout` | 退出登录并清除令牌，回到未授权态 |
-| `list_my_templates` | 列出可用项目模板 |
-| `create_project` | 创建项目（支持模板回填，仅 SUPER） |
-| `list_my_projects` | 列出有权限的项目 |
-| `get_project_info` | 获取项目详情与用户填写链接 |
-| `list_missing_submitters` | 查某项目未提交名单 |
-| `create_archive_download_link` | 生成打包下载链接 |
-| `ask_user_choice` | 向用户提问让其选项选择 |
+| 工具 | 来源 | 用途 |
+|---|---|---|
+| `kfile_login` | bridge | 授权登录（开浏览器），成功后可调用其他工具 |
+| `kfile_logout` | bridge | 退出登录并清除令牌，回到未授权态 |
+| `list_my_templates` | 后端 | 列出可用项目模板 |
+| `create_project` | 后端 | 创建项目（支持模板回填，仅 SUPER） |
+| `list_my_projects` | 后端 | 列出有权限的项目 |
+| `get_project_info` | 后端 | 获取项目详情与用户填写链接 |
+| `list_missing_submitters` | 后端 | 查某项目未提交名单（仅适用于已配置提交名单的项目） |
+| `list_project_submissions` | 后端 | 查某项目实际已提交名单（人数/文件名/大小，适用所有项目） |
+| `create_archive_download_link` | 后端 | 生成打包下载链接 |
+| `ask_user_choice` | 后端 | 向用户提问让其选项选择 |
 
 ## 开发
 
