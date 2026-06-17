@@ -60,12 +60,11 @@ const onSubmit = async () => {
     await store.login(form.value.username, form.value.password)
     const raw = route.query.redirect || '/admin/projects'
     let target = String(raw)
-    try {
-      if (target.startsWith('http://') || target.startsWith('https://')) {
-        const url = new URL(target)
-        target = url.pathname + url.search + url.hash
-      }
-    } catch {}
+    // 完整外链（如 MCP 授权页 redirect）：直接整页跳转，避免 router 仅处理同源路径
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+      window.location.href = target
+      return
+    }
     router.replace(target)
   } catch (e) {
     const msg = e?.response?.data?.message || '登录失败'

@@ -13,7 +13,23 @@ spring:
     active: dev
   config:
     import: application-${spring.profiles.active}.yml
+  ai:
+    mcp:
+      server:
+        name: kfile-mcp-server
+        version: 1.0.0
+        # SSE 传输：由 spring-ai-starter-mcp-server-webmvc 自动启用（1.0.x 无 protocol 属性）。
+        # 端点：SSE 连接 /mcp/sse，消息收发 /mcp/messages（均由 McpTokenAuthFilter 鉴权）。
+        sse-endpoint: /mcp/sse
+        sse-message-endpoint: /mcp/messages
+        # 同步服务器，仅注册同步 @Tool 方法
+        type: SYNC
 
 geoip:
   enabled: ${GEOIP_ENABLED:false}
   mmdbPath: ${GEOIP_MMDB_PATH:}
+
+# MCP 长期令牌有效期（默认 6 个月），可通过环境变量覆盖
+app:
+  mcp:
+    token-validity: P182D
