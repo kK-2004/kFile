@@ -20,6 +20,15 @@ public class AdminPermissionService {
     @Autowired
     private ProjectPermissionRepository permRepo;
 
+    public boolean canCreateProject(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) return false;
+        for (GrantedAuthority ga : authentication.getAuthorities()) {
+            String authority = ga.getAuthority();
+            if ("ROLE_SUPER".equals(authority) || "ROLE_ADMIN".equals(authority)) return true;
+        }
+        return false;
+    }
+
     public boolean canManageProject(Authentication authentication, Long projectId) {
         if (authentication == null || !authentication.isAuthenticated()) return false;
         for (GrantedAuthority ga : authentication.getAuthorities()) {

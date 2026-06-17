@@ -24,7 +24,7 @@ public class ProjectController {
     private final com.kk.security.service.AdminPermissionService adminPermissionService;
 
     @PostMapping
-    @PreAuthorize("hasRole('SUPER') or hasRole('ADMIN')")
+    @PreAuthorize("@adminPermissionService.canCreateProject(authentication)")
     public ProjectResponse create(@RequestBody CreateProjectRequest req,
                                   org.springframework.security.core.Authentication authentication) {
         Project p = projectService.create(req, authentication);
@@ -63,7 +63,7 @@ public class ProjectController {
     }
 
     @GetMapping("/quota")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("@adminPermissionService.canCreateProject(authentication)")
     public java.util.Map<String, Object> quota(org.springframework.security.core.Authentication authentication) {
         return projectService.getCreationQuota(authentication);
     }

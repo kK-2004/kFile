@@ -76,7 +76,10 @@ public class ProjectQueryService {
             expected = p.getExpectedUserFields() == null ? null
                     : objectMapper.readValue(p.getExpectedUserFields(), new TypeReference<>() {});
         } catch (Exception ignored) {}
-        return ProjectResponse.from(p, types, expected, includeAllowedList);
+        ProjectResponse response = ProjectResponse.from(p, types, expected, includeAllowedList);
+        long totalSubmitters = submissionRepository.countDistinctSubmitters(p);
+        response.setTotalSubmitters((int) totalSubmitters);
+        return response;
     }
 
     /**

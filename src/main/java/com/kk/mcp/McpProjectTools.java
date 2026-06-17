@@ -19,7 +19,6 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -107,7 +106,7 @@ public class McpProjectTools {
     }
 
     // ====================================================================
-    // create_project：选定模板回填 + 入参覆盖，仅 SUPER 可创建
+    // create_project：选定模板回填 + 入参覆盖，ADMIN 和 SUPER 可创建
     // ====================================================================
     @Tool(name = "create_project", description =
             "创建一个项目。开始创建前必须先用 ask_user_choice 询问用户“是否使用模板”，并把结果传入 useTemplate。" +
@@ -116,7 +115,7 @@ public class McpProjectTools {
             "(2) useTemplate=false：等价手填创建，开关字段需用 ask_user_choice(是/否) 向用户询问，不要读默认值。" +
             "项目特有字段（name 必填；startAt/endAt/fileSizeLimitBytes/allowedFileTypes 按需）始终取自入参，模板不含这些。" +
             "必须先以 confirmed=false 或不传 confirmed 获取预览，再用 ask_user_choice 让用户确认/修改；" +
-            "只有用户确认后才允许以 confirmed=true 再次调用并真正创建。创建成功返回用户填写链接 submitUrl。仅 SUPER 角色可创建。")
+            "只有用户确认后才允许以 confirmed=true 再次调用并真正创建。创建成功返回用户填写链接 submitUrl。ADMIN 和 SUPER 角色可创建。")
     public Map<String, Object> createProject(
             @ToolParam(description = "项目名称（必填）") String name,
             @ToolParam(description = "是否使用模板。创建项目第一步必须先问用户，并传入 true/false。", required = false) Boolean useTemplate,
@@ -143,8 +142,9 @@ public class McpProjectTools {
             @ToolParam(description = "预览返回的确认令牌。confirmed=true 时必须提供，且参数不能与预览时不同。", required = false) String confirmationToken
     ) {
         AdminUser user = currentUser();
-        if (!isSuper()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅 SUPER 可创建项目");
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!adminPermissionService.canCreateProject(auth)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅 ADMIN 或 SUPER 可创建项目");
         }
         if (useTemplate == null) {
             return Map.of(
@@ -220,7 +220,6 @@ public class McpProjectTools {
         }
         projectCreationConfirmations.remove(confirmationToken);
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         Project p = projectService.create(req, auth);
         ProjectResponse response = projectQueryService.getOne(p.getId(), false);
         Map<String, Object> out = projectPayload(response);
@@ -461,15 +460,6 @@ public class McpProjectTools {
         }
         return userRepo.findByUsername(auth.getName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在"));
-    }
-
-    private boolean isSuper() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return false;
-        for (GrantedAuthority ga : auth.getAuthorities()) {
-            if ("ROLE_SUPER".equals(ga.getAuthority())) return true;
-        }
-        return false;
     }
 
     private void applyTemplateBase(CreateProjectRequest req, ProjectTemplate t) {
