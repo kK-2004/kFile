@@ -91,13 +91,27 @@ should_deploy_backend() {
   log_info "本次变更文件:"
   printf '%s\n' "${changed_files}"
 
+  # mcp-bridge 是独立发布（走 npm）的前端/Node 产物，与后端镜像无关，
+  # 明确忽略其变更：即使提交里包含 mcp-bridge 也不作为后端镜像重建的触发条件。
+  local filtered_files=""
   local file
   while IFS= read -r file; do
+    case "${file}" in
+      mcp-bridge/*)
+        log_info "忽略 mcp-bridge 变更（不触发后端镜像重建）: ${file}"
+        continue
+        ;;
+    esac
+    filtered_files+="${file}"$'\n'
+  done <<< "${changed_files}"
+
+  while IFS= read -r file; do
+    [[ -z "${file}" ]] && continue
     if is_backend_related_change "${file}"; then
       log_info "检测到后端/镜像相关变更: ${file}"
       return 0
     fi
-  done <<< "${changed_files}"
+  done <<< "${filtered_files}"
 
   log_info "未检测到后端/镜像相关变更，跳过镜像构建、容器重启和 Nginx 重载"
   return 1
@@ -133,6 +147,27 @@ if [[ -z "${OSS_AK}" ]] || [[ -z "${OSS_SK}" ]]; then
   exit 1
 fi
 
+# ==================== 构建镜像 ====================
+# 注意：必须先构建并验证新镜像成功，再停止旧容器。
+# 这样构建失败时不会误删正在运行的服务，停机窗口也压到最短。
+log_info "=== 构建 Docker 镜像（多阶段） ==="
+docker build \
+  -f "${DOCKERFILE_PATH}" \
+  -t "${IMAGE_NAME}:${BUILD_NUMBER}" \
+  -t "${IMAGE_NAME}:latest" \
+  --build-arg MAVEN_PROFILE="${MAVEN_PROFILE}" \
+  --build-arg SKIP_TESTS="${SKIP_TESTS}" \
+  --build-arg BUILD_NUMBER="${BUILD_NUMBER}" \
+  "${BUILD_CONTEXT}"
+
+# ==================== 验证镜像 ====================
+log_info "=== 验证镜像 ==="
+if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE_NAME}:${BUILD_NUMBER}$"; then
+  log_error "镜像构建失败"
+  exit 1
+fi
+log_info "镜像大小: $(docker images --format '{{.Size}}' "${IMAGE_NAME}:${BUILD_NUMBER}")"
+
 # ==================== 停止旧容器 ====================
 log_info "=== 停止旧容器 ==="
 if docker ps -a --filter "name=^${CONTAINER_NAME}$" --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -153,25 +188,6 @@ if [[ -n "${DOCKER_NETWORK}" ]]; then
     log_info "网络已存在: ${DOCKER_NETWORK}"
   fi
 fi
-
-# ==================== 构建镜像 ====================
-log_info "=== 构建 Docker 镜像（多阶段） ==="
-docker build \
-  -f "${DOCKERFILE_PATH}" \
-  -t "${IMAGE_NAME}:${BUILD_NUMBER}" \
-  -t "${IMAGE_NAME}:latest" \
-  --build-arg MAVEN_PROFILE="${MAVEN_PROFILE}" \
-  --build-arg SKIP_TESTS="${SKIP_TESTS}" \
-  --build-arg BUILD_NUMBER="${BUILD_NUMBER}" \
-  "${BUILD_CONTEXT}"
-
-# ==================== 验证镜像 ====================
-log_info "=== 验证镜像 ==="
-if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE_NAME}:${BUILD_NUMBER}$"; then
-  log_error "镜像构建失败"
-  exit 1
-fi
-log_info "镜像大小: $(docker images --format '{{.Size}}' "${IMAGE_NAME}:${BUILD_NUMBER}")"
 
 # ==================== 运行新容器 ====================
 log_info "=== 运行新容器: ${CONTAINER_NAME} ==="
