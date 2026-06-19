@@ -235,7 +235,8 @@ public class McpProjectTools {
     // ====================================================================
     @Tool(name = "list_my_projects", description =
             "列出当前登录用户有权限查看的项目。SUPER 返回全部；ADMIN 仅返回被分配给自己的项目，看不到别人的。" +
-            "用于后续操作（如查询未提交者）前选定 projectId。建议用 ask_user_choice 让用户从结果里选 projectId。")
+            "用于后续操作（如查询未提交者）前选定 projectId。建议用 ask_user_choice 让用户从结果里选 projectId。" +
+            "每项含 status 字段：已下线（offline=true，不可再提交）/ 已截止（未下线但已过截止日期）/ 进行中（未下线且在有效期内）——直接展示给用户，无需自行综合判断。")
     public List<Map<String, Object>> listMyProjects() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return projectQueryService.myProjects(auth).stream()
@@ -467,7 +468,17 @@ public class McpProjectTools {
             m.put("submitPath", submitPath(id));
             m.put("submitUrl", submitUrl(id));
         }
+        // 给 agent 一个明确的 status 派生字段，避免再去综合判断 offline/expired/endAt：
+        // offline=true → "已下线"（不可再提交）；否则看是否过期（已含截止日期判断）→ "已截止"；否则 "进行中"。
+        m.put("status", deriveStatus(response.getOffline(), response.getExpired()));
         return m;
+    }
+
+    /** 派生项目提交状态：offline 优先，其次截止/过期，最后进行中。 */
+    private String deriveStatus(Boolean offline, Boolean expired) {
+        if (Boolean.TRUE.equals(offline)) return "已下线";
+        if (Boolean.TRUE.equals(expired)) return "已截止";
+        return "进行中";
     }
 
     private String submitPath(Long projectId) {
