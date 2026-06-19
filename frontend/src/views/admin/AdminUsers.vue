@@ -88,7 +88,6 @@
       </div>
 
       <el-table :data="tokens" v-loading="tokensLoading" empty-text="暂无令牌">
-        <el-table-column prop="id" label="ID" width="80"/>
         <el-table-column prop="username" label="用户"/>
         <el-table-column label="创建时间" width="180">
           <template #default="{row}">{{ formatTs(row.createdAt) }}</template>

@@ -188,7 +188,7 @@ export async function runBridge(opts: BridgeOptions): Promise<void> {
   const authHost = (process.env.KFILE_AUTH_HOST || host).trim();
 
   const server = new Server(
-    { name: 'kfile-mcp-bridge', version: '0.2.4' },
+    { name: 'kfile-mcp-bridge', version: '0.2.5' },
     { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
 
@@ -230,10 +230,25 @@ export async function runBridge(opts: BridgeOptions): Promise<void> {
       handleDisconnect('onerror');
     };
     const client = new Client(
-      { name: 'kfile-mcp-bridge', version: '0.2.4' },
+      { name: 'kfile-mcp-bridge', version: '0.2.5' },
       { capabilities: {} },
     );
-    await client.connect(sseTransport);
+    try {
+      await client.connect(sseTransport);
+    } catch (e: any) {
+      connState = 'idle';
+      // SSE 握手 401 = token 已失效（吊销/过期/无效，后端统一返回 TOKEN_INVALID）。
+      // 此时本地 token 是废的：清除它 + 置空 activeToken + 不重连（重连也只会再 401）。
+      // 与网络抖动等可重试错误区分开。
+      if (isTokenInvalidError(e)) {
+        console.error('[kfile-mcp-bridge] token 已失效（吊销/过期/无效），清除本地 token，需重新授权。');
+        clearToken();
+        activeToken = null;
+        throw new Error('令牌已被吊销或失效。请重新调用 kfile_login 完成授权。');
+      }
+      // 其他错误（网络/5xx）：不清 token，抛出让调用方决定是否重试。
+      throw e;
+    }
     remoteClient = client;
     activeToken = token;
     connState = 'connected';
@@ -363,10 +378,10 @@ export async function runBridge(opts: BridgeOptions): Promise<void> {
         return { content: [{ type: 'text', text: '已登录，无需重复授权。可直接调用其他工具。' }] };
       }
       try {
-        let token = loadToken(host);
-        if (!token) {
-          token = await runAuthorizationFlow(host, authHost);
-        }
+        // 关键：先清掉可能已失效（被吊销/过期）的本地 token，强制走浏览器授权重新签发。
+        // 否则 loadToken 复用废 token → connectRemote 401 → 下次 login 又复用，陷入死循环。
+        clearToken();
+        const token = await runAuthorizationFlow(host, authHost);
         await connectRemote(token);
         return {
           content: [{ type: 'text', text: '授权成功，已连接 k-File。现在可以调用 list_my_projects / create_project 等工具了。' }],
@@ -424,6 +439,19 @@ export async function runBridge(opts: BridgeOptions): Promise<void> {
   } else {
     console.error('[kfile-mcp-bridge] 未授权。所有工具已列出，调用真实工具前请先 kfile_login。');
   }
+}
+
+/**
+ * 判断 SSE 握手错误是否为 token 失效（401）。
+ * 后端 McpTokenAuthFilter 对 token 失效（吊销/过期/无效）统一返回 401。
+ * SDK 抛 SseError，code 字段为 HTTP 状态码。
+ */
+function isTokenInvalidError(e: any): boolean {
+  if (!e) return false;
+  const code = (e as any).code;
+  const msg = String((e as any)?.message || '');
+  // SseError.code === 401，或错误信息含 401（兼容不同 SDK 版本/包装层）
+  return code === 401 || msg.includes('401');
 }
 
 function injectAccessToken(args: unknown, token: string | null): Record<string, unknown> {

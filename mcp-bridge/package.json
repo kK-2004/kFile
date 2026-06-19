@@ -1,6 +1,6 @@
 {
   "name": "@kk-2004/kfile-mcp",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "stdio MCP server that bridges local MCP clients to a k-File SSE MCP server, with automatic OAuth-style token management.",
   "license": "MIT",
   "author": "kk",

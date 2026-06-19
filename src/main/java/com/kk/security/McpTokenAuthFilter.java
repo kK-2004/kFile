@@ -39,16 +39,14 @@ public class McpTokenAuthFilter extends OncePerRequestFilter {
 
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith(BEARER_PREFIX)) {
-            SecurityContextHolder.clearContext();
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "未认证");
+            writeTokenInvalid(response);
             return;
         }
 
         String rawToken = header.substring(BEARER_PREFIX.length()).trim();
         McpTokenService.AuthResult result = tokenService.authenticate(rawToken);
         if (result == null) {
-            SecurityContextHolder.clearContext();
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "未认证");
+            writeTokenInvalid(response);
             return;
         }
 
@@ -56,6 +54,18 @@ public class McpTokenAuthFilter extends OncePerRequestFilter {
                 result.user().getUsername(), null, result.authorities());
         SecurityContextHolder.getContext().setAuthentication(auth);
         chain.doFilter(request, response);
+    }
+
+    /**
+     * 统一的 token 失败响应：401 + JSON {errorCode:"TOKEN_INVALID"}。
+     * bridge 据此识别"本地 token 已失效（吊销/过期/无效）"，清本地 token 重新登录；
+     * 与网络抖动等可重试错误区分开。
+     */
+    private void writeTokenInvalid(HttpServletResponse response) throws IOException {
+        SecurityContextHolder.clearContext();
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"errorCode\":\"TOKEN_INVALID\"}");
     }
 
     private boolean isMcpTransportRequest(HttpServletRequest request) {

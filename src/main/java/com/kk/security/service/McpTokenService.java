@@ -163,15 +163,19 @@ public class McpTokenService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权吊销该令牌");
         }
         token.setRevoked(true);
+        token.setRevokedAt(Instant.now());
         tokenRepo.save(token);
         log.info("BIZ action=MCP_TOKEN_REVOKE tokenId={} operator={}", tokenId,
                 currentUser == null ? "?" : currentUser.getUsername());
     }
 
-    /** SUPER 看全部，否则只看自己的 */
+    /**
+     * 管理端列表：SUPER 看全部未吊销的，否则只看自己的未吊销的。
+     * 已吊销的令牌逻辑删除——不再显示（定时任务每天 0:10 物理清理）。
+     */
     public List<McpAccessToken> listForUser(AdminUser currentUser) {
         boolean isSuper = currentUser != null && "SUPER".equalsIgnoreCase(currentUser.getRole());
-        return isSuper ? tokenRepo.findAll() : tokenRepo.findByUser(currentUser);
+        return isSuper ? tokenRepo.findAllActive() : tokenRepo.findActiveByUser(currentUser);
     }
 
     public Map<String, Object> toView(McpAccessToken t) {

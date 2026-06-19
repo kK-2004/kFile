@@ -40,5 +40,8 @@ public class McpAccessToken {
 
     private Boolean revoked = false;
 
+    // 吊销时刻：非空即逻辑删除（管理端不再显示，定时任务物理清理）。
+    private Instant revokedAt;
+
     private Instant lastUsedAt;
 }
