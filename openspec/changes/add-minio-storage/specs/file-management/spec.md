@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: SUPER 可访问文件管理入口
-系统 SHALL 在 SUPER 管理后台提供一个「文件管理」页面（路由 `/admin/files`），仅对 `SUPER` 角色可见可访问；非 SUPER 用户 MUST 无法访问该页面及其后端接口。
+系统 SHALL 在 SUPER 管理后台提供「文件管理」页面（路由 `/admin/files`），仅 `SUPER` 角色可见可访问；非 SUPER 用户 MUST 无法访问该页面及其后端接口。
 
 #### Scenario: SUPER 用户看到文件管理导航
 - **WHEN** 拥有 `SUPER` 角色的管理员登录后台
@@ -15,88 +15,119 @@
 - **WHEN** 未认证用户调用 `/api/admin/files/**` 接口
 - **THEN** 系统返回 `401 Unauthorized`
 
-### Requirement: 数据源切换
-系统 SHALL 支持在文件管理页选择数据源（OSS 与 MinIO），各数据源对应独立的 bucket，彼此互不影响；前端 SHALL 仅展示当前已启用的数据源。
-
-#### Scenario: 列出可用数据源
-- **WHEN** 前端请求 `GET /api/admin/files/sources`
-- **THEN** 系统返回当前启用的数据源数组（至少包含 `oss`；若 `minio.enabled=true` 则同时包含 `minio`）
-
-#### Scenario: MinIO 未启用时隐藏
-- **WHEN** `minio.enabled` 为 `false` 或 `minio.*` 配置缺失
-- **THEN** `sources` 仅返回 OSS，前端不显示 MinIO 数据源切换项
-
-#### Scenario: 两个 bucket 独立浏览
-- **WHEN** 用户在 OSS 数据源下浏览目录 `/a/`，随后切换到 MinIO 数据源
-- **THEN** MinIO 数据源展示其自身根目录，不受 OSS 当前路径影响；切回 OSS 仍停留在 `/a/`
-
-### Requirement: 目录浏览
-系统 SHALL 支持按前缀（目录）列出对象，区分「子目录」与「文件」，并通过面包屑支持进入子目录与返回上级。
+### Requirement: DB 虚拟多级文件树
+系统 SHALL 用数据库维护虚拟多级文件夹结构（`stored_file` 表，parentId 自引用，type=FOLDER|FILE），与对象存储的真实扁平结构解耦；前端通过 parentId 导航任意多级文件夹。
 
 #### Scenario: 列出根目录
-- **WHEN** 用户请求 `GET /api/admin/files/list?source=oss&prefix=`（prefix 为空）
-- **THEN** 系统返回根前缀下的子目录与文件列表，每个条目含 `name`、`isDir`、`size`、`lastModified`、`key`
+- **WHEN** 用户请求 `GET /api/admin/files/list?parentId=`（parentId 为空）
+- **THEN** 系统返回根级子项列表（文件夹在前，按名排序）+ 当前路径面包屑 `path`
 
-#### Scenario: 进入子目录
-- **WHEN** 用户请求 `GET /api/admin/files/list?source=minio&prefix=docs/`
-- **THEN** 系统返回 `docs/` 前缀下的下一层子目录与文件，不递归
+#### Scenario: 进入子文件夹
+- **WHEN** 用户请求 `GET /api/admin/files/list?parentId=5`
+- **THEN** 系统返回 parentId=5 的下一级子项 + 从根到该节点的面包屑 `path`
 
-#### Scenario: 过滤目录占位对象
-- **WHEN** 目录由 0 字节占位对象 `.keep` 创建
-- **THEN** `list` 结果 MUST 将其所在前缀作为 `isDir=true` 条目返回，而不是作为文件展示 `.keep`
+#### Scenario: 对象存储扁平
+- **WHEN** 用户上传文件到任意虚拟路径
+- **THEN** 对象的 storageKey 为 `<prefix>/<虚拟文件夹路径>/<timestamp-uuid>/<真实文件名.ext>`（不含虚拟树层级的真实文件夹，但保留真实文件名 + 一次性子目录防覆盖），下载时用 originalName 还原文件名
 
 ### Requirement: 创建文件夹
-系统 SHALL 支持在指定目录下创建文件夹；对象存储无真目录时 MUST 通过约定占位对象实现。
+系统 SHALL 支持在指定父目录下创建虚拟文件夹；同父目录下同名同 type MUST 被拒绝。
 
 #### Scenario: 创建文件夹
-- **WHEN** 用户请求 `POST /api/admin/files/mkdir` `{source, prefix:"docs/", name:"2026"}`
-- **THEN** 系统创建占位对象使其出现在列表中，并返回该目录的 key（如 `docs/2026/`）
+- **WHEN** 用户请求 `POST /api/admin/files/mkdir {parentId: 5, name: "2026"}`
+- **THEN** 系统在 parentId=5 下创建 type=FOLDER 的 StoredFile，返回该节点
+
+#### Scenario: 同名冲突
+- **WHEN** 用户在 parentId=5 下创建已存在的同名文件夹
+- **THEN** 系统返回 `409 Conflict`
 
 #### Scenario: 防止路径穿越
-- **WHEN** 用户传入含 `..` 或绝对路径的 `name`（如 `../evil`）
-- **THEN** 系统 MUST 剥离或拒绝危险片段，最终 key 仍限定在目标 prefix 之下
+- **WHEN** 用户传入含 `/`、`\` 或 `..` 的 `name`
+- **THEN** 系统 MUST 拒绝或剥离危险片段
 
-### Requirement: 上传文件
-系统 SHALL 支持将文件上传到指定目录；上传的路径与文件名处理规则 MUST 与现有 OSS 上传逻辑对齐（根前缀归一化、`baseName` 去路径与 `..`、日期分目录）。
+### Requirement: 上传文件（浏览器直传，带进度）
+系统 SHALL 支持将文件经**浏览器直传**到指定虚拟目录（文件不经业务后端）；上传目标目录由 parentId 决定，存储源由 source 参数决定；前端 MUST 展示真实上传进度。
 
 #### Scenario: 上传到指定目录
-- **WHEN** 用户请求 `POST /api/admin/files/upload?source=minio&prefix=docs/`，附带文件 `report.pdf`
-- **THEN** 系统将对象存储到 `docs/yyyy/MM/dd/report.pdf`（日期为当天），返回可访问的代理 URL（如 `/file/minio/docs/yyyy/MM/dd/report.pdf`）
+- **WHEN** 用户请求 `POST /api/admin/files/upload-init {parentId:5, source:"minio", originalName:"report.pdf", contentType}`，浏览器按返回的 putUrl 直接 PUT 文件，再请求 `POST /api/admin/files/upload-complete`
+- **THEN** 系统按 `<prefix>/<虚拟文件夹路径>/<timestamp-uuid>/report.pdf` 上传到对象存储 → 在 parentId=5 下创建 type=FILE 的 StoredFile（stat 取真实 size），返回该节点
 
-#### Scenario: 文件名安全处理
-- **WHEN** 上传文件名为 `/etc/passwd` 或 `../../secret`
-- **THEN** 系统 MUST 使用 `baseName` 规则剥离路径与 `..`，最终对象 key 不逃逸出目标 prefix
+#### Scenario: OSS 直传 Content-Type 签名一致
+- **WHEN** 存储源=oss 且文件有 Content-Type
+- **THEN** `upload-init` MUST 将 contentType 纳入预签名，浏览器 PUT 时 Content-Type 与签名一致（否则 OSS 校验签名失败 403）
 
-#### Scenario: 保留同名覆盖语义
-- **WHEN** 目标 key 已存在同名对象并再次上传
-- **THEN** 系统 MUST 按对象存储默认行为覆盖，不报错（与现有 OSS 上传一致）
+#### Scenario: 上传源未启用
+- **WHEN** 请求 source=minio 但 MinIO 未启用
+- **THEN** 系统返回 `400 Bad Request`，提示存储源不可用
 
 ### Requirement: 下载文件
-系统 SHALL 支持下载文件；MUST 通过与 OSS 对称的下载代理路径 `/file/minio/**` 暴露 MinIO 对象，默认走 302 重定向到预签名直链，支持 `?proxy=1` 强制流式代理与 `?download=1` 强制下载。
+系统 SHALL 通过 DB 记录的 storageKey + storageSource 生成下载链接；MinIO 文件可通过 `/file/minio/**` 代理访问。
 
-#### Scenario: 默认 302 预签名直链
-- **WHEN** 浏览器请求 `GET /file/minio/<key>`
-- **THEN** 系统返回 `302`，`Location` 指向 MinIO 预签名 GET 直链
+#### Scenario: 管理员获取下载链接
+- **WHEN** 用户请求 `GET /api/admin/files/download-url?fileId=10`
+- **THEN** 系统按该文件的 storageSource 经 registry 生成预签名直链或代理 URL，返回 `{url}`
 
-#### Scenario: 强制流式代理
-- **WHEN** 浏览器请求 `GET /file/minio/<key>?proxy=1`
-- **THEN** 系统以流式方式回传对象内容，附带正确的 `Content-Type`/`Content-Length`/`ETag` 头
+#### Scenario: 代理路径公开访问
+- **WHEN** 任意客户端 `GET /file/minio/<key>`
+- **THEN** 系统默认 302 到预签名直链；`?proxy=1` 流式；`?download=1` 强制下载；未登录可访问
 
-#### Scenario: 强制下载
-- **WHEN** 浏览器请求 `GET /file/minio/<key>?download=1`
-- **THEN** 系统（无论 302 还是代理）设置 `Content-Disposition: attachment` 促使浏览器下载
+### Requirement: 删除文件/文件夹（递归）
+系统 SHALL 支持删除单个文件或文件夹；文件夹 MUST 递归删除全部子节点；删除 MUST 同时清理对象存储真实对象与 DB 记录。
 
-#### Scenario: 公开 GET 访问
-- **WHEN** 任意（含未登录）客户端 `GET /file/minio/**`
-- **THEN** 系统允许访问（与 `/file/oss/**` 同样在 SecurityConfig 放开 GET）
+#### Scenario: 删除文件
+- **WHEN** 用户请求 `DELETE /api/admin/files/10`（type=FILE）
+- **THEN** 系统删除 MinIO 对象 + DB 行，后续 list 不再返回它
 
-### Requirement: 删除文件
-系统 SHALL 支持删除单个对象；删除 MUST 经前端二次确认，删除后该对象从列表消失。
+#### Scenario: 递归删除文件夹
+- **WHEN** 用户请求 `DELETE /api/admin/files/5`（type=FOLDER）
+- **THEN** 系统 MUST 递归删除其下所有文件（对象+行）与子文件夹
 
-#### Scenario: 删除单个文件
-- **WHEN** 用户请求 `DELETE /api/admin/files?source=oss&key=docs/2026/01/01/x.txt`
-- **THEN** 系统删除该对象，后续 `list` 不再返回它
+#### Scenario: 对象删除失败不阻断
+- **WHEN** MinIO 删除某对象失败
+- **THEN** 系统 MUST 仍删除对应 DB 行（避免孤儿 DB 行），并在响应中返回失败计数
 
-#### Scenario: 删除目录占位对象不级联
-- **WHEN** 用户删除一个目录占位对象（`.keep`）对应的目录 key
-- **THEN** 系统 MUST 仅删除占位对象本身，不递归删除目录内其它对象（递归删除属 Non-Goal，需用户逐个删除）
+### Requirement: 分享文件（复用既有分享能力）
+系统 SHALL 复用既有 `ShareLinkService` + `ShareDownload.vue` 实现文件分享；管理员勾选多个文件生成分享链接，访问者经 `/share?s=<code>` 下载。
+
+#### Scenario: 创建分享
+- **WHEN** 用户请求 `POST /api/admin/files/share {fileIds:[10,11], expireSeconds:3600, filename:"batch.zip"}`
+- **THEN** 系统对每个 FILE 预签名 MinIO URL → 构造 `entries=[{u,f,s}]` → 调 `ShareLinkService.create`，返回 `{code, expireAt}`
+
+#### Scenario: 访问分享
+- **WHEN** 访问者打开 `/share?s=<code>`
+- **THEN** 现有 `ShareDownload.vue` 渲染文件列表、过期倒计时、打包下载（客户端 ZIP）
+
+#### Scenario: 分享过期
+- **WHEN** 分享的 expireAt 已过
+- **THEN** 现有逻辑返回 `410 Gone`
+
+### Requirement: 大文件断点续传（>50MB，仅 MinIO）
+系统 SHALL 对存储源=minio 且 >50MB 的文件支持断点续传分片上传；采用 AWS SDK v2 对 MinIO 发 S3 multipart（CreateMultipartUpload/UploadPart/CompleteMultipartUpload/ListParts）；进度状态全在 MinIO（经 ListParts 查已传 part），**不引入 Redis**；uploadId 持久化在 DB `StoredFileUpload` 表（contentMd5 唯一索引定位）；前端用 SparkMD5 算整文件 MD5 作为幂等 key；OSS 与 ≤50MB 文件仍走单次 presigned PUT。
+
+#### Scenario: 分片上传完整流程
+- **WHEN** 用户上传 51MB 文件到 minio，前端按 5MB 切片（totalChunks=11，chunkId 0..10）并用 SparkMD5 算整文件 MD5
+- **THEN** `upload-multipart-init` 创建 S3 multipart 拿 uploadId + 写 StoredFileUpload(UPLOADING) + 写 StoredFile(UPLOADING)；前端逐个 `upload-multipart-sign` 拿 presigned URL → PUT chunk → 收集 part ETag；全部 chunk 完成后 `upload-multipart-complete` 合并，StoredFile status=UPLOADED + StoredFileUpload status=UPLOADED
+
+#### Scenario: 断点续传（基于 ListParts）
+- **WHEN** 上传中断后重新发起同一文件（相同 contentMd5）
+- **THEN** `upload-multipart-init` 按 contentMd5 查 DB 拿 uploadId → 调 `ListParts(uploadId)` 查 MinIO 已上传的 partNumber 集合 → 返回 `uploadedParts`；前端仅 PUT 未上传的 chunk
+
+#### Scenario: 分片校验失败
+- **WHEN** `upload-multipart-complete` 传入的 part ETag 与 MinIO 记录不一致（分片损坏/篡改）
+- **THEN** MinIO 在 complete 阶段拒绝，系统 abort 该 multipart，返回「分片校验不一致，请重新上传」，清空 StoredFileUpload + StoredFile(UPLOADING) 记录
+
+#### Scenario: 分片路径
+- **WHEN** 在虚拟文件夹 `A/B/` 下分片上传 `report.pdf`
+- **THEN** chunk 对象 key 为 `<prefix>/_chunks/A/B/<timestamp-uuid>/report.pdf-<chunkId>`（timestamp-uuid 在 init 时生成一次，所有 chunk 共用）；合并后最终 key 为 `<prefix>/A/B/<timestamp-uuid>/report.pdf`
+
+#### Scenario: 分片进度可见
+- **WHEN** 分片上传中
+- **THEN** 前端 MUST 按已上传字节数/总字节数（或已完成 chunk 数/totalChunks）展示真实进度，非模拟进度
+
+#### Scenario: ≤50MB 或 OSS 不分片
+- **WHEN** 文件 ≤50MB 或存储源=oss
+- **THEN** 走单次 presigned PUT（upload-init/upload-complete），不进入分片流程
+
+#### Scenario: 放弃上传的资源回收
+- **WHEN** 用户放弃上传（StoredFileUpload 留在 UPLOADING 状态超过阈值如 24h）
+- **THEN** 定时清理任务 `MultipartUploadCleanupTask` 扫描到该记录 → 调 `abortMultipartUpload` 释放 MinIO 未完成 multipart → 删 StoredFileUpload + StoredFile(UPLOADING) 行

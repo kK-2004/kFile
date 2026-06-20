@@ -2,3 +2,5 @@
 @import "tailwindcss/theme";
 @import "tailwindcss/utilities";
 
+/* 暗色模式：基于 html.dark class（非 prefers-color-scheme），让 dark: 前缀生效 */
+@custom-variant dark (&:where(.dark, .dark *));

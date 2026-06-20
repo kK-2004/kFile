@@ -1,12 +1,15 @@
 :root{
   --kf-bg: #ffffff;
+  --kf-bg-dim: #f5f7fa;
   --kf-header-bg: #ffffff;
   --kf-border: #e5e7eb;
+  --kf-border-light: #f0f0f0;
   --kf-text: #1f2937;
+  --kf-text-primary: #1f2937;
+  --kf-border-color: var(--kf-border);
   --kf-muted: #6b7280;
-  --kf-primary: #5594c8; /* Element Plus primary */
-  --kf-primary-hover: #accbea; /* Element Plus primary hover */
-  /* 新增与App.vue一致的颜色变量 */
+  --kf-primary: #5594c8;
+  --kf-primary-hover: #accbea;
   --kf-danger: #ef4444;
   --kf-danger-hover: #f87171;
   --kf-warning: #f59e0b;
@@ -15,6 +18,33 @@
   --kf-success-hover: #34d399;
   --kf-hover-bg: #fef2f2;
   --kf-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --kf-surface-dim: #f9fafb;
+  --kf-user-info-bg: #f9fafb;
+}
+
+/* 暗色主题覆盖 */
+html.dark{
+  --kf-bg: #141414;
+  --kf-bg-dim: #1a1a1a;
+  --kf-header-bg: #1d1e1f;
+  --kf-border: #3a3a3c;
+  --kf-border-light: #2c2c2e;
+  --kf-text: #e5eaf3;
+  --kf-text-primary: #e5eaf3;
+  --kf-border-color: #3a3a3c;
+  --kf-muted: #a3a6ad;
+  --kf-primary: #5594c8;
+  --kf-primary-hover: #3a7aab;
+  --kf-danger: #ef4444;
+  --kf-danger-hover: #c93b3b;
+  --kf-warning: #f59e0b;
+  --kf-warning-hover: #d97f06;
+  --kf-success: #10b981;
+  --kf-success-hover: #0e9c6e;
+  --kf-hover-bg: #2a2a2c;
+  --kf-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --kf-surface-dim: #1d1e1f;
+  --kf-user-info-bg: #262728;
 }
 
 /* App layout */
@@ -42,7 +72,7 @@
 .el-header 
 .el-button.is-link:hover{ 
   color: var(--kf-primary); 
-  background: #f3f4f6;
+  background: var(--kf-surface-dim);
 }
 
 /* Cards */
@@ -51,9 +81,9 @@
   border-color: var(--kf-border);
   box-shadow: 0 2px 10px rgba(31,41,55,0.06);
 }
-.el-card__header{ 
-  padding: 14px 18px; 
-  background: #f9fafb; /* 与App.vue用户信息背景一致 */
+.el-card__header{
+  padding: 14px 18px;
+  background: var(--kf-surface-dim);
   border-bottom: 1px solid var(--kf-border);
   border-radius: 10px 10px 0 0;
 }
@@ -70,7 +100,7 @@
 
 /* Tables */
 .el-table th{ 
-  background: #fafafa; 
+  background: var(--kf-surface-dim); 
   color: var(--kf-text); 
   font-weight: 600; 
 }
@@ -86,7 +116,7 @@
   overflow-x: hidden; 
 }
 .el-table__body tr:hover>td{ 
-  background: #fcfcfd; 
+  background: var(--kf-surface-dim); 
 }
 
 /* Forms */
@@ -104,10 +134,10 @@
   color: var(--kf-primary); 
 }
 
-/* Inputs width inside list */
-.el-card .el-input, .el-card .el-select{ 
-  max-width: 420px; 
-  width: 100%; 
+/* Inputs width inside list（排除 pagination 内的 select，避免 sizes 选择器布局错乱） */
+.el-card .el-input:not(.el-pagination .el-input), .el-card .el-select:not(.el-pagination .el-select){
+  max-width: 420px;
+  width: 100%;
 }
 .project-form .el-input, .project-form .el-select{ 
   max-width: 820px; 
@@ -165,21 +195,21 @@ html, body, #app, .el-container{
 /* 统一默认按钮 hover，避免与白色背景混淆 */
 .el-button--default:hover,
 .el-button--default:focus{
-  background-color: #f3f4f6;
-  border-color: #e5e7eb;
-  color: #374151;
+  background-color: var(--kf-surface-dim);
+  border-color: var(--kf-border);
+  color: var(--kf-text);
 }
 
 /* plain / text / link 样式按钮的 hover 反馈 */
 .el-button.is-plain:hover,
 .el-button.is-plain:focus{
-  background-color: #f8fafc;
-  border-color: #d1d5db;
-  color: #374151;
+  background-color: var(--kf-surface-dim);
+  border-color: var(--kf-border);
+  color: var(--kf-text);
 }
 .el-button.is-text:hover,
 .el-button.is-link:hover{
-  background-color: #f3f4f6;
+  background-color: var(--kf-surface-dim);
 }
 
 /* 各语义按钮 hover 颜色（全局兜底） */
@@ -202,9 +232,9 @@ html, body, #app, .el-container{
 
 /* 新增与App.vue一致的操作按钮样式 */
 .action-btn {
-  background: #ffffff !important;
-  border: 1px solid #e5e7eb !important;
-  color: #4b5563 !important;
+  background: var(--kf-bg) !important;
+  border: 1px solid var(--kf-border) !important;
+  color: var(--kf-muted) !important;
   font-weight: 500;
   border-radius: 6px;
   padding: 6px 16px;
@@ -212,9 +242,9 @@ html, body, #app, .el-container{
 }
 
 .action-btn:hover {
-  background: #fef2f2 !important;
-  border-color: #fecaca !important;
-  color: #ef4444 !important;
+  background: var(--kf-hover-bg) !important;
+  border-color: var(--kf-danger-hover) !important;
+  color: var(--kf-danger) !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
 }
@@ -229,8 +259,8 @@ html, body, #app, .el-container{
 }
 
 .nav-btn:hover {
-  background: #fef2f2 !important;
-  color: #ef4444 !important;
+  background: var(--kf-hover-bg) !important;
+  color: var(--kf-danger) !important;
   transform: translateY(-1px);
 }
 
@@ -240,9 +270,9 @@ html, body, #app, .el-container{
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: #f9fafb;
+  background: var(--kf-surface-dim);
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--kf-border);
 }
 
 .username {
@@ -252,10 +282,10 @@ html, body, #app, .el-container{
 }
 
 .user-role {
-  color: #ef4444;
+  color: var(--kf-danger);
   font-size: 12px;
   padding: 2px 8px;
-  background: #fef2f2;
+  background: var(--kf-hover-bg);
   border-radius: 4px;
   font-weight: 500;
 }

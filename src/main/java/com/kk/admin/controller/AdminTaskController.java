@@ -22,7 +22,7 @@ public class AdminTaskController {
     private final ProjectService projectService;
 
     @PostMapping("/projects/{projectId}/delete-task")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canDeleteProject(authentication, #projectId)")
     public Map<String,Object> startDelete(@PathVariable Long projectId, Authentication authentication) {
         var t = deleteTaskService.start(projectId, authentication);
         return java.util.Map.of("taskId", t.getId(), "status", t.getStatus());

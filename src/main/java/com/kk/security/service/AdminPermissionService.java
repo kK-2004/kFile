@@ -43,4 +43,34 @@ public class AdminPermissionService {
         ProjectPermission perm = permRepo.findByUserAndProject(user, p).orElse(null);
         return perm != null;
     }
+
+    /** 是否允许编辑项目（SUPER 全 true；ADMIN 需 ProjectPermission.canEdit） */
+    public boolean canEditProject(Authentication authentication, Long projectId) {
+        if (authentication == null || !authentication.isAuthenticated()) return false;
+        for (GrantedAuthority ga : authentication.getAuthorities()) {
+            if ("ROLE_SUPER".equals(ga.getAuthority())) return true;
+        }
+        Project p = projectRepo.findById(projectId).orElse(null);
+        if (p == null) return false;
+        AdminUser user = userRepo.findByUsername(authentication.getName()).orElse(null);
+        if (user == null || Boolean.FALSE.equals(user.getEnabled())) return false;
+        if ("SUPER".equalsIgnoreCase(user.getRole())) return true;
+        ProjectPermission perm = permRepo.findByUserAndProject(user, p).orElse(null);
+        return perm != null && perm.isCanEdit();
+    }
+
+    /** 是否允许删除项目（SUPER 全 true；ADMIN 需 ProjectPermission.canDelete） */
+    public boolean canDeleteProject(Authentication authentication, Long projectId) {
+        if (authentication == null || !authentication.isAuthenticated()) return false;
+        for (GrantedAuthority ga : authentication.getAuthorities()) {
+            if ("ROLE_SUPER".equals(ga.getAuthority())) return true;
+        }
+        Project p = projectRepo.findById(projectId).orElse(null);
+        if (p == null) return false;
+        AdminUser user = userRepo.findByUsername(authentication.getName()).orElse(null);
+        if (user == null || Boolean.FALSE.equals(user.getEnabled())) return false;
+        if ("SUPER".equalsIgnoreCase(user.getRole())) return true;
+        ProjectPermission perm = permRepo.findByUserAndProject(user, p).orElse(null);
+        return perm != null && perm.isCanDelete();
+    }
 }

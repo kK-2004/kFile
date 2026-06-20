@@ -50,25 +50,27 @@
           </div>
 
           <div class="header-right">
-            <el-space :size="8" class="nav-space" v-if="auth && auth.user">
-              <el-button
-                  v-if="!isUserSubmit && !(isAdminLogin && !auth.user)"
-                  class="nav-btn"
-                  text
-                  @click="$router.push('/user/projects')"
-              >
-                用户端
-              </el-button>
-              <el-button
-                  v-if="!isUserSubmit"
-                  class="nav-btn"
-                  text
-                  @click="$router.push('/admin')"
-              >
-                管理端
-              </el-button>
+            <el-space :size="8" class="nav-space">
+              <template v-if="auth && auth.user">
+                <el-button
+                    v-if="!isUserSubmit && !(isAdminLogin && !auth.user)"
+                    class="nav-btn"
+                    text
+                    @click="$router.push('/user/projects')"
+                >
+                  用户端
+                </el-button>
+                <el-button
+                    v-if="!isUserSubmit"
+                    class="nav-btn"
+                    text
+                    @click="$router.push('/admin')"
+                >
+                  管理端
+                </el-button>
+              </template>
 
-              <template v-if="isAdmin">
+              <template v-if="isAdmin && auth && auth.user">
                 <el-divider direction="vertical" class="nav-divider" />
                 <el-button
                     class="nav-btn"
@@ -101,9 +103,31 @@
                 >
                   系统设置
                 </el-button>
+                <el-button
+                    class="nav-btn"
+                    text
+                    v-if="isAdmin"
+                    @click="$router.push('/admin/files')"
+                >
+                  文件管理
+                </el-button>
+                <el-button
+                    class="nav-btn"
+                    text
+                    v-if="isAdmin"
+                    @click="$router.push('/admin/shares')"
+                >
+                  分享管理
+                </el-button>
 
                 <el-divider direction="vertical" class="nav-divider" />
+              </template>
 
+              <el-button class="theme-btn" text @click="cycleTheme" :title="themeTooltip">
+                <el-icon size="16"><component :is="themeIconComp" /></el-icon>
+              </el-button>
+
+              <template v-if="isAdmin && auth && auth.user">
                 <div class="user-info">
                   <span class="username">{{ auth.user.username }}</span>
                   <span class="user-role">{{ (auth.user.role||'').toUpperCase() }}</span>
@@ -182,9 +206,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import { useThemeStore } from './stores/theme'
 import api from './api'
 import { ElMessage } from 'element-plus'
 import { CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import { Sunny, Moon, Monitor } from '@element-plus/icons-vue'
 import NewYearElements from './components/NewYearElements.vue'
 
 const route = useRoute()
@@ -197,6 +223,20 @@ const isUserSubmit = computed(() => route.path.startsWith('/user/projects/') && 
 const isHome = computed(() => isUserSubmit.value)
 const showAnnouncement = ref(true)
 const isSuper = computed(() => auth.user && (auth.user.role||'').toUpperCase()==='SUPER')
+
+// 主题切换
+const theme = useThemeStore()
+const themeIconComp = computed(() => {
+  if (theme.mode === 'light') return Sunny
+  if (theme.mode === 'dark') return Moon
+  return Monitor
+})
+const themeTooltip = computed(() => {
+  if (theme.mode === 'light') return '亮色模式（点击切换）'
+  if (theme.mode === 'dark') return '暗色模式（点击切换）'
+  return '跟随系统（点击切换）'
+})
+const cycleTheme = () => theme.cycleMode()
 const showNewYearElements = computed(() => {
   const now = new Date()
 
@@ -289,8 +329,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 
 /* Header 样式 */
 .app-header {
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: var(--kf-header-bg);
+  box-shadow: var(--kf-shadow);
   padding: 0 32px;
   height: 64px !important;
   display: flex;
@@ -300,7 +340,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
   left: 0;
   right: 0;
   z-index: 1000;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--kf-border-light);
 }
 
 .header-content {
@@ -340,7 +380,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
   font-size: 26px;
   font-weight: 800;
   font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: #1f2937;
+  color: var(--kf-text);
   letter-spacing: 1.5px;
   text-transform: uppercase;
   position: relative;
@@ -377,7 +417,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 
 /* 导航按钮 - 确保文字颜色清晰 */
 :deep(.nav-btn) {
-  color: #4b5563 !important;
+  color: var(--kf-muted) !important;
   font-weight: 500;
   padding: 8px 16px;
   border-radius: 8px;
@@ -385,8 +425,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 }
 
 :deep(.nav-btn:hover) {
-  background: #fef2f2 !important;
-  color: #ef4444 !important;
+  background: var(--kf-hover-bg) !important;
+  color: var(--kf-danger) !important;
   transform: translateY(-1px);
 }
 
@@ -394,7 +434,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 :deep(.nav-divider) {
   height: 20px;
   margin: 0 8px;
-  border-color: #e5e7eb;
+  border-color: var(--kf-border);
+}
+
+/* 主题切换按钮 */
+.theme-btn {
+  padding: 4px 8px !important;
+  color: var(--kf-muted) !important;
+}
+.theme-btn:hover {
+  background: var(--kf-hover-bg) !important;
 }
 
 /* 用户信息 */
@@ -403,31 +452,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: #f9fafb;
+  background: var(--kf-user-info-bg);
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--kf-border);
 }
 
 .username {
-  color: #1f2937;
+  color: var(--kf-text);
   font-weight: 500;
   font-size: 14px;
 }
 
 .user-role {
-  color: #ef4444;
+  color: var(--kf-danger);
   font-size: 12px;
   padding: 2px 8px;
-  background: #fef2f2;
+  background: var(--kf-hover-bg);
   border-radius: 4px;
   font-weight: 500;
 }
 
-/* 操作按钮 - 确保颜色清晰可见 */
+/* 操作按钮 */
 :deep(.action-btn) {
-  background: #ffffff !important;
-  border: 1px solid #e5e7eb !important;
-  color: #4b5563 !important;
+  background: var(--kf-bg) !important;
+  border: 1px solid var(--kf-border) !important;
+  color: var(--kf-muted) !important;
   font-weight: 500;
   border-radius: 6px;
   padding: 6px 16px;
@@ -435,24 +484,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 }
 
 :deep(.action-btn:hover) {
-  background: #fef2f2 !important;
-  border-color: #fecaca !important;
-  color: #ef4444 !important;
+  background: var(--kf-hover-bg) !important;
+  border-color: var(--kf-danger-hover) !important;
+  color: var(--kf-danger) !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
 }
 
 :deep(.logout-btn:hover) {
-  background: #ef4444 !important;
-  border-color: #ef4444 !important;
+  background: var(--kf-danger) !important;
+  border-color: var(--kf-danger) !important;
   color: #ffffff !important;
 }
 
 /* 主内容区域 */
 .app-main {
-  background: #f5f7fa;
+  background: var(--kf-bg-dim);
   padding: 0;
-  margin-top: 64px; /* 避开固定头部 */
+  margin-top: 64px;
 }
 /* 强制覆盖 Element Plus 默认主区域内边距 */
 :deep(.el-main.app-main) { padding: 0 !important; }
@@ -477,6 +526,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 
 :deep(.pwd-dialog .el-dialog__body) {
   padding: 20px;
+  background: var(--kf-bg);
 }
 
 /* 响应式设计 */

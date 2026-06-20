@@ -66,10 +66,10 @@
       <el-table-column label="操作" width="420">
         <template #default="{row}">
           <el-space>
-            <el-button size="small" @click="edit(row)">编辑</el-button>
+            <el-button size="small" @click="edit(row)" v-if="row.canEdit || isSuper">编辑</el-button>
             <el-button size="small" @click="viewSubmissions(row)">提交记录</el-button>
             <el-button size="small" @click="exportCsv(row)">导出CSV</el-button>
-            <el-button size="small" type="danger" v-if="auth.user && (auth.user.role||'').toUpperCase()==='SUPER'" @click="openDelete(row)">删除</el-button>
+            <el-button size="small" type="danger" v-if="row.canDelete || isSuper" @click="openDelete(row)">删除</el-button>
           </el-space>
         </template>
       </el-table-column>
@@ -125,6 +125,7 @@ import { useAuthStore } from '../../stores/auth'
 import { copyText } from '../../utils/clipboard'
 
 const auth = useAuthStore()
+const isSuper = computed(() => auth.user && (auth.user.role||'').toUpperCase() === 'SUPER')
 onMounted(async()=>{ if (!auth.loaded) await auth.loadMe(); await loadQuota() })
 
 const projects = ref([])

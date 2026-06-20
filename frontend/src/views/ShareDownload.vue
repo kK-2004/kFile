@@ -40,39 +40,59 @@
         <div class="card file-card">
           <div class="file-card-header">
             <h2 class="card-title">文件列表</h2>
+            <div class="view-toggle" v-if="hasFolders">
+              <button class="toggle-btn" :class="{ active: viewMode === 'folder' }" @click="viewMode = 'folder'">文件夹视图</button>
+              <button class="toggle-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">文件列表</button>
+            </div>
             <span class="file-count">共 {{ shareData.e.length }} 项</span>
           </div>
           <div class="file-table-wrap">
-            <table class="file-table">
-              <thead>
-                <tr>
-                  <th>文件名</th>
-                  <th class="text-right">大小</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(f, i) in visibleFiles" :key="i">
-                  <td>
-                    <div class="file-name-cell">
-                      <div class="file-type-icon" :class="fileTypeClass(f.f)">
-                        <svg v-if="fileTypeClass(f.f)==='type-zip'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
-                        <svg v-else-if="fileTypeClass(f.f)==='type-img'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        <svg v-else-if="fileTypeClass(f.f)==='type-video'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-                        <svg v-else-if="fileTypeClass(f.f)==='type-pdf'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <!-- 文件夹视图 -->
+            <template v-if="viewMode === 'folder' && hasFolders">
+              <div class="folder-tree">
+                <template v-for="(fld, i) in folderTree.folders" :key="'f'+i">
+                  <folder-node :node="fld" :depth="0" />
+                </template>
+                <div v-for="(f, idx) in folderTree.files" :key="'rf'+idx" class="tree-row tree-file" :style="{paddingLeft: '8px'}">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span class="tree-name">{{ f.f }}</span>
+                  <span class="tree-size">{{ f.s != null ? formatSize(f.s) : '—' }}</span>
+                </div>
+              </div>
+            </template>
+            <!-- 文件列表视图 -->
+            <template v-else>
+              <table class="file-table">
+                <thead>
+                  <tr>
+                    <th>文件名</th>
+                    <th class="text-right">大小</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(f, i) in visibleFiles" :key="i">
+                    <td>
+                      <div class="file-name-cell">
+                        <div class="file-type-icon" :class="fileTypeClass(f.f)">
+                          <svg v-if="fileTypeClass(f.f)==='type-zip'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                          <svg v-else-if="fileTypeClass(f.f)==='type-img'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                          <svg v-else-if="fileTypeClass(f.f)==='type-video'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                          <svg v-else-if="fileTypeClass(f.f)==='type-pdf'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        </div>
+                        <span class="file-name-text">{{ f.p ? f.p + '/' : '' }}{{ f.f }}</span>
                       </div>
-                      <span class="file-name-text">{{ f.f }}</span>
-                    </div>
-                  </td>
-                  <td class="text-right file-size-cell">{{ f.s != null ? formatSize(f.s) : '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div v-if="shareData.e.length > 10" class="file-card-footer">
-            <button class="toggle-more-btn" @click="showAllFiles = !showAllFiles">
-              {{ showAllFiles ? '收起' : `查看全部 ${shareData.e.length} 个文件` }}
-            </button>
+                    </td>
+                    <td class="text-right file-size-cell">{{ f.s != null ? formatSize(f.s) : '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="shareData.e.length > 10" class="file-card-footer">
+                <button class="toggle-more-btn" @click="showAllFiles = !showAllFiles">
+                  {{ showAllFiles ? '收起' : `查看全部 ${shareData.e.length} 个文件` }}
+                </button>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -122,6 +142,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import JSZip from 'jszip'
 import api from '../api'
+import FolderNode from '../components/FolderNode.vue'
 
 const shareData = ref(null)
 const error = ref('')
@@ -129,6 +150,7 @@ const downloading = ref(false)
 const progress = ref(0)
 const downloadDone = ref(false)
 const showAllFiles = ref(false)
+const viewMode = ref('folder') // 'folder' | 'list'
 
 const now = ref(Date.now())
 let timer = null
@@ -148,7 +170,7 @@ onMounted(async () => {
         }
         shareData.value = {
           n: data.filename || 'download.zip',
-          e: data.entries.map(e => ({ u: e.u || e.url, f: e.f || e.filename, s: e.s ?? e.size })),
+          e: data.entries.map(e => ({ u: e.u || e.url, f: e.f || e.filename, p: e.p || '', s: e.s ?? e.size })),
           exp: data.expireAt ? Math.floor(data.expireAt / 1000) : null
         }
       } catch (e) {
@@ -213,6 +235,26 @@ const visibleFiles = computed(() => {
   return showAllFiles.value ? shareData.value.e : shareData.value.e.slice(0, 10)
 })
 
+// 是否有任何文件带路径（用于决定是否展示「文件夹视图」选项）
+const hasFolders = computed(() => shareData.value?.e.some(f => f.p))
+
+// 文件夹树：{ folders: [{name, children: <tree>}], files: [entry] }
+const folderTree = computed(() => {
+  if (!shareData.value) return { folders: [], files: [] }
+  const root = { folders: [], files: [] }
+  for (const e of shareData.value.e) {
+    const segs = (e.p || '').split('/').filter(Boolean)
+    let node = root
+    for (const seg of segs) {
+      let next = node.folders.find(f => f.name === seg)
+      if (!next) { next = { name: seg, folders: [], files: [] }; node.folders.push(next) }
+      node = next
+    }
+    node.files.push(e)
+  }
+  return root
+})
+
 const totalBytes = computed(() => {
   if (!shareData.value) return 0
   return shareData.value.e.reduce((sum, f) => sum + (f.s || 0), 0)
@@ -253,7 +295,12 @@ const startDownload = async () => {
   const zip = new JSZip()
   const concurrency = 4
   let index = 0
-  let processed = 0
+  // 真实进度：按已下载字节 / 总字节
+  const totalBytes = entries.reduce((s, e) => s + (e.s || 0), 0)
+  let downloadedBytes = 0
+  const updateProgress = () => {
+    if (totalBytes > 0) progress.value = Math.min(99, Math.floor((downloadedBytes / totalBytes) * 100))
+  }
 
   const worker = async () => {
     while (true) {
@@ -263,13 +310,36 @@ const startDownload = async () => {
       try {
         const resp = await fetch(e.u)
         if (!resp.ok) throw new Error(`下载失败: ${resp.status}`)
-        const buf = await resp.arrayBuffer()
-        zip.file(e.f || `file-${current + 1}`, buf)
+        // 流式读取以跟踪真实下载字节
+        const contentLength = Number(resp.headers.get('content-length') || e.s || 0)
+        if (resp.body && contentLength > 0) {
+          const reader = resp.body.getReader()
+          const chunks = []
+          let received = 0
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            chunks.push(value)
+            received += value.length
+            downloadedBytes += value.length
+            updateProgress()
+          }
+          const blob = new Blob(chunks)
+          const buf = await blob.arrayBuffer()
+          const zipPath = e.p ? `${e.p}/${e.f}` : (e.f || `file-${current + 1}`)
+          zip.file(zipPath, buf)
+        } else {
+          // 无法流式（无 body 或无 content-length），回退整体读取
+          const buf = await resp.arrayBuffer()
+          downloadedBytes += contentLength || buf.byteLength
+          updateProgress()
+          const zipPath = e.p ? `${e.p}/${e.f}` : (e.f || `file-${current + 1}`)
+          zip.file(zipPath, buf)
+        }
       } catch (err) {
         console.warn('download failed for entry', e, err)
-      } finally {
-        processed++
-        progress.value = Math.floor((processed / entries.length) * 100)
+        downloadedBytes += (e.s || 0) // 失败也算进度（避免卡住）
+        updateProgress()
       }
     }
   }
@@ -325,6 +395,18 @@ const startDownload = async () => {
   --border: #e5e5ea;
   --text-primary: #1d1d1f;
   --text-secondary: #42474f;
+  --text-muted: #86868b;
+}
+/* 暗色覆盖 */
+.dark .share-page {
+  --primary: #5594c8;
+  --primary-light: #1a3a5c;
+  --surface: #1d1e1f;
+  --surface-dim: #141414;
+  --surface-container: #262728;
+  --border: #3a3a3c;
+  --text-primary: #e5eaf3;
+  --text-secondary: #a3a6ad;
   --text-muted: #86868b;
 }
 
@@ -452,6 +534,43 @@ const startDownload = async () => {
   background: var(--surface-container);
 }
 .file-count { font-size: 13px; color: var(--text-muted); }
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.toggle-btn.active {
+  background: var(--primary, #4f46e5);
+  color: #fff;
+}
+.toggle-btn:not(.active):hover { background: var(--surface-hover, #f3f4f6); }
+
+.folder-tree {
+  padding: 4px 0;
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  font-size: 14px;
+  color: #374151;
+}
+.tree-folder .tree-name { font-weight: 600; }
+.tree-file { color: #6b7280; }
+.tree-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-size { color: #9ca3af; font-size: 12px; flex-shrink: 0; }
 
 .file-table-wrap { overflow-x: auto; }
 .file-table {

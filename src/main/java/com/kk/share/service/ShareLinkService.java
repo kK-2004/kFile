@@ -22,7 +22,6 @@ public class ShareLinkService {
         if (entries == null || entries.isEmpty()) {
             throw new IllegalArgumentException("entries 不能为空");
         }
-        long exp = expireSeconds != null && expireSeconds > 0 ? expireSeconds : 300;
         String code = Base62Util.encode(UUID.randomUUID());
 
         String dataJson;
@@ -40,9 +39,14 @@ public class ShareLinkService {
         link.setProjectId(projectId);
         link.setData(dataJson);
         link.setCreatedAt(Instant.now());
-        link.setExpireAt(Instant.now().plusSeconds(exp));
+        // expireSeconds=null 表示永久分享（expireAt=null）；否则按秒数过期
+        if (expireSeconds != null && expireSeconds > 0) {
+            link.setExpireAt(Instant.now().plusSeconds(expireSeconds));
+        } else {
+            link.setExpireAt(null); // 永久
+        }
         shareLinkRepository.save(link);
-        return new CreatedShare(code, link.getExpireAt().toEpochMilli());
+        return new CreatedShare(code, link.getExpireAt() == null ? null : link.getExpireAt().toEpochMilli());
     }
 
     public record CreatedShare(String code, Long expireAt) {}

@@ -56,7 +56,15 @@ public class AdminAuthController {
         }
         var user = userRepo.findByUsername(auth.getName()).orElse(null);
         String role = user != null ? user.getRole() : "";
-        return ResponseEntity.ok(Map.of("username", auth.getName(), "role", role));
+        Long id = user != null ? user.getId() : null;
+        Long quota = user != null ? user.getQuotaBytes() : null;
+        // Map.of 不允许 null 值，用 HashMap
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("id", id);
+        resp.put("username", auth.getName());
+        resp.put("role", role);
+        resp.put("quotaBytes", quota);
+        return ResponseEntity.ok(resp);
     }
 
     @PostMapping("/change-password")

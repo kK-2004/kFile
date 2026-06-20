@@ -11,9 +11,9 @@
           k‑File 一站式文件管理
         </h1>
 
-        <p class="mt-6 text-lg leading-8 text-gray-600">
+        <p class="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
           专为作业与资料收集场景设计。
-          支持<span class="font-semibold text-gray-800">自动重命名</span>、<span class="font-semibold text-gray-800">一键设置截止时间</span>与<span class="font-semibold text-gray-800">未提交名单导出</span>。
+          支持<span class="font-semibold text-gray-800 dark:text-gray-100">自动重命名</span>、<span class="font-semibold text-gray-800 dark:text-gray-100">一键设置截止时间</span>与<span class="font-semibold text-gray-800 dark:text-gray-100">未提交名单导出</span>。
           告别繁琐的人工统计与催收，让文件归档井井有条。
         </p>
 
@@ -31,27 +31,27 @@
 <!--              href="https://ksite.xin/"-->
 <!--              target="_blank"-->
 <!--              rel="noopener noreferrer"-->
-<!--              class="inline-flex items-center rounded-xl px-6 py-3 text-base font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 transition hover:bg-white hover:text-gray-900"-->
+<!--              class="inline-flex items-center rounded-xl px-6 py-3 text-base font-semibold text-gray-700 dark:text-gray-200 ring-1 ring-inset ring-gray-300 transition hover:bg-white dark:bg-gray-800 hover:text-gray-900"-->
 <!--          >-->
 <!--            了解更多-->
 <!--          </a>-->
         </div>
 
-        <div class="mt-8 flex flex-wrap justify-center gap-2 text-sm text-gray-500">
-          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200">📚 课程作业</span>
-          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200">🗂️ 培训材料</span>
-          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200">📝 活动报名</span>
-          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200">💾 团队归档</span>
+        <div class="mt-8 flex flex-wrap justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200 dark:border-gray-700">📚 课程作业</span>
+          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200 dark:border-gray-700">🗂️ 培训材料</span>
+          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200 dark:border-gray-700">📝 活动报名</span>
+          <span class="px-3 py-1 rounded-full bg-gray-100/80 border border-gray-200 dark:border-gray-700">💾 团队归档</span>
         </div>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-6 text-gray-700 sm:grid-cols-2 lg:gap-8">
+      <div class="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-6 text-gray-700 dark:text-gray-200 sm:grid-cols-2 lg:gap-8">
         <div class="relative rounded-2xl bg-white/60 p-6 ring-1 ring-gray-200/50 backdrop-blur-md transition hover:bg-white/80">
           <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
           <h3 class="text-base font-semibold text-gray-900">智能截止控制</h3>
-          <p class="mt-2 text-sm leading-6 text-gray-600">
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
             一键设置截止时间，到期自动停止收集。支持单次提交多个文件，满足多样化需求。
           </p>
         </div>
@@ -60,7 +60,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
           <h3 class="text-base font-semibold text-gray-900">自动命名与校验</h3>
-          <p class="mt-2 text-sm leading-6 text-gray-600">
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
             导入名单自动校验提交资格。按预设规则（如学号+姓名）<span class="text-indigo-600 font-medium">自动重命名</span>文件，统一规范。
           </p>
         </div>
@@ -69,7 +69,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           </div>
           <h3 class="text-base font-semibold text-gray-900">实时进度催收</h3>
-          <p class="mt-2 text-sm leading-6 text-gray-600">
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
             实时统计提交进度，支持<span class="text-amber-600 font-medium">一键导出未提交人员名单</span>，精准提醒。
           </p>
         </div>
@@ -78,7 +78,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </div>
           <h3 class="text-base font-semibold text-gray-900">一键打包下载</h3>
-          <p class="mt-2 text-sm leading-6 text-gray-600">
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
             按任务批量打包，省时省力。生成下载直链，支持定时/限时分享，集中分发更安全。
           </p>
         </div>
@@ -116,7 +116,7 @@
                 leave-to-class="opacity-0 translate-y-6 scale-95"
             >
               <div
-                  class="w-full max-w-[360px] rounded-2xl bg-white p-6 shadow-xl ring-1 ring-black/5"
+                  class="w-full max-w-[360px] rounded-2xl bg-white dark:bg-gray-800 p-6 shadow-xl ring-1 ring-black/5"
               >
                 <!-- Beta 标签 -->
                 <div class="mb-4 flex justify-center">
@@ -130,13 +130,13 @@
                   k-File 正在内测
                 </h3>
 
-                <p class="mt-2 text-center text-sm leading-relaxed text-gray-500">
+                <p class="mt-2 text-center text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                   当前版本仅对受邀用户开放。<br />
                   如需体验，请联系管理员添加测试权限。
                 </p>
 
                 <!-- 联系方式卡片 -->
-                <div class="mt-6 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div class="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-3">
                   <div class="flex items-center justify-between">
                     <div>
                       <div class="text-xs text-gray-400">联系管理员（QQ）</div>
@@ -154,7 +154,7 @@
                            focus:outline-none"
                                           :class="copied
                       ? 'bg-emerald-500 text-white'
-                      : 'bg-blue-100 text-gray-700 hover:bg-blue-200'"
+                      : 'bg-blue-100 text-gray-700 dark:text-gray-200 hover:bg-blue-200'"
                     >
                       {{ copied ? '已复制' : '复制' }}
                     </button>
@@ -162,7 +162,7 @@
                 </div>
 
                 <button
-                    class="mt-6 w-full rounded-xl border border-gray-300 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                    class="mt-6 w-full rounded-xl border border-gray-300 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100"
                     @click="showBetaModal = false"
                 >
                   关闭

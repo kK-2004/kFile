@@ -7,6 +7,11 @@ pipeline {
         OSS_SK                        = credentials('aliyun-oss-sk')
         SPRING_DATASOURCE_USERNAME     = credentials('kfile-db-username')
         SPRING_DATASOURCE_PASSWORD     = credentials('kfile-db-password')
+        MINIO_ENABLED                  = 'true'
+        MINIO_ENDPOINT                 = 'https://minio-louis-api.ksite.xin'
+        MINIO_ACCESS_KEY               = credentials('kfile-minio-access-key')
+        MINIO_SECRET_KEY               = credentials('kfile-minio-secret-key')
+        MINIO_BUCKET                   = 'k-file'
     }
 
     triggers {

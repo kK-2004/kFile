@@ -48,17 +48,31 @@ public class ProjectQueryService {
         }
         List<Project> projects;
         boolean isSuper = isSuper(auth);
+        // ADMIN: 收集权限映射，用于设置 canEdit/canDelete
+        java.util.Map<Long, ProjectPermission> permByProject = new java.util.HashMap<>();
         if (isSuper) {
             projects = projectService.list();
         } else {
             AdminUser user = userRepo.findByUsername(auth.getName()).orElse(null);
             List<ProjectPermission> list = user == null ? List.of() : permRepo.findByUser(user);
             projects = new ArrayList<>();
-            for (ProjectPermission pp : list) projects.add(pp.getProject());
+            for (ProjectPermission pp : list) {
+                projects.add(pp.getProject());
+                permByProject.put(pp.getProject().getId(), pp);
+            }
         }
         List<ProjectResponse> out = new ArrayList<>();
         for (Project p : projects) {
-            out.add(toResponse(p, true));
+            ProjectResponse r = toResponse(p, true);
+            if (isSuper) {
+                r.setCanEdit(true);
+                r.setCanDelete(true);
+            } else {
+                ProjectPermission pp = permByProject.get(p.getId());
+                r.setCanEdit(pp != null && pp.isCanEdit());
+                r.setCanDelete(pp != null && pp.isCanDelete());
+            }
+            out.add(r);
         }
         return out;
     }

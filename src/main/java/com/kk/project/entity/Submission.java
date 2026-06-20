@@ -38,6 +38,10 @@ public class Submission {
     @Column(columnDefinition = "json")
     private String fileUrls;
 
+    // 本次提交所有文件总字节数（用于空间配额核算）
+    @Column(name = "total_size")
+    private Long totalSize;
+
     @CreationTimestamp
     private Instant createdAt;
 

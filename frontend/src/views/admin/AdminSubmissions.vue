@@ -923,7 +923,7 @@ const formatDateTime = (dateTimeStr) => {
   flex-direction: column;
   overflow: hidden;
   padding: 0;
-  background: #ffffff;
+  background: var(--kf-bg);
   border-radius: 8px;
 }
 
@@ -934,15 +934,15 @@ const formatDateTime = (dateTimeStr) => {
   padding: 0 24px;
   font-size: 20px;
   font-weight: 600;
-  color: #111827;
+  color: var(--kf-text);
 }
 
 /* 突出显示当前项目名称 */
 .project-tag {
   margin-left: 6px;
-  background-color: #eef2ff; /* 柔和高亮背景 */
-  color: #3730a3;            /* 深蓝紫文字 */
-  border-color: #c7d2fe;     /* 边框与背景协调 */
+  background-color: var(--kf-hover-bg); /* 柔和高亮背景 */
+  color: var(--kf-primary);            /* 深蓝紫文字 */
+  border-color: var(--kf-primary-hover);     /* 边框与背景协调 */
   font-weight: 600;
 }
 
@@ -951,8 +951,8 @@ const formatDateTime = (dateTimeStr) => {
   flex-shrink: 0;
   margin-bottom: 0;
   padding: 24px 24px 20px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #ffffff;
+  border-bottom: 1px solid var(--kf-border);
+  background: var(--kf-bg);
 }
 
 /* 表格容器 */
@@ -960,7 +960,7 @@ const formatDateTime = (dateTimeStr) => {
   flex: 1;
   overflow: hidden;
   min-height: 0;
-  background: #ffffff;
+  background: var(--kf-bg);
 }
 
 /* 表格样式优化 - 参考图片风格 */
@@ -982,43 +982,43 @@ const formatDateTime = (dateTimeStr) => {
 
 /* 表头样式 */
 .table-container :deep(.el-table__header-wrapper) {
-  background: #ffffff;
+  background: var(--kf-bg);
 }
 
 .table-container :deep(.el-table th.el-table__cell) {
-  background: #ffffff;
-  color: #111827;
+  background: var(--kf-bg);
+  color: var(--kf-text);
   font-weight: 500;
   font-size: 13px;
   padding: 16px 0;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--kf-border);
 }
 
 /* 表格行样式 */
 .table-container :deep(.el-table__row) {
-  background: #ffffff;
+  background: var(--kf-bg);
 }
 
 .table-container :deep(.el-table tbody tr:hover > td) {
-  background-color: #f9fafb !important;
+  background-color: var(--kf-surface-dim) !important;
 }
 
 .table-container :deep(.el-table td.el-table__cell) {
   padding: 20px 0;
-  color: #6b7280;
-  border-bottom: 1px solid #f3f4f6;
+  color: var(--kf-muted);
+  border-bottom: 1px solid var(--kf-border-light);
 }
 
 /* 展开行样式 */
 .table-container :deep(.el-table__expanded-cell) {
   padding: 0;
-  background: #fafafa;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--kf-surface-dim);
+  border-bottom: 1px solid var(--kf-border);
 }
 
 /* 展开图标样式 */
 .table-container :deep(.el-table__expand-icon) {
-  color: #6b7280;
+  color: var(--kf-muted);
 }
 
 .table-container :deep(.el-table__expand-icon .el-icon) {
@@ -1027,14 +1027,14 @@ const formatDateTime = (dateTimeStr) => {
 
 /* 链接样式 */
 .file-link {
-  color: #6366f1;
+  color: var(--kf-primary);
   text-decoration: none;
   transition: color 0.2s;
   font-weight: 500;
 }
 
 .file-link:hover {
-  color: #4f46e5;
+  color: var(--kf-primary);
   text-decoration: underline;
 }
 
@@ -1046,13 +1046,13 @@ const formatDateTime = (dateTimeStr) => {
 }
 
 :deep(.el-button--primary) {
-  background-color: #6366f1;
-  border-color: #6366f1;
+  background-color: var(--kf-primary);
+  border-color: var(--kf-primary);
 }
 
 :deep(.el-button--primary:hover) {
-  background-color: #4f46e5;
-  border-color: #4f46e5;
+  background-color: var(--kf-primary);
+  border-color: var(--kf-primary);
 }
 
 /* 时间线样式 */
@@ -1085,7 +1085,7 @@ const formatDateTime = (dateTimeStr) => {
   top: 32px;
   width: 1px;
   height: calc(100% - 8px);
-  background-color: #e5e7eb;
+  background-color: var(--kf-border);
 }
 
 .timeline-icon {
@@ -1101,9 +1101,9 @@ const formatDateTime = (dateTimeStr) => {
   flex-shrink: 0;
 }
 
-.timeline-icon.status-latest { background-color: #10b981; }
-.timeline-icon.status-middle { background-color: #3b82f6; }
-.timeline-icon.status-earliest { background-color: #9ca3af; }
+.timeline-icon.status-latest { background-color: var(--kf-success); }
+.timeline-icon.status-middle { background-color: var(--kf-primary); }
+.timeline-icon.status-earliest { background-color: var(--kf-muted); }
 
 .icon-svg {
   width: 16px;
@@ -1128,27 +1128,27 @@ const formatDateTime = (dateTimeStr) => {
 }
 
 .version-title-wrapper { display: flex; align-items: center; gap: 8px; }
-.version-title { font-size: 14px; font-weight: 500; color: #111827; }
-.latest-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; background-color: #dcfce7; color: #166534; }
-.version-time { font-size: 14px; color: #6b7280; }
+.version-title { font-size: 14px; font-weight: 500; color: var(--kf-text); }
+.latest-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; background-color: var(--kf-success); color: #ffffff; }
+.version-time { font-size: 14px; color: var(--kf-muted); }
 
 .file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-.file-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; transition: all 0.2s; }
-.file-item:hover { background-color: #f9fafb; border-color: #d1d5db; }
+.file-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; background-color: var(--kf-bg); border: 1px solid var(--kf-border); border-radius: 8px; transition: all 0.2s; }
+.file-item:hover { background-color: var(--kf-surface-dim); border-color: var(--kf-border); }
 .file-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .file-icon { flex-shrink: 0; }
-.file-icon-svg { width: 20px; height: 20px; color: #9ca3af; }
-.file-name { font-size: 14px; color: #111827; cursor: pointer; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; transition: color 0.2s; }
-.file-name:hover { color: #6366f1; }
+.file-icon-svg { width: 20px; height: 20px; color: var(--kf-muted); }
+.file-name { font-size: 14px; color: var(--kf-text); cursor: pointer; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; transition: color 0.2s; }
+.file-name:hover { color: var(--kf-primary); }
 .file-actions { display: flex; align-items: center; gap: 8px; }
 .action-btn { display: inline-flex; align-items: center; padding: 6px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; background: transparent; }
 .action-btn:focus { outline: none; }
-.action-btn-primary { color: #6366f1; }
-.action-btn-primary:hover { color: #4f46e5; background-color: #eef2ff; }
-.action-btn-secondary { color: #6b7280; }
-.action-btn-secondary:hover { color: #4b5563; background-color: #f3f4f6; }
+.action-btn-primary { color: var(--kf-primary); }
+.action-btn-primary:hover { color: var(--kf-primary); background-color: var(--kf-hover-bg); }
+.action-btn-secondary { color: var(--kf-muted); }
+.action-btn-secondary:hover { color: var(--kf-muted); background-color: var(--kf-surface-dim); }
 .action-icon { width: 14px; height: 14px; margin-right: 4px; }
-.no-files { margin-top: 8px; font-size: 14px; color: #9ca3af; font-style: italic; }
+.no-files { margin-top: 8px; font-size: 14px; color: var(--kf-muted); font-style: italic; }
 
 /* 帮助问号图标 */
 .help-icon {
@@ -1159,14 +1159,14 @@ const formatDateTime = (dateTimeStr) => {
   height: 22px;
   margin-left: 6px;
   border-radius: 50%;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
+  border: 1px solid var(--kf-border);
+  color: var(--kf-muted);
   cursor: help;
   user-select: none;
 }
 .help-icon:hover {
-  background-color: #f3f4f6;
-  color: #374151;
+  background-color: var(--kf-surface-dim);
+  color: var(--kf-text);
 }
 
 /* 过滤工具条居中 */
@@ -1183,21 +1183,21 @@ const formatDateTime = (dateTimeStr) => {
 
 /* 按条件打包按钮：改为白色风格 */
 .cond-zip-btn {
-  background-color: #ffffff;
-  border-color: #e5e7eb;
-  color: #374151;
+  background-color: var(--kf-bg);
+  border-color: var(--kf-border);
+  color: var(--kf-text);
 }
 .cond-zip-btn:hover:not(.is-disabled) {
-  background-color: #f9fafb;
-  border-color: #d1d5db;
-  color: #111827;
+  background-color: var(--kf-surface-dim);
+  border-color: var(--kf-border);
+  color: var(--kf-text);
 }
 /* 禁用态：置灰，禁止 hover 与位移 */
 .cond-zip-btn.is-disabled,
 .cond-zip-btn[disabled] {
-  background-color: #f3f4f6 !important;
-  border-color: #e5e7eb !important;
-  color: #9ca3af !important;
+  background-color: var(--kf-surface-dim) !important;
+  border-color: var(--kf-border) !important;
+  color: var(--kf-muted) !important;
   cursor: not-allowed !important;
   box-shadow: none !important;
   transform: none !important;
@@ -1205,19 +1205,25 @@ const formatDateTime = (dateTimeStr) => {
 }
 .cond-zip-btn.is-disabled:hover,
 .cond-zip-btn[disabled]:hover {
-  background-color: #f3f4f6 !important;
-  border-color: #e5e7eb !important;
-  color: #9ca3af !important;
+  background-color: var(--kf-surface-dim) !important;
+  border-color: var(--kf-border) !important;
+  color: var(--kf-muted) !important;
   box-shadow: none !important;
   transform: none !important;
 }
 
 .project-name-highlight {
-  background: linear-gradient(180deg, transparent 60%, #fef08a 60%);
-  color: #111827;
+  background: linear-gradient(180deg, transparent 62%, rgba(246, 195, 67, 0.52) 62%);
+  color: var(--kf-text);
   font-weight: 700;
   font-size: 21px;
   padding: 0 4px;
+  border-radius: 4px;
+}
+
+:global(html.dark) .project-name-highlight {
+  background: linear-gradient(180deg, transparent 66%, rgba(91, 208, 200, 0.32) 66%);
+  color: var(--kf-text);
 }
 
 /* --- 新增：简约排序胶囊样式 --- */
@@ -1226,7 +1232,7 @@ const formatDateTime = (dateTimeStr) => {
   align-items: center;
   gap: 10px;
   padding: 6px 12px 6px 18px; /* 左侧留宽一点，视觉更平衡 */
-  background-color: #f3f4f6;
+  background-color: var(--kf-surface-dim);
   border: 1px solid transparent;
   border-radius: 9999px; /* 全圆角 */
   cursor: pointer;
@@ -1238,24 +1244,24 @@ const formatDateTime = (dateTimeStr) => {
 }
 
 .sort-pill:hover {
-  background-color: #e5e7eb;
-  color: #111827;
+  background-color: var(--kf-border);
+  color: var(--kf-text);
 }
 
 .sort-pill:active {
-  background-color: #d1d5db;
+  background-color: var(--kf-border);
   transform: scale(0.98);
 }
 
 .sort-label {
-  color: #6b7280;
+  color: var(--kf-muted);
   font-weight: 500;
   font-size: 13px;
 }
 
 .sort-value {
   font-weight: 600;
-  color: #111827;
+  color: var(--kf-text);
   min-width: 32px; /* 防止文字长短变化导致抖动 */
   text-align: center;
 }
@@ -1267,11 +1273,11 @@ const formatDateTime = (dateTimeStr) => {
   justify-content: center;
   width: 20px;
   height: 20px;
-  background-color: #ffffff;
+  background-color: var(--kf-bg);
   border-radius: 50%;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性旋转动画 */
-  color: #6b7280;
+  color: var(--kf-muted);
 }
 
 .sort-icon {
@@ -1282,7 +1288,7 @@ const formatDateTime = (dateTimeStr) => {
 /* 升序状态：图标旋转180度，颜色高亮 */
 .sort-icon-wrapper.is-asc {
   transform: rotate(180deg);
-  background-color: #eff6ff;
-  color: #3b82f6;
+  background-color: var(--kf-hover-bg);
+  color: var(--kf-primary);
 }
 </style>

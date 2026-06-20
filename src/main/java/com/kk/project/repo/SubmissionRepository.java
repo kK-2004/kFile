@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -31,4 +32,8 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     @Query("select s from Submission s where s.project = ?1 and (s.valid = true or s.valid is null) order by s.createdAt desc")
     List<Submission> findVisibleByProjectOrderByCreatedAtDesc(Project project);
+
+    /** 统计某项目 owner 下所有提交的文件总字节数（配额核算） */
+    @Query("select coalesce(sum(s.totalSize),0) from Submission s where s.project.ownerUserId = :ownerUserId")
+    long sumTotalSizeByProjectOwner(@Param("ownerUserId") Long ownerUserId);
 }

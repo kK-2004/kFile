@@ -69,7 +69,7 @@ public class ProjectController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canManageProject(authentication, #id)")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canEditProject(authentication, #id)")
     public ProjectResponse update(@PathVariable Long id, @RequestBody UpdateProjectRequest req,
                                   org.springframework.security.core.Authentication authentication) {
         Project p = projectService.update(id, req, authentication);
@@ -82,7 +82,7 @@ public class ProjectController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('SUPER') or @adminPermissionService.canDeleteProject(authentication, #id)")
     public void delete(@PathVariable Long id, org.springframework.security.core.Authentication authentication) {
         Project p = projectService.get(id);
         log.info("BIZ action=PROJECT_DELETE_REQUEST projectId={} projectName={} actor={} roles={}",

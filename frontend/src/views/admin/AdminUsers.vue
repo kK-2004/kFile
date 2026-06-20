@@ -13,6 +13,12 @@
       <el-table-column prop="id" label="ID" width="80"/>
       <el-table-column prop="username" label="用户名"/>
       <el-table-column prop="role" label="角色" width="120"/>
+      <el-table-column label="空间配额" width="140">
+        <template #default="{row}">
+          <span v-if="(row.role||'').toUpperCase()==='SUPER'">不限</span>
+          <el-link v-else type="primary" @click="openQuota(row)">{{ row.quotaBytes ? formatSize(row.quotaBytes) : '默认' }}</el-link>
+        </template>
+      </el-table-column>
       <el-table-column prop="enabled" label="启用" width="100">
         <template #default="{row}"><el-tag :type="row.enabled?'success':'info'">{{ row.enabled?'是':'否' }}</el-tag></template>
       </el-table-column>
@@ -42,15 +48,41 @@
       </el-form>
     </el-drawer>
 
+    <!-- 配额设置对话框 -->
+    <el-dialog v-model="showQuota" :title="`设置 ${quotaUser?.username} 的空间配额`" width="420px">
+      <el-form label-width="120px">
+        <el-form-item label="配额(GB)">
+          <el-input-number v-model="quotaGB" :min="-1" :step="1" :precision="2" style="width:100%"/>
+          <div style="color:#909399; font-size:12px; margin-top:4px;">
+            留空或 -1 = 使用全局默认；0 = 不限；正数 = 独立配额（文件管理 + 项目提交共用）
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showQuota=false">取消</el-button>
+        <el-button type="primary" :loading="quotaSaving" @click="saveQuota">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="showPerm" title="项目权限配置" size="40%">
       <div v-if="currentUser">
         <div style="margin-bottom: 12px;">用户：{{ currentUser.username }} ({{ currentUser.role }})</div>
         <el-table :data="projects">
-          <el-table-column prop="id" label="项目ID" width="100"/>
+          <el-table-column prop="id" label="项目ID" width="90"/>
           <el-table-column prop="name" label="项目名称"/>
-          <el-table-column label="有权限" width="120">
+          <el-table-column label="有权限" width="90">
             <template #default="{row}">
-              <el-switch v-model="row._allowed" :disabled="currentUser.role==='SUPER'"/>
+              <el-switch v-model="row._allowed" :disabled="currentUser.role==='SUPER'" @change="(v) => { if (!v) { row._canEdit=false; row._canDelete=false } }"/>
+            </template>
+          </el-table-column>
+          <el-table-column label="允许修改" width="100">
+            <template #default="{row}">
+              <el-switch v-model="row._canEdit" :disabled="currentUser.role==='SUPER' || !row._allowed"/>
+            </template>
+          </el-table-column>
+          <el-table-column label="允许删除" width="100">
+            <template #default="{row}">
+              <el-switch v-model="row._canDelete" :disabled="currentUser.role==='SUPER' || !row._allowed"/>
             </template>
           </el-table-column>
         </el-table>
@@ -180,6 +212,38 @@ const loadTokens = async () => {
 
 const formatTs = (ts) => ts ? new Date(ts).toLocaleString() : '-'
 
+// 配额管理
+const showQuota = ref(false)
+const quotaUser = ref(null)
+const quotaGB = ref(-1)
+const quotaSaving = ref(false)
+const formatSize = (b) => {
+  if (b == null) return '默认'
+  if (b >= 1024*1024*1024) return (b/1024/1024/1024).toFixed(1) + ' GB'
+  if (b >= 1024*1024) return (b/1024/1024).toFixed(1) + ' MB'
+  return (b/1024).toFixed(0) + ' KB'
+}
+const openQuota = (row) => {
+  quotaUser.value = row
+  quotaGB.value = row.quotaBytes == null ? -1 : Number((row.quotaBytes / 1024 / 1024 / 1024).toFixed(2))
+  showQuota.value = true
+}
+const saveQuota = async () => {
+  quotaSaving.value = true
+  try {
+    let bytes
+    if (quotaGB.value < 0) bytes = null           // 用全局默认
+    else if (quotaGB.value === 0) bytes = 0         // 不限
+    else bytes = Math.round(quotaGB.value * 1024 * 1024 * 1024)
+    await api.adminSetUserQuota(quotaUser.value.id, bytes)
+    quotaUser.value.quotaBytes = bytes
+    ElMessage.success('配额已更新')
+    showQuota.value = false
+  } catch (e) {
+    ElMessage.error('保存失败')
+  } finally { quotaSaving.value = false }
+}
+
 const revokeToken = async (row) => {
   try {
     await api.mcpRevokeToken(row.id)
@@ -212,13 +276,19 @@ const create = async () => {
 const openPerm = async (row) => {
   currentUser.value = row
   const { data } = await api.adminListUserProjects(row.id)
-  original = new Set(data)
-  projects.value = projects.value.map(p => ({ ...p, _allowed: original.has(p.id) }))
+  // data: [{projectId, canEdit, canDelete}]
+  const permMap = new Map()
+  for (const p of (data || [])) permMap.set(p.projectId, p)
+  original = new Set(permMap.keys())
+  projects.value = projects.value.map(p => {
+    const perm = permMap.get(p.id)
+    return { ...p, _allowed: !!perm, _canEdit: perm?.canEdit || false, _canDelete: perm?.canDelete || false }
+  })
   // 模板分配：SUPER 才能看到/操作
   if (isSuper.value) {
     try {
-      const { data: tids } = await api.adminListUserTemplates(row.id)
-      originalTemplates = new Set(tids || [])
+      const { data: tIds } = await api.adminListUserTemplates(row.id)
+      originalTemplates = new Set((tIds || []))
       templates.value = templates.value.map(t => ({ ...t, _allowed: originalTemplates.has(t.id) }))
     } catch { originalTemplates = new Set() }
   }
@@ -227,11 +297,13 @@ const openPerm = async (row) => {
 
 const savePerms = async () => {
   try {
-    // 项目权限
-    const now = new Set(projects.value.filter(p => p._allowed).map(p => p.id))
-    const grants = [...now].filter(id => !original.has(id))
-    const revokes = [...original].filter(id => !now.has(id))
-    for (const id of grants) await api.adminGrantProject(currentUser.value.id, id)
+    // 项目权限：对所有 allowed 项目重新 grant（后端 upsert，含 canEdit/canDelete）；移除取消的
+    const allowedProjects = projects.value.filter(p => p._allowed)
+    const nowIds = new Set(allowedProjects.map(p => p.id))
+    const revokes = [...original].filter(id => !nowIds.has(id))
+    for (const p of allowedProjects) {
+      await api.adminGrantProject(currentUser.value.id, p.id, { canEdit: !!p._canEdit, canDelete: !!p._canDelete })
+    }
     for (const id of revokes) await api.adminRevokeProject(currentUser.value.id, id)
     // 模板权限（仅 SUPER）
     if (isSuper.value) {

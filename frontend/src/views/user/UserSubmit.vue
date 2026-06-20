@@ -1,17 +1,17 @@
 <template>
-  <div class="min-h-full bg-gray-50/30">
+  <div :class="['user-submit-page min-h-full bg-gray-50/30 dark:bg-gray-900', { 'submit-dark': isDarkTheme }]">
     <!-- 新增：项目不存在时的提示界面 -->
     <div v-if="notFound" class="min-h-[80vh] flex flex-col items-center justify-center p-4">
-      <div class="bg-white rounded-3xl p-12 text-center max-w-md w-full shadow-sm border border-gray-100">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center max-w-md w-full shadow-sm border border-gray-100 dark:border-gray-700">
         <!-- 404 插图 -->
-        <div class="w-24 h-24 mx-auto mb-6 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+        <div class="w-24 h-24 mx-auto mb-6 bg-gray-50 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-300">
           <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
 
-        <h2 class="text-2xl font-bold text-gray-800 mb-3">项目不存在</h2>
-        <p class="text-gray-500 mb-8 leading-relaxed">
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-3">项目不存在</h2>
+        <p class="text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-8 leading-relaxed">
           您访问的项目链接无效或该项目已被发起人删除。<br/>请核对链接后重试。
         </p>
 
@@ -24,28 +24,28 @@
       </div>
     </div>
 
-    <div v-else class="container mx-auto px-4 py-4 max-w-4xl">
+    <div v-else class="submit-page-shell container mx-auto px-4 py-4 max-w-4xl">
 
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+      <div class="submit-surface submit-hero-card bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
         <div class="px-6 py-4">
           <div class="flex items-center justify-between gap-4">
-            <h1 class="text-xl font-medium text-gray-800">
+            <h1 class="text-xl font-medium text-gray-800 dark:text-gray-100">
               <span class="project-name-highlight">文件上传</span> - {{ (project && (project.name || project.title)) || '加载中...' }}
             </h1>
             <div class="shrink-0">
               <button v-if="mode === 'submit'"
                       @click="switchToStatus"
-                      class="px-3 py-2 text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg bg-white">
+                      class="submit-secondary-button px-3 py-2 text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg bg-white dark:bg-gray-800">
                 点我查询提交状态
               </button>
               <button v-else
                       @click="switchToSubmit"
-                      class="px-3 py-2 text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg bg-white">
+                      class="submit-secondary-button px-3 py-2 text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg bg-white dark:bg-gray-800">
                 返回提交
               </button>
             </div>
           </div>
-          <div v-if="project" class="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600">
+          <div v-if="project" class="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
             <span class="flex items-center gap-1">
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
@@ -64,21 +64,21 @@
 
       <div v-if="project" class="space-y-6">
 
-        <div v-if="mode === 'status'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div v-if="mode === 'status'" class="submit-surface bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div class="max-w-2xl">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">{{ queryLabel }}</label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">{{ queryLabel }}</label>
                 <div class="flex gap-3">
                   <input
                       v-model="queryValue"
                       :placeholder="`请输入${queryLabel}`"
-                      class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors box-border outline-none"
+                      class="submit-input flex-1 px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors box-border outline-none"
                   />
                   <button
                       :disabled="!queryValue || querying"
                       @click="queryStatusByField"
-                      class="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+                      class="submit-primary-button px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 dark:bg-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
                   >
                     {{ querying ? '查询中…' : '查询' }}
                   </button>
@@ -98,10 +98,10 @@
               </span>
             </div>
 
-            <div class="border-t border-gray-100 pt-6">
-              <h3 class="text-sm font-medium text-gray-700 mb-4">查询结果</h3>
+            <div class="border-t border-gray-100 dark:border-gray-700 pt-6">
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-200 mb-4">查询结果</h3>
 
-              <div v-if="querying" class="flex items-center gap-2 text-gray-500 mb-3">
+              <div v-if="querying" class="flex items-center gap-2 text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-3">
                 <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
@@ -119,7 +119,7 @@
                   ]">
                     {{ latest.expired ? '逾期' : '正常' }}
                   </span>
-                  <span class="text-sm text-gray-500">
+                  <span class="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">
                     时间：{{ formatTimestamp(latest.createdAt) }}（第 {{ submitCountDisplay }} 次）
                   </span>
                 </div>
@@ -131,7 +131,7 @@
                            :class="[
                              idx === 0 ? 'bg-green-100 text-green-600' :
                              idx < versions.length - 1 ? 'bg-blue-100 text-blue-600' :
-                             'bg-gray-100 text-gray-500'
+                             'bg-gray-100 text-gray-500 dark:text-gray-400 dark:text-gray-500'
                            ]">
                         <svg v-if="idx === 0" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                           <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -144,25 +144,25 @@
 
                       <div class="ml-4 flex-1 min-w-0">
                         <div class="flex items-center justify-between mb-2">
-                          <h4 class="text-sm font-medium text-gray-800">
+                          <h4 class="text-sm font-medium text-gray-800 dark:text-gray-100">
                             {{ idx === 0 ? '最新提交' : `历史提交 ${versions.length - idx}` }}
                           </h4>
-                          <time class="text-sm text-gray-500">{{ formatTimestamp(ver.createdAt) }}</time>
+                          <time class="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">{{ formatTimestamp(ver.createdAt) }}</time>
                         </div>
 
                         <div v-if="Array.isArray(ver.fileNames) && ver.fileNames.length"
                              class="grid gap-2">
                           <div v-for="(name, i2) in ver.fileNames" :key="i2"
-                               class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                            <div class="w-5 h-5 text-gray-400">
+                               class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                            <div class="w-5 h-5 text-gray-400 dark:text-gray-500">
                               <svg fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
                               </svg>
                             </div>
-                            <span class="text-sm text-gray-700 truncate">{{ name }}</span>
+                            <span class="text-sm text-gray-700 dark:text-gray-200 truncate">{{ name }}</span>
                           </div>
                         </div>
-                        <div v-else class="text-sm text-gray-500 italic">暂无文件</div>
+                        <div v-else class="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500 italic">暂无文件</div>
                       </div>
                     </div>
                   </div>
@@ -170,12 +170,12 @@
               </div>
 
               <div v-else class="text-center py-8">
-                <div class="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center">
-                  <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-500 flex items-center justify-center">
+                  <svg class="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <p class="text-gray-500">
+                <p class="text-gray-500 dark:text-gray-400 dark:text-gray-500">
                   <template v-if="queryTried">
                     {{ `${queryLabel}「${queryValue}」暂无提交` }}
                   </template>
@@ -238,7 +238,7 @@
             </div>
           </div>
 
-          <div v-if="!project.offline" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div v-if="!project.offline" class="submit-surface bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
             <div v-if="project.userSubmitStatusText" class="mb-6">
               <span :class="[
                 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
@@ -253,19 +253,19 @@
 
             <div v-if="visibleExpectedFields.length" class="grid gap-4 mb-6">
               <div v-for="field in visibleExpectedFields" :key="field.key" class="space-y-2 w-full">
-                <label class="block text-sm font-medium text-gray-700">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">
                   {{ field.label || field.key }}
                   <span v-if="field.required" class="text-red-500 ml-1">*</span>
                 </label>
 
                 <div v-if="(field.type||'text') === 'select' && Array.isArray(field.options)" class="relative w-full">
                   <select v-model="submitter[field.key]"
-                          class="custom-select w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none bg-white text-gray-800 box-border outline-none cursor-pointer hover:border-blue-400">
-                    <option value="" class="text-gray-500">请选择</option>
-                    <option v-for="opt in field.options" :key="opt" :value="opt" class="text-gray-800">{{ opt }}</option>
+                          class="submit-input custom-select w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 box-border outline-none cursor-pointer hover:border-blue-400">
+                    <option value="" class="text-gray-500 dark:text-gray-400 dark:text-gray-500">请选择</option>
+                    <option v-for="opt in field.options" :key="opt" :value="opt" class="text-gray-800 dark:text-gray-100">{{ opt }}</option>
                   </select>
                   <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
@@ -274,7 +274,7 @@
                 <input v-else
                        v-model="submitter[field.key]"
                        :placeholder="field.placeholder || ''"
-                       class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors box-border outline-none" />
+                       class="submit-input w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors box-border outline-none" />
               </div>
             </div>
 
@@ -284,14 +284,15 @@
                   当前不在允许提交名单，请检查填写的字段
                 </span>
               </div>
-              <div v-if="autoNamingEnabled" class="p-3 rounded-xl border border-blue-100 bg-blue-50/40 text-sm text-blue-800">
+              <div v-if="autoNamingEnabled" class="submit-info-note p-3 rounded-xl border border-blue-100 bg-blue-50/40 text-sm text-blue-800">
                 {{ autoNamingHint }}
               </div>
-              <label class="block text-sm font-medium text-gray-700">选择文件</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">选择文件</label>
 
-              <div class="upload-click-area border-2 border-dashed border-gray-200 rounded-2xl p-6 transition-colors hover:border-blue-400 hover:bg-blue-50/30 relative min-h-[200px] flex flex-col justify-center"
+              <div class="upload-click-area border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-2xl p-6 transition-colors hover:border-blue-400 hover:bg-blue-50/30 relative min-h-[200px] flex flex-col justify-center"
                    :class="{
                      'opacity-50 cursor-not-allowed': !project.allowResubmit && latest.exists,
+                     'upload-dragging': isDragging,
                      'border-blue-400 bg-blue-50/30': isDragging,
                      'cursor-pointer': !fileList.length, /* 只有没文件时，整个大框才显示手型，有文件时由内部控制 */
                      'items-center': !fileList.length /* 没文件时居中，有文件时靠上 */
@@ -302,17 +303,17 @@
                    @drop.prevent="handleDrop"
                    @click="!fileList.length ? triggerFileSelect() : null">
                 <div v-if="!fileList.length" class="text-center space-y-2">
-                  <div class="w-16 h-16 mx-auto mb-4 rounded-2xl border-2 border-dashed border-gray-300 flex items-center justify-center bg-white"
+                  <div class="upload-empty-icon w-16 h-16 mx-auto mb-4 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-500 flex items-center justify-center bg-white dark:bg-gray-800"
                        :class="{ 'border-blue-400 bg-blue-50': isDragging }">
-                    <svg class="w-8 h-8 text-gray-400" :class="{ 'text-blue-500': isDragging }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-8 h-8 text-gray-400 dark:text-gray-500" :class="{ 'text-blue-500': isDragging }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
                   </div>
-                  <h3 class="text-lg font-medium text-gray-800">上传文件</h3>
-                  <p class="text-gray-500">
-                    将文件<span class="text-blue-600 font-medium">拖拽</span>到此处，或 <span class="text-blue-600 font-medium">点击选择文件</span>
+                  <h3 class="upload-drop-title text-lg font-medium text-gray-800 dark:text-gray-100">上传文件</h3>
+                  <p class="upload-drop-copy text-gray-500 dark:text-gray-400 dark:text-gray-500">
+                    将文件<span class="upload-link text-blue-600 font-medium">拖拽</span>到此处，或 <span class="upload-link text-blue-600 font-medium">点击选择文件</span>
                   </p>
-                  <div class="text-sm text-gray-400 space-y-1">
+                  <div class="upload-drop-meta text-sm text-gray-400 dark:text-gray-500 space-y-1">
                     <div>允许类型：{{ (project.allowedFileTypes||[]).join(', ') || '不限' }}</div>
                     <div>大小上限：{{ sizeLimitText }}</div>
                   </div>
@@ -322,37 +323,37 @@
                   <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
 
                     <div v-for="(file, index) in fileList" :key="index"
-                         class="group relative bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-start gap-3">
+                         class="upload-file-card group relative bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-start gap-3">
 
                       <button @click.stop="removeFile(index)"
-                              class="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors z-10 outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 border-none p-0">
+                              class="upload-remove-button absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors z-10 outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 border-none p-0">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
 
-                      <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 flex-shrink-0">
+                      <div class="upload-file-icon w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 flex-shrink-0">
                         <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                           <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
                         </svg>
                       </div>
 
                       <div class="min-w-0 w-full">
-                        <p class="text-sm font-medium text-gray-800 truncate" :title="file.name">{{ file.name }}</p>
-                        <p class="text-xs text-gray-500 mt-0.5">{{ formatBytes(file.size) }}</p>
+                        <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate" :title="file.name">{{ file.name }}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 mt-0.5">{{ formatBytes(file.size) }}</p>
                       </div>
 
                     </div>
 
                     <div @click.stop="triggerFileSelect"
                          v-if="project.allowMultiFiles || fileList.length === 0"
-                         class="group flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-all min-h-[120px]">
-                      <div class="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-blue-100 text-gray-400 group-hover:text-blue-500 flex items-center justify-center mb-2 transition-colors">
+                         class="upload-add-card group flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-500 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-all min-h-[120px]">
+                      <div class="upload-add-icon w-10 h-10 rounded-full bg-gray-100 group-hover:bg-blue-100 text-gray-400 dark:text-gray-500 group-hover:text-blue-500 flex items-center justify-center mb-2 transition-colors">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                         </svg>
                       </div>
-                      <span class="text-sm text-gray-500 group-hover:text-blue-600">继续添加</span>
+                      <span class="upload-add-text text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500 group-hover:text-blue-600">继续添加</span>
                     </div>
 
                   </div>
@@ -370,7 +371,7 @@
               <div class="flex gap-3 pt-4">
                 <button :disabled="disableSubmit"
                         @click="submit"
-                        class="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2">
+                        class="submit-primary-button px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 dark:bg-gray-600 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
@@ -378,7 +379,7 @@
                 </button>
                 <button :disabled="!fileList.length"
                         @click="clearFiles"
-                        class="px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
+                        class="submit-ghost-button px-6 py-3 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
                   清空文件
                 </button>
               </div>
@@ -389,7 +390,7 @@
     </div>
 
     <div v-if="showUploadDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <div class="text-center space-y-4">
           <div class="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center">
             <svg class="w-8 h-8 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -399,14 +400,14 @@
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold text-gray-800 mb-2">正在上传</h3>
-            <p class="text-sm text-gray-600">
+            <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">正在上传</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-300">
               {{ currentFileName ? `正在上传第 ${currentFileIndex}/${totalFilesCount} 个：${currentFileName}` : '准备上传...' }}
             </p>
           </div>
 
           <div class="space-y-2">
-            <div class="flex justify-between text-sm text-gray-500">
+            <div class="flex justify-between text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">
               <span>速度：{{ speedBps ? (formatBytes(speedBps) + '/s') : '—' }}</span>
               <span>{{ formatBytes(uploadedBytes) }} / {{ formatBytes(totalBytes) }}</span>
             </div>
@@ -416,16 +417,16 @@
                    :style="{ width: uploadProgress + '%' }"></div>
             </div>
 
-            <p class="text-xs text-gray-500">请勿关闭页面，上传完成后将自动关闭本窗口</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">请勿关闭页面，上传完成后将自动关闭本窗口</p>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-if="loading || submitting" class="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-40">
+    <div v-if="loading || submitting" class="fixed inset-0 bg-white dark:bg-gray-800 bg-opacity-75 flex items-center justify-center z-40">
       <div class="text-center">
         <div class="w-12 h-12 mx-auto mb-4 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p class="text-gray-600">{{ submitting ? '正在提交，请稍候…' : '正在加载…' }}</p>
+        <p class="text-gray-600 dark:text-gray-300">{{ submitting ? '正在提交，请稍候…' : '正在加载…' }}</p>
       </div>
     </div>
 
@@ -453,6 +454,10 @@ import api from '../../api'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
+import { useThemeStore } from '../../stores/theme'
+
+const theme = useThemeStore()
+const isDarkTheme = computed(() => theme.effectiveDark)
 
 const route = useRoute()
 const id = route.params.id
@@ -982,13 +987,212 @@ watch(() => ({ ...submitter.value }), () => {
 </script>
 
 <style scoped>
+.user-submit-page {
+  --submit-page-bg: #f7f9fc;
+  --submit-header-bg: var(--kf-header-bg);
+  --submit-surface: #ffffff;
+  --submit-surface-muted: #f6f8fb;
+  --submit-surface-hover: #eef7ff;
+  --submit-border: #e5eaf0;
+  --submit-border-strong: #cfd8e3;
+  --submit-text: #1f2937;
+  --submit-muted: #64748b;
+  --submit-soft: #94a3b8;
+  --submit-accent: #2563eb;
+  --submit-accent-strong: #1d4ed8;
+  --submit-accent-soft: rgba(37, 99, 235, 0.12);
+  --submit-warm: #f6c343;
+  --submit-danger: #ef4444;
+  --submit-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+  --submit-shadow-hover: 0 18px 38px rgba(15, 23, 42, 0.1);
+  min-height: 100vh;
+  background: var(--submit-page-bg);
+  color: var(--submit-text);
+}
+
+.user-submit-page.submit-dark {
+  --submit-page-bg: #101615;
+  --submit-header-bg: rgba(18, 22, 22, 0.96);
+  --submit-surface: #17201e;
+  --submit-surface-muted: #111817;
+  --submit-surface-hover: #1d2a27;
+  --submit-border: rgba(151, 168, 164, 0.18);
+  --submit-border-strong: rgba(133, 245, 232, 0.36);
+  --submit-text: #f1f7f5;
+  --submit-muted: #a6b7b3;
+  --submit-soft: #768884;
+  --submit-accent: #5bd0c8;
+  --submit-accent-strong: #7dd7ff;
+  --submit-accent-soft: rgba(91, 208, 200, 0.14);
+  --submit-warm: #f5cf68;
+  --submit-danger: #ff7676;
+  --submit-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+  --submit-shadow-hover: 0 22px 54px rgba(0, 0, 0, 0.46);
+  background:
+    linear-gradient(180deg, #101615 0%, #121817 48%, #0f1212 100%);
+}
+
+.submit-page-shell {
+  padding-bottom: 2rem;
+}
+
+.submit-surface {
+  background: var(--submit-surface);
+  border-color: var(--submit-border);
+  box-shadow: var(--submit-shadow);
+}
+
+.submit-hero-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.submit-hero-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--submit-accent), transparent);
+  opacity: 0.58;
+}
+
+.submit-dark .submit-surface {
+  background: linear-gradient(180deg, rgba(28, 39, 37, 0.96), rgba(21, 30, 29, 0.98));
+  border-color: var(--submit-border);
+}
+
 /* 项目名称高亮样式 */
 .project-name-highlight {
-  background: linear-gradient(180deg, transparent 60%, #fef08a 60%);
-  color: #111827;
+  background: linear-gradient(180deg, transparent 62%, rgba(246, 195, 67, 0.52) 62%);
+  color: var(--submit-text);
   font-weight: 700;
   font-size: 21px;
   padding: 0 4px;
+  border-radius: 4px;
+}
+
+.submit-dark .project-name-highlight {
+  background: linear-gradient(180deg, transparent 66%, rgba(91, 208, 200, 0.34) 66%);
+  color: #f8fffd;
+}
+
+.submit-secondary-button,
+.submit-primary-button,
+.submit-ghost-button {
+  border-radius: 12px;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.submit-secondary-button {
+  color: var(--submit-accent);
+  border-color: color-mix(in srgb, var(--submit-accent) 28%, transparent);
+  background: var(--submit-surface);
+}
+
+.submit-secondary-button:hover {
+  color: var(--submit-accent-strong);
+  border-color: color-mix(in srgb, var(--submit-accent) 50%, transparent);
+  background: var(--submit-accent-soft);
+  transform: translateY(-1px);
+}
+
+.submit-primary-button {
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, var(--submit-accent), var(--submit-accent-strong));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--submit-accent) 24%, transparent);
+}
+
+.submit-primary-button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--submit-accent) 30%, transparent);
+}
+
+.submit-primary-button:disabled {
+  opacity: 1;
+  background: #e4e8ee !important;
+  border-color: #d5dbe4 !important;
+  color: #98a2b3 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+  transform: none;
+}
+
+.submit-ghost-button {
+  background: var(--submit-surface);
+  border-color: var(--submit-border);
+  color: var(--submit-muted);
+}
+
+.submit-ghost-button:not(:disabled):hover {
+  background: var(--submit-surface-hover);
+  border-color: var(--submit-border-strong);
+  color: var(--submit-text);
+}
+
+.submit-ghost-button:disabled {
+  opacity: 1;
+  color: var(--submit-soft);
+}
+
+.submit-dark .submit-primary-button {
+  color: #061817;
+}
+
+.submit-dark .submit-primary-button:disabled {
+  background: linear-gradient(180deg, #27302f, #202827) !important;
+  border-color: rgba(151, 168, 164, 0.18) !important;
+  color: #7c8b88 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.submit-dark .submit-ghost-button:disabled {
+  background: #1d2523 !important;
+  border-color: rgba(151, 168, 164, 0.15) !important;
+  color: #6f7d79 !important;
+}
+
+.submit-input {
+  background: #ffffff;
+  color: var(--submit-text);
+  border-color: var(--submit-border);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.submit-input:hover {
+  border-color: var(--submit-border-strong);
+}
+
+.submit-input:focus {
+  border-color: var(--submit-accent) !important;
+  box-shadow: 0 0 0 3px var(--submit-accent-soft);
+}
+
+.submit-input::placeholder {
+  color: var(--submit-soft);
+}
+
+.submit-dark .submit-input {
+  background: #121a19 !important;
+  border-color: rgba(151, 168, 164, 0.22) !important;
+  color: var(--submit-text) !important;
+}
+
+.submit-dark .submit-input:focus {
+  box-shadow: 0 0 0 3px rgba(91, 208, 200, 0.16);
+}
+
+.submit-dark .submit-input::placeholder {
+  color: #687b77;
+}
+
+.submit-dark .submit-input option {
+  background: #121a19;
+  color: var(--submit-text);
+}
+
+.submit-info-note {
+  background: var(--submit-accent-soft);
+  border-color: color-mix(in srgb, var(--submit-accent) 24%, transparent);
+  color: var(--submit-accent-strong);
 }
 
 /* 修复：删除 background-image 等属性，只保留 padding-right，依靠模板中的 SVG 显示图标 */
@@ -1004,11 +1208,197 @@ watch(() => ({ ...submitter.value }), () => {
 /* 可点击上传区域 */
 .upload-click-area {
   user-select: none;
+  background: var(--submit-surface-muted);
+  border-color: var(--submit-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
 }
 
 .upload-click-area:not(.opacity-50):hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  background: var(--submit-surface-hover);
+  border-color: var(--submit-border-strong);
+  box-shadow: var(--submit-shadow-hover);
+}
+
+.upload-click-area.upload-dragging {
+  background: var(--submit-accent-soft);
+  border-color: var(--submit-accent);
+  box-shadow: 0 0 0 4px var(--submit-accent-soft), var(--submit-shadow-hover);
+}
+
+.upload-click-area.opacity-50 {
+  opacity: 1;
+  background: #f0f2f5;
+  border-color: #d7dde6;
+  color: var(--submit-soft);
+}
+
+.upload-empty-icon {
+  border-color: var(--submit-border-strong);
+  background: var(--submit-surface);
+  color: var(--submit-soft);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.upload-click-area:not(.opacity-50):hover .upload-empty-icon,
+.upload-click-area.upload-dragging .upload-empty-icon {
+  border-color: var(--submit-accent);
+  background: var(--submit-accent-soft);
+  color: var(--submit-accent);
+}
+
+.upload-drop-title {
+  color: var(--submit-text);
+}
+
+.upload-drop-copy {
+  color: var(--submit-muted);
+}
+
+.upload-link {
+  color: var(--submit-accent);
+}
+
+.upload-drop-meta {
+  color: var(--submit-soft);
+}
+
+.upload-file-card {
+  background: var(--submit-surface);
+  border-color: var(--submit-border);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.upload-file-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--submit-border-strong);
+  background: var(--submit-surface-hover);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+}
+
+.upload-file-icon,
+.upload-add-icon {
+  background: var(--submit-accent-soft);
+  color: var(--submit-accent);
+}
+
+.upload-remove-button {
+  background: transparent;
+}
+
+.upload-remove-button:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--submit-danger);
+}
+
+.upload-add-card {
+  background: color-mix(in srgb, var(--submit-surface) 72%, transparent);
+  border-color: var(--submit-border);
+}
+
+.upload-add-card:hover {
+  background: var(--submit-accent-soft);
+  border-color: var(--submit-accent);
+  transform: translateY(-2px);
+}
+
+.upload-add-card:hover .upload-add-text,
+.upload-add-card:hover .upload-add-icon {
+  color: var(--submit-accent);
+}
+
+.submit-dark .upload-click-area {
+  background: rgba(16, 23, 22, 0.82);
+  border-color: rgba(151, 168, 164, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.submit-dark .upload-click-area:not(.opacity-50):hover {
+  background: rgba(25, 36, 34, 0.95);
+  border-color: rgba(91, 208, 200, 0.58);
+}
+
+.submit-dark .upload-click-area.upload-dragging {
+  background: rgba(91, 208, 200, 0.12);
+  border-color: rgba(91, 208, 200, 0.8);
+}
+
+.submit-dark .upload-click-area.opacity-50 {
+  background: #171f1d;
+  border-color: rgba(151, 168, 164, 0.16);
+  color: #687b77;
+}
+
+.submit-dark .upload-empty-icon {
+  background: #192220 !important;
+  border-color: rgba(151, 168, 164, 0.28) !important;
+  color: #82938f !important;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+.submit-dark .upload-click-area:not(.opacity-50):hover .upload-empty-icon,
+.submit-dark .upload-click-area.upload-dragging .upload-empty-icon {
+  background: rgba(91, 208, 200, 0.12) !important;
+  border-color: rgba(91, 208, 200, 0.72) !important;
+  color: var(--submit-accent) !important;
+}
+
+.submit-dark .upload-drop-title {
+  color: #f5fbfa;
+}
+
+.submit-dark .upload-drop-copy {
+  color: #a6b7b3 !important;
+}
+
+.submit-dark .upload-drop-meta {
+  color: #71827e !important;
+}
+
+.submit-dark .upload-link {
+  color: var(--submit-accent) !important;
+}
+
+.submit-dark .upload-file-card {
+  background: #192220 !important;
+  border-color: rgba(151, 168, 164, 0.2) !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+}
+
+.submit-dark .upload-file-card:hover {
+  background: #1f2b28 !important;
+  border-color: rgba(91, 208, 200, 0.62) !important;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(91, 208, 200, 0.08);
+}
+
+.submit-dark .upload-file-icon,
+.submit-dark .upload-add-icon {
+  background: rgba(91, 208, 200, 0.12) !important;
+  color: var(--submit-accent) !important;
+}
+
+.submit-dark .upload-remove-button:hover {
+  background: rgba(255, 118, 118, 0.12) !important;
+  color: var(--submit-danger) !important;
+}
+
+.submit-dark .upload-add-card {
+  background: rgba(19, 27, 26, 0.72) !important;
+  border-color: rgba(151, 168, 164, 0.22) !important;
+}
+
+.submit-dark .upload-add-card:hover {
+  background: rgba(91, 208, 200, 0.1) !important;
+  border-color: rgba(91, 208, 200, 0.64) !important;
+}
+
+.submit-dark .upload-add-text {
+  color: #9fb0ac !important;
+}
+
+.submit-dark .upload-add-card:hover .upload-add-text {
+  color: var(--submit-accent) !important;
 }
 
 /* 确保与 ElementUI 样式兼容 */
