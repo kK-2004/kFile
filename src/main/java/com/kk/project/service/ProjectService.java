@@ -37,10 +37,29 @@ public class ProjectService {
     public Project create(CreateProjectRequest req, Authentication authentication) {
         // 对普通站点用户施加每月创建上限（默认3个）
         boolean isAdmin = false;
+        boolean isSuper = false;
         if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
                 String a = ga.getAuthority();
-                if ("ROLE_SUPER".equals(a) || "ROLE_ADMIN".equals(a)) { isAdmin = true; break; }
+                if ("ROLE_SUPER".equals(a)) { isAdmin = true; isSuper = true; break; }
+                if ("ROLE_ADMIN".equals(a)) { isAdmin = true; break; }
+            }
+        }
+        // 非 SUPER 的 ADMIN 校验当月项目数配额
+        if (isAdmin && !isSuper) {
+            int monthlyLimit = java.util.Optional.ofNullable(appConfigService.getInt(com.kk.common.service.AppConfigService.KEY_USER_MONTHLY_LIMIT))
+                    .orElse(userMonthlyCreateLimitDefault);
+            if (monthlyLimit > 0) {
+                com.kk.security.entity.AdminUser user = adminUserRepository.findByUsername(authentication.getName()).orElse(null);
+                if (user != null) {
+                    java.time.ZonedDateTime n = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC);
+                    java.time.ZonedDateTime st = n.withDayOfMonth(1).toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC);
+                    java.time.ZonedDateTime en = st.plusMonths(1);
+                    long used = projectRepository.countByOwnerUserIdAndCreatedAtBetween(user.getId(), st.toInstant(), en.toInstant());
+                    if (used >= monthlyLimit) {
+                        throw new IllegalStateException("本月项目创建数已达上限（" + monthlyLimit + "），请下月再试或联系管理员");
+                    }
+                }
             }
         }
         Project p = new Project();
@@ -97,6 +116,11 @@ public class ProjectService {
         p.setUserSubmitStatusText(req.getUserSubmitStatusText());
         p.setQueryFieldKey(req.getQueryFieldKey());
         p.setTotalSubmitters(0);
+        // 记录项目所属 ADMIN（用于配额归属）；SUPER 创建为 null
+        if (isAdmin && !isSuper) {
+            com.kk.security.entity.AdminUser creator = adminUserRepository.findByUsername(authentication.getName()).orElse(null);
+            if (creator != null) p.setOwnerUserId(creator.getId());
+        }
         Project saved = projectRepository.save(p);
         grantCreatorPermissionIfAdmin(saved, authentication);
         log.info("BIZ action=PROJECT_CREATE projectId={} projectName={} actor={} roles={} isAdmin={}",
@@ -125,15 +149,18 @@ public class ProjectService {
             com.kk.security.entity.ProjectPermission permission = new com.kk.security.entity.ProjectPermission();
             permission.setUser(user);
             permission.setProject(project);
+            // ADMIN 自己创建的项目具备全部权限（编辑 + 删除）
+            permission.setCanEdit(true);
+            permission.setCanDelete(true);
             permRepo.save(permission);
         });
     }
 
     public java.util.Map<String, Object> getCreationQuota(org.springframework.security.core.Authentication authentication) {
-        boolean isAdmin = false;
+        boolean isSuper = false;
         if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
-                if ("ROLE_SUPER".equals(ga.getAuthority())) { isAdmin = true; break; }
+                if ("ROLE_SUPER".equals(ga.getAuthority())) { isSuper = true; break; }
             }
         }
 
@@ -141,15 +168,22 @@ public class ProjectService {
         java.time.ZonedDateTime start = now.withDayOfMonth(1).toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC);
         java.time.ZonedDateTime end = start.plusMonths(1);
 
-        int used = 0;
         int monthlyLimit = java.util.Optional.ofNullable(appConfigService.getInt(com.kk.common.service.AppConfigService.KEY_USER_MONTHLY_LIMIT))
                 .orElse(userMonthlyCreateLimitDefault);
-        boolean unlimited = isAdmin || monthlyLimit <= 0;
+        boolean unlimited = isSuper || monthlyLimit <= 0;
+        // 真实已用：当前 ADMIN 本月归属项目数（ProjectPermission + project.createdAt）
+        int used = 0;
+        if (!isSuper) {
+            com.kk.security.entity.AdminUser user = authentication == null ? null
+                    : adminUserRepository.findByUsername(authentication.getName()).orElse(null);
+            if (user != null) {
+                used = (int) projectRepository.countByOwnerUserIdAndCreatedAtBetween(user.getId(), start.toInstant(), end.toInstant());
+            }
+        }
         Integer limit = unlimited ? null : monthlyLimit;
         Integer remaining = unlimited ? null : Math.max(monthlyLimit - used, 0);
         Long totalQuota = appConfigService.getLong(com.kk.common.service.AppConfigService.KEY_USER_TOTAL_QUOTA_BYTES);
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
-        // Map.of 不允许 null 值，这里需要兼容 unlimited 场景下的 null limit/remaining
         java.util.Map<String,Object> resp = new java.util.HashMap<>();
         resp.put("limit", limit);
         resp.put("used", used);

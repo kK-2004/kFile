@@ -36,6 +36,10 @@ public class ProjectResponse {
     private Boolean autoFileNamingEnabled;
     private Object autoFileNamingConfig;
 
+    // 当前用户对该项目的权限粒度（SUPER 为 true；ADMIN 来自 ProjectPermission）
+    private Boolean canEdit;
+    private Boolean canDelete;
+
     public static ProjectResponse from(Project p, List<String> types, Object expected) {
         return from(p, types, expected, true);
     }

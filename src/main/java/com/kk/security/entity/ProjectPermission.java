@@ -31,4 +31,12 @@ public class ProjectPermission {
     // 对应 k-Site 的 userId（user_accounts.external_id），bigint unsigned
     @Column(name = "site_user_id", columnDefinition = "BIGINT UNSIGNED")
     private Long siteUserId;
+
+    /** 是否允许编辑项目 */
+    @Column(name = "can_edit", nullable = false)
+    private boolean canEdit = false;
+
+    /** 是否允许删除项目 */
+    @Column(name = "can_delete", nullable = false)
+    private boolean canDelete = false;
 }

@@ -36,6 +36,10 @@ geoip:
 oss:
   type: ali
 
+# MinIO：dev 环境留空占位，需启用时通过 MINIO_* 环境变量注入
+minio:
+  enabled: ${MINIO_ENABLED:false}
+
 app:
   project:
     monthly-limit:

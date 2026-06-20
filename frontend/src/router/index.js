@@ -7,6 +7,8 @@ import AdminUsers from '../views/admin/AdminUsers.vue'
 import AdminSettings from '../views/admin/AdminSettings.vue'
 import AdminMcpAuthorize from '../views/admin/AdminMcpAuthorize.vue'
 import AdminTemplates from '../views/admin/AdminTemplates.vue'
+import AdminFiles from '../views/admin/AdminFiles.vue'
+import AdminShares from '../views/admin/AdminShares.vue'
 import UserProjects from '../views/user/UserProjects.vue'
 import Hero from '../views/Hero.vue'
 import UserSubmit from '../views/user/UserSubmit.vue'
@@ -28,6 +30,8 @@ const routes = [
   ,{ path: '/admin/settings', component: AdminSettings }
   ,{ path: '/admin/mcp/authorize', component: AdminMcpAuthorize }
   ,{ path: '/admin/templates', component: AdminTemplates }
+  ,{ path: '/admin/files', component: AdminFiles }
+  ,{ path: '/admin/shares', component: AdminShares }
 ]
 
 const router = createRouter({

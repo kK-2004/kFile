@@ -26,6 +26,10 @@ public class AdminUser {
     @Column(nullable = false, length = 16)
     private String role;
 
+    /** 文件管理空间配额（字节）；null=未设/继承全局，0=不限（SUPER），>0=独立配额 */
+    @Column(name = "quota_bytes")
+    private Long quotaBytes;
+
     private Boolean enabled = true;
 
     @CreationTimestamp

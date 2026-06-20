@@ -34,6 +34,7 @@ public class SubmissionService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GeoIpService geoIpService;
     private final OssProperties ossProperties;
+    private final com.kk.storage.service.StoredFileService storedFileService;
 
     @Transactional
     public Submission submit(Long projectId, String submitterJson, List<MultipartFile> files,
@@ -92,6 +93,9 @@ public class SubmissionService {
             String n = f.getOriginalFilename();
             if (n != null && !n.isBlank()) fileNamesForLog.add(n.trim());
         }
+        // 配额校验（项目所属 ADMIN）
+        long submitTotalSize = filesToUpload.stream().filter(f -> f != null).mapToLong(MultipartFile::getSize).sum();
+        storedFileService.checkQuota(project.getOwnerUserId(), submitTotalSize);
         List<String> urls = ossService.uploadWithPrefix(filesToUpload, keyPrefix);
 
         Submission s = new Submission();
@@ -117,6 +121,7 @@ public class SubmissionService {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize file urls", e);
         }
+        s.setTotalSize(submitTotalSize);
 
         long countForSubmitter = submissionRepository.countByProjectAndSubmitterFingerprint(project, fingerprint) + 1;
         s.setSubmitCount((int) countForSubmitter);
@@ -164,10 +169,12 @@ public class SubmissionService {
         // 校验大小与类型
         java.util.List<String> types = projectService.parseTypes(project);
         java.util.List<String> normalizedKeys = new java.util.ArrayList<>();
+        long directTotalSize = 0;
         for (String key : keys) {
             if (!org.springframework.util.StringUtils.hasText(key)) continue;
             // stat for size
             com.kk.oss.OssService.ObjectStat stat = ossService.statByKey(key);
+            directTotalSize += stat.length;
             if (project.getFileSizeLimitBytes() != null && stat.length > project.getFileSizeLimitBytes()) {
                 throw new IllegalArgumentException("文件超出大小限制: " + key);
             }
@@ -192,6 +199,9 @@ public class SubmissionService {
             if (exist > 0) throw new IllegalStateException("该项目不允许重复提交");
         }
 
+        // 配额校验（项目所属 ADMIN）
+        storedFileService.checkQuota(project.getOwnerUserId(), directTotalSize);
+
         java.util.List<String> urls = normalizedKeys.stream().map(ossService::proxyUrlByKey).toList();
 
         Submission s = new Submission();
@@ -214,6 +224,7 @@ public class SubmissionService {
         s.setIpCity(geo.getCity());
         try { s.setFileUrls(objectMapper.writeValueAsString(urls)); }
         catch (JsonProcessingException e) { throw new RuntimeException("Failed to serialize file urls", e); }
+        s.setTotalSize(directTotalSize);
 
         long countForSubmitter = submissionRepository.countByProjectAndSubmitterFingerprint(project, fingerprint) + 1;
         s.setSubmitCount((int) countForSubmitter);

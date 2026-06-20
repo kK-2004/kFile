@@ -6,12 +6,13 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.EnableAsync;
 import com.kk.config.OssProperties;
+import com.kk.config.MinioProperties;
 import com.kk.geoip.GeoIpProperties;
 
 @SpringBootApplication
 @EnableScheduling
 @EnableAsync
-@EnableConfigurationProperties({OssProperties.class, GeoIpProperties.class})
+@EnableConfigurationProperties({OssProperties.class, MinioProperties.class, GeoIpProperties.class})
 public class KFileApplication {
 
     public static void main(String[] args) {

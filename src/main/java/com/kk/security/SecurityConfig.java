@@ -74,6 +74,7 @@ public class SecurityConfig {
                         "/api/projects/*/submissions/direct-multipart-complete"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/file/oss/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/file/minio/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/mcp/**", "/api/mcp/**").authenticated()
                 .anyRequest().authenticated()

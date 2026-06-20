@@ -75,13 +75,13 @@ public class Project {
     @Column(columnDefinition = "json")
     private String allowedSubmitterList;
 
-    // 创建者（站点用户ID）
-    @Column(name = "creator_site_user_id", columnDefinition = "BIGINT UNSIGNED")
-    private Long creatorSiteUserId;
-
     // 创建时间
     @CreationTimestamp
     private Instant createdAt;
+
+    // 项目所属 ADMIN（创建者）；null 表示 SUPER 创建（不受配额约束）
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
 
     // ===== 自动命名文件（可选）=====
     // 是否开启自动命名

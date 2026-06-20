@@ -12,6 +12,12 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME:-kfile}
       - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-123456}
+      # MinIO 数据源（可选，默认禁用；启用时注入实际值）
+      - MINIO_ENABLED=${MINIO_ENABLED:-false}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-}
+      - MINIO_BUCKET=${MINIO_BUCKET:-k-file}
     networks:
       - common-net
     healthcheck:

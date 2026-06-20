@@ -51,19 +51,41 @@ public class AdminUserController {
         u.setPassword(encoder.encode(password));
         u.setRole(role);
         u.setEnabled(true);
+        // 可选：创建时设配额（字节）；前端传 GB 会转字节
+        Object quota = req.get("quotaBytes");
+        if (quota instanceof Number n) u.setQuotaBytes(n.longValue());
         return userRepo.save(u);
+    }
+
+    /** 更新用户配额（SUPER 可设；传 null=用全局默认，0=不限） */
+    @PutMapping("/{userId}/quota")
+    @PreAuthorize("hasRole('SUPER')")
+    public ResponseEntity<?> setQuota(@PathVariable Long userId, @RequestBody Map<String, Object> req) {
+        AdminUser u = userRepo.findById(userId).orElseThrow();
+        Object quota = req.get("quotaBytes");
+        if (quota == null) u.setQuotaBytes(null);
+        else if (quota instanceof Number n) u.setQuotaBytes(n.longValue());
+        userRepo.save(u);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{userId}/projects/{projectId}")
     @PreAuthorize("hasRole('SUPER')")
-    public ResponseEntity<?> grant(@PathVariable Long userId, @PathVariable Long projectId) {
+    public ResponseEntity<?> grant(@PathVariable Long userId, @PathVariable Long projectId,
+                                   @RequestBody(required = false) java.util.Map<String, Object> body) {
         AdminUser u = userRepo.findById(userId).orElseThrow();
         Project p = projectRepo.findById(projectId).orElseThrow();
-        if (permRepo.findByUserAndProject(u, p).isEmpty()) {
-            ProjectPermission pp = new ProjectPermission();
+        boolean canEdit = body != null && Boolean.TRUE.equals(body.get("canEdit"));
+        boolean canDelete = body != null && Boolean.TRUE.equals(body.get("canDelete"));
+        ProjectPermission pp = permRepo.findByUserAndProject(u, p).orElse(null);
+        if (pp == null) {
+            pp = new ProjectPermission();
             pp.setUser(u); pp.setProject(p);
-            permRepo.save(pp);
         }
+        // SUPER 分配权限时细化 canEdit/canDelete；已有权限则更新
+        pp.setCanEdit(canEdit);
+        pp.setCanDelete(canDelete);
+        permRepo.save(pp);
         return ResponseEntity.ok().build();
     }
 
@@ -78,9 +100,14 @@ public class AdminUserController {
 
     @GetMapping("/{userId}/projects")
     @PreAuthorize("hasRole('SUPER')")
-    public List<Long> listUserProjects(@PathVariable Long userId) {
+    public List<java.util.Map<String, Object>> listUserProjects(@PathVariable Long userId) {
         AdminUser u = userRepo.findById(userId).orElseThrow();
-        return permRepo.findByUser(u).stream().map(pp -> pp.getProject().getId()).toList();
+        return permRepo.findByUser(u).stream()
+                .map(pp -> java.util.Map.<String, Object>of(
+                        "projectId", pp.getProject().getId(),
+                        "canEdit", pp.isCanEdit(),
+                        "canDelete", pp.isCanDelete()))
+                .toList();
     }
 
     @PostMapping("/{userId}/reset-password")

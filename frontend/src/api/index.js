@@ -156,8 +156,9 @@ export default {
   ,getShare(code) { return instance.get(`/api/share/${code}`) }
   ,adminListUsers() { return instance.get('/api/admin/users') }
   ,adminCreateUser(payload) { return instance.post('/api/admin/users', payload) }
+  ,adminSetUserQuota(userId, quotaBytes) { return instance.put(`/api/admin/users/${userId}/quota`, { quotaBytes }) }
   ,adminListUserProjects(userId) { return instance.get(`/api/admin/users/${userId}/projects`) }
-  ,adminGrantProject(userId, projectId) { return instance.post(`/api/admin/users/${userId}/projects/${projectId}`) }
+  ,adminGrantProject(userId, projectId, payload) { return instance.post(`/api/admin/users/${userId}/projects/${projectId}`, payload || {}) }
   ,adminRevokeProject(userId, projectId) { return instance.delete(`/api/admin/users/${userId}/projects/${projectId}`) }
   ,adminListProjects() { return instance.get('/api/admin/projects') }
   ,adminMissingAllowed(projectId) { return instance.get(`/api/admin/projects/${projectId}/missing-allowed`) }
@@ -210,5 +211,68 @@ export default {
     const params = { projectId, fileUrlOrKey, download }
     if (expireSeconds) params.expireSeconds = expireSeconds
     return instance.get('/api/admin/submissions/presigned-url', { params })
+  }
+
+  // ===== 分享链接管理 =====
+  ,adminListShares(page = 0, pageSize = 15, keyword = '') {
+    const params = { page, pageSize }
+    if (keyword) params.keyword = keyword
+    return instance.get('/api/admin/shares', { params })
+  }
+  ,adminDeleteShare(id) { return instance.delete(`/api/admin/shares/${id}`) }
+  ,adminFileSources() { return instance.get('/api/admin/files/sources') }
+  ,adminFileList(parentId, page = 0, pageSize = 15, scope = '', keyword = '') {
+    const params = { page, pageSize }
+    if (parentId != null) params.parentId = parentId
+    if (scope) params.scope = scope
+    if (keyword) params.keyword = keyword
+    return instance.get('/api/admin/files/list', { params })
+  }
+  ,adminFileQuota() { return instance.get('/api/admin/files/quota') }
+  ,adminFileMkdir({ parentId, name }) {
+    return instance.post('/api/admin/files/mkdir', { parentId: parentId ?? null, name })
+  }
+  // 第一步：申请直传预签名 PUT 直链（不经过后端上传）
+  ,adminFileUploadInit({ parentId, source, originalName, contentType }) {
+    return instance.post('/api/admin/files/upload-init', {
+      parentId: parentId ?? null, source, originalName, contentType
+    })
+  }
+  // 第二步：浏览器 PUT 完成后回调落库（文件不经后端）
+  ,adminFileUploadComplete({ parentId, storageSource, storageKey, originalName, contentType, size }) {
+    return instance.post('/api/admin/files/upload-complete', {
+      parentId: parentId ?? null, storageSource, storageKey, originalName, contentType, size
+    })
+  }
+  // 浏览器直接 PUT 到预签名直链（不走业务后端，用裸 axios 以便跨域 + 进度）
+  ,directPutObject(putUrl, file, contentType, onUploadProgress) {
+    return axios.put(putUrl, file, {
+      headers: { 'Content-Type': contentType || 'application/octet-stream' },
+      timeout: 0,
+      onUploadProgress
+    })
+  }
+  // ===== 大文件断点续传（仅 MinIO，>50MB）=====
+  ,adminFileMultipartInit({ parentId, originalName, contentType, fileSize, totalChunks, contentMd5 }) {
+    return instance.post('/api/admin/files/upload-multipart-init', {
+      parentId: parentId ?? null, originalName, contentType, fileSize, totalChunks, contentMd5
+    })
+  }
+  ,adminFileMultipartSign({ contentMd5, chunkId }) {
+    return instance.post('/api/admin/files/upload-multipart-sign', { contentMd5, chunkId })
+  }
+  ,adminFileMultipartComplete({ contentMd5, parts }) {
+    return instance.post('/api/admin/files/upload-multipart-complete', { contentMd5, parts })
+  }
+  ,adminFileDelete(id) {
+    return instance.delete(`/api/admin/files/${id}`)
+  }
+  ,adminFileDownloadUrl(fileId, { download = true, expireSeconds } = {}) {
+    const params = { fileId, download }
+    if (expireSeconds) params.expireSeconds = expireSeconds
+    return instance.get('/api/admin/files/download-url', { params })
+  }
+  ,adminFileShare({ fileIds, expireSeconds, filename }) {
+    return instance.post('/api/admin/files/share', { fileIds, expireSeconds, filename })
   }
 }

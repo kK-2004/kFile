@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div :class="['page-container', { 'project-form-dark': isDarkTheme }]">
     <div class="project-form-container">
 
       <div class="page-header">
@@ -40,7 +40,7 @@
                 <el-option :value="null" label="不使用模板" />
                 <el-option v-for="t in usableTemplates" :key="t.id" :value="t.id" :label="t.name" />
               </el-select>
-              <span style="font-size:12px;color:#86868b;">选择后自动回填可复用字段，名称/时间/大小/扩展名仍需填写</span>
+              <span class="form-hint">选择后自动回填可复用字段，名称/时间/大小/扩展名仍需填写</span>
               <el-button
                 v-if="isSuperUser"
                 type="primary"
@@ -95,7 +95,7 @@
                       active-text="在线"
                       inactive-text="已下线"
                       inline-prompt
-                      style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
+                      class="status-switch"
                   />
                 </div>
               </div>
@@ -119,7 +119,7 @@
                     >
                       <el-option v-for="t in typeSelectable" :key="t" :value="t" :label="`.${t}`" />
                     </el-select>
-                    <div v-if="isSuperUser" style="font-size:12px;color:#86868b;margin-top:4px;">留空表示允许所有文件类型</div>
+                    <div v-if="isSuperUser" class="form-hint form-hint-top">留空表示允许所有文件类型</div>
                   </div>
                 </el-form-item>
               </div>
@@ -554,9 +554,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
 import { Document, Setting, User, FolderOpened, Plus, Delete, InfoFilled, Check, Back } from '@element-plus/icons-vue'
+import { useThemeStore } from '../../stores/theme'
 
 const route = useRoute();
 const router = useRouter();
+const theme = useThemeStore()
+const isDarkTheme = computed(() => theme.effectiveDark)
 const isEdit = computed(()=>!!route.params.id)
 const saving = ref(false)
 
@@ -1432,17 +1435,6 @@ function bindAutoNameDrag() {
 </script>
 
 <style scoped>
-/* 定义 CSS 变量：OpenAI/Modern SaaS 风格 */
-:root {
-  --oa-bg: #f9f9f9;
-  --oa-text-main: #202123;
-  --oa-text-sub: #6e6e80;
-  --oa-border: #e5e5e5;
-  --oa-primary: #10a37f;
-  --oa-radius: 8px;
-  --oa-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
-}
-
 .hidden { display: none; }
 
 .header-right-inline {
@@ -1451,13 +1443,13 @@ function bindAutoNameDrag() {
   gap: 10px;
 }
 .switch-label-inline {
-  color: #6e6e80;
+  color: var(--form-muted);
   font-size: 13px;
 }
 .section-subtitle {
   margin: 10px 0 6px;
   font-weight: 600;
-  color: #353740;
+  color: var(--form-text-secondary);
   font-size: 13px;
 }
 .table-actions {
@@ -1467,19 +1459,100 @@ function bindAutoNameDrag() {
   margin-bottom: 10px;
 }
 .alias-block { margin-top: 10px; }
-.alias-title { font-weight: 600; color: #353740; font-size: 13px; margin: 6px 0; }
+.alias-title { font-weight: 600; color: var(--form-text-secondary); font-size: 13px; margin: 6px 0; }
 .preview-row { margin-top: 10px; }
-.preview-text { font-weight: 600; color: #202123; }
+.preview-text { font-weight: 600; color: var(--form-text); }
+.text-gray {
+  color: var(--form-soft, var(--kf-muted));
+  font-size: 12px;
+}
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--form-badge-bg);
+  color: var(--form-badge-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.mt-4 {
+  margin-top: 16px;
+}
+.required-field :deep(.el-form-item__label)::before {
+  content: '*';
+  color: var(--form-danger);
+  margin-right: 4px;
+}
+.form-hint {
+  font-size: 12px;
+  color: var(--form-soft);
+}
+.form-hint-top {
+  margin-top: 4px;
+}
 
 .page-container {
+  --form-bg: #f7f7f8;
+  --form-header-bg: rgba(247, 247, 248, 0.88);
+  --form-surface: #ffffff;
+  --form-surface-muted: #f7f7f8;
+  --form-surface-hover: #f0f0f0;
+  --form-border: #e5e5e5;
+  --form-border-soft: #f2f2f2;
+  --form-text: #202123;
+  --form-text-secondary: #353740;
+  --form-muted: #6e6e80;
+  --form-soft: #8e8ea0;
+  --form-primary: #1a1a1a;
+  --form-primary-hover: #353740;
+  --form-primary-contrast: #ffffff;
+  --form-accent: #10a37f;
+  --form-accent-soft: rgba(16, 163, 127, 0.16);
+  --form-danger: #ef4444;
+  --form-success-bg: #f0fdf4;
+  --form-success-border: #dcfce7;
+  --form-success-text: #15803d;
+  --form-badge-bg: #f0f0f0;
+  --form-badge-text: #4b5563;
+  --form-scrollbar: #d1d5db;
+  --form-shadow: 0 1px 2px 0 rgba(0,0,0,0.03);
   height: calc(100vh - 65px);
-  background-color: #f7f7f8;
-  color: #353740;
+  background-color: var(--form-bg);
+  color: var(--form-text-secondary);
   font-family: -apple-system, "system-ui", "Segoe UI", Helvetica, Arial, sans-serif;
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.page-container.project-form-dark {
+  --form-bg: #141414;
+  --form-header-bg: rgba(20, 20, 20, 0.88);
+  --form-surface: #1d1e1f;
+  --form-surface-muted: #262728;
+  --form-surface-hover: #2a2a2c;
+  --form-border: #3a3a3c;
+  --form-border-soft: #2c2c2e;
+  --form-text: #e5eaf3;
+  --form-text-secondary: #d8dee8;
+  --form-muted: #a3a6ad;
+  --form-soft: #7e858f;
+  --form-primary: #5594c8;
+  --form-primary-hover: #6aa6d8;
+  --form-primary-contrast: #ffffff;
+  --form-accent: #5bd0c8;
+  --form-accent-soft: rgba(91, 208, 200, 0.16);
+  --form-danger: #f87171;
+  --form-success-bg: rgba(16, 185, 129, 0.12);
+  --form-success-border: rgba(16, 185, 129, 0.24);
+  --form-success-text: #34d399;
+  --form-badge-bg: rgba(91, 208, 200, 0.12);
+  --form-badge-text: #9de8e2;
+  --form-scrollbar: #4b5563;
+  --form-shadow: 0 18px 48px rgba(0, 0, 0, 0.26);
+  background: linear-gradient(180deg, #141414 0%, #171817 55%, #141414 100%);
 }
 
 .project-form-container {
@@ -1514,12 +1587,12 @@ function bindAutoNameDrag() {
   padding: 0; /* 移除左右 padding，因为容器已有 padding */
 
   /* 毛玻璃特效核心代码 */
-  background: rgba(247, 247, 248, 0.85); /* 稍微降低透明度，让下方内容隐约可见 */
+  background: var(--form-header-bg); /* 稍微降低透明度，让下方内容隐约可见 */
   backdrop-filter: blur(12px); /* 高斯模糊效果 */
   -webkit-backdrop-filter: blur(12px); /* Safari 支持 */
 
   /* 可选：添加一条极细的分割线，增加精致感 */
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+  border-bottom: 1px solid var(--form-border-soft);
 
   mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
 }
@@ -1560,12 +1633,12 @@ function bindAutoNameDrag() {
   cursor: pointer;
   padding: 8px;
   border-radius: 6px;
-  color: #6e6e80;
+  color: var(--form-muted);
   transition: background 0.2s;
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.05);
+  background: var(--form-surface);
+  border: 1px solid var(--form-border-soft);
 }
-.back-btn:hover { background: #ececf1; }
+.back-btn:hover { background: var(--form-surface-hover); }
 
 .title-group {
   display: flex;
@@ -1576,13 +1649,13 @@ function bindAutoNameDrag() {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #202123;
+  color: var(--form-text);
   line-height: 1.2;
 }
 
 .quota-text {
   font-size: 12px;
-  color: #8e8ea0;
+  color: var(--form-soft);
 }
 
 /* 核心修改：内容区域
@@ -1597,7 +1670,7 @@ function bindAutoNameDrag() {
 
   /* 隐藏滚动条样式 (可选) */
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
+  scrollbar-color: var(--form-scrollbar) transparent;
 }
 
 /* Form Section 卡片 */
@@ -1606,29 +1679,29 @@ function bindAutoNameDrag() {
 }
 
 .card-style {
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--form-surface);
+  border: 1px solid var(--form-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px 0 rgba(0,0,0,0.03);
+  box-shadow: var(--form-shadow);
   overflow: hidden; /* 确保子元素不溢出圆角 */
 }
 
 /* Section Header 放在卡片内部 */
 .section-header {
   padding: 20px 24px 16px; /* 内部 padding */
-  border-bottom: 1px solid #f2f2f2;
+  border-bottom: 1px solid var(--form-border-soft);
 }
 
 .section-header h3 {
   font-size: 16px;
   font-weight: 600;
   margin: 0 0 4px 0;
-  color: #202123;
+  color: var(--form-text);
 }
 
 .section-desc {
   font-size: 13px;
-  color: #6e6e80;
+  color: var(--form-muted);
   margin: 0;
 }
 
@@ -1687,19 +1760,19 @@ function bindAutoNameDrag() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #f9f9f9;
+  background: var(--form-surface-muted);
   padding: 12px 16px;
   border-radius: 8px;
   border: 1px solid transparent;
   transition: all 0.2s;
 }
 .switch-card:hover {
-  background: #f0f0f0;
+  background: var(--form-surface-hover);
 }
 .switch-label {
   font-size: 14px;
   font-weight: 500;
-  color: #353740;
+  color: var(--form-text-secondary);
 }
 
 /* 智能识别样式 */
@@ -1707,9 +1780,9 @@ function bindAutoNameDrag() {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  background: #f0fdf4;
-  border: 1px solid #dcfce7;
-  color: #15803d;
+  background: var(--form-success-bg);
+  border: 1px solid var(--form-success-border);
+  color: var(--form-success-text);
   padding: 12px;
   border-radius: 6px;
   font-size: 13px;
@@ -1724,32 +1797,44 @@ function bindAutoNameDrag() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #f9f9f9;
+  background: var(--form-surface-muted);
   padding: 10px 16px;
   border-radius: 6px;
 }
 
 /* 表格样式重写 - Modern */
 .custom-table-wrapper {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--form-border);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--form-surface);
 }
 
 .modern-table :deep(th.el-table__cell) {
-  background-color: #f7f7f8;
-  color: #6e6e80;
+  background-color: var(--form-surface-muted);
+  color: var(--form-muted);
   font-weight: 500;
   font-size: 12px;
   text-transform: uppercase;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--form-border);
   height: 40px;
   padding: 4px 0;
 }
 
+.modern-table :deep(.el-table),
+.modern-table :deep(.el-table__inner-wrapper),
+.modern-table :deep(.el-table__body-wrapper),
+.modern-table :deep(tr),
 .modern-table :deep(td.el-table__cell) {
-  border-bottom: 1px solid #f2f2f2;
+  background-color: var(--form-surface);
+}
+
+.modern-table :deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--form-surface-muted) !important;
+}
+
+.modern-table :deep(td.el-table__cell) {
+  border-bottom: 1px solid var(--form-border-soft);
   padding: 12px 0;
 }
 .modern-table :deep(.el-table__row:last-child td.el-table__cell) {
@@ -1764,80 +1849,231 @@ function bindAutoNameDrag() {
 }
 .table-input :deep(.el-input__wrapper.is-focus),
 .table-input :deep(.el-select__wrapper.is-focus) {
-  background: #fff;
-  box-shadow: 0 0 0 1px #10a37f inset !important;
+  background: var(--form-surface);
+  box-shadow: 0 0 0 1px var(--form-accent) inset !important;
 }
 
 .drag-handle-icon {
   cursor: grab;
-  color: #d9d9e3;
+  color: var(--form-border);
   font-weight: 900;
   letter-spacing: -1px;
 }
-.drag-handle-icon:hover { color: #6e6e80; }
+.drag-handle-icon:hover { color: var(--form-muted); }
 
 /* Element Plus 覆盖 */
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: #353740;
+  color: var(--form-text-secondary);
   font-size: 13px;
   padding-bottom: 6px;
 }
 :deep(.el-input__wrapper), :deep(.el-select__wrapper) {
   border-radius: 6px;
-  box-shadow: 0 0 0 1px #d9d9e3 inset;
+  box-shadow: 0 0 0 1px var(--form-border) inset;
+  background: var(--form-surface);
+  color: var(--form-text);
   transition: all 0.2s;
 }
 :deep(.el-input__wrapper:hover), :deep(.el-select__wrapper:hover) {
-  box-shadow: 0 0 0 1px #8e8ea0 inset;
+  box-shadow: 0 0 0 1px var(--form-soft) inset;
 }
 :deep(.el-input__wrapper.is-focus), :deep(.el-select__wrapper.is-focus) {
-  box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2) inset, 0 0 0 1px #10a37f inset;
+  box-shadow: 0 0 0 2px var(--form-accent-soft) inset, 0 0 0 1px var(--form-accent) inset;
+}
+:deep(.el-input__inner),
+:deep(.el-select__placeholder),
+:deep(.el-date-editor .el-range-input) {
+  color: var(--form-text);
+}
+:deep(.el-input__inner::placeholder),
+:deep(.el-select__placeholder.is-transparent),
+:deep(.el-date-editor .el-range-input::placeholder) {
+  color: var(--form-soft);
+}
+:deep(.el-input__prefix),
+:deep(.el-input__suffix),
+:deep(.el-select__caret),
+:deep(.el-date-editor .el-range-separator) {
+  color: var(--form-soft);
+}
+:deep(.el-input-group__append) {
+  background: var(--form-surface-muted);
+  border-color: var(--form-border);
+  box-shadow: 0 0 0 1px var(--form-border) inset;
+  color: var(--form-muted);
+  font-weight: 600;
+}
+:deep(.el-textarea__inner) {
+  background: var(--form-surface);
+  box-shadow: 0 0 0 1px var(--form-border) inset;
+  color: var(--form-text);
+}
+:deep(.el-textarea__inner::placeholder) {
+  color: var(--form-soft);
+}
+:deep(.el-checkbox__label),
+:deep(.el-radio-button__inner) {
+  color: var(--form-text-secondary);
+}
+:deep(.el-checkbox__inner) {
+  background: var(--form-surface);
+  border-color: var(--form-border);
+}
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background: var(--form-accent);
+  border-color: var(--form-accent);
+}
+:deep(.el-radio-button__inner) {
+  background: var(--form-surface);
+  border-color: var(--form-border);
+}
+:deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: var(--form-accent);
+  border-color: var(--form-accent);
+  box-shadow: -1px 0 0 0 var(--form-accent);
+  color: var(--form-primary-contrast);
 }
 :deep(.el-button) {
   border-radius: 6px;
   font-weight: 500;
 }
 :deep(.el-button--primary) {
-  background-color: #1a1a1a;
-  border-color: #1a1a1a;
+  background-color: var(--form-primary);
+  border-color: var(--form-primary);
+  color: var(--form-primary-contrast);
 }
 :deep(.el-button--primary:hover) {
-  background-color: #353740;
-  border-color: #353740;
+  background-color: var(--form-primary-hover);
+  border-color: var(--form-primary-hover);
+}
+:deep(.el-button--primary.is-plain) {
+  background: var(--form-surface);
+  border-color: var(--form-border);
+  color: var(--form-accent);
+}
+:deep(.el-button--primary.is-plain:hover) {
+  background: var(--form-accent-soft);
+  border-color: var(--form-accent);
+  color: var(--form-accent);
+}
+:deep(.el-button.is-disabled),
+:deep(.el-button.is-disabled:hover) {
+  background: var(--form-surface-muted);
+  border-color: var(--form-border);
+  color: var(--form-soft);
+  opacity: 0.72;
+}
+:deep(.status-switch) {
+  --el-switch-on-color: #34d399;
+  --el-switch-off-color: #f87171;
 }
 
 /* 列表编辑器 */
 .list-editor-container {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--form-border);
   border-radius: 6px;
   overflow: hidden;
 }
 .editor-toolbar {
-  background: #f7f7f8;
+  background: var(--form-surface-muted);
   padding: 8px 12px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--form-border);
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.editor-hint { font-size: 12px; color: #8e8ea0; }
+.editor-hint { font-size: 12px; color: var(--form-soft); }
 .code-textarea :deep(.el-textarea__inner) {
   border: none;
   box-shadow: none;
   padding: 12px;
   font-family: monospace;
   font-size: 13px;
-  background: #fff;
+  background: var(--form-surface);
+  color: var(--form-text);
 }
 
 /* 拖拽反馈 */
 :deep(.dragging) {
-  background: #fafafa !important;
+  background: var(--form-surface-muted) !important;
   opacity: 0.8;
 }
 :deep(.drag-over) {
-  border-bottom: 2px solid #10a37f !important;
+  border-bottom: 2px solid var(--form-accent) !important;
+}
+
+:global(.modern-dialog.el-dialog),
+:global(.modern-dialog .el-dialog) {
+  --dialog-surface: #ffffff;
+  --dialog-surface-muted: #f7f7f8;
+  --dialog-border: #e5e5e5;
+  --dialog-text: #202123;
+  --dialog-muted: #6e6e80;
+  background: var(--dialog-surface);
+  border: 1px solid var(--dialog-border);
+}
+:global(.modern-dialog.el-dialog .el-dialog__header),
+:global(.modern-dialog .el-dialog__header),
+:global(.modern-dialog.el-dialog .el-dialog__footer),
+:global(.modern-dialog .el-dialog__footer) {
+  border-color: var(--dialog-border);
+}
+:global(.modern-dialog.el-dialog .el-dialog__title),
+:global(.modern-dialog .el-dialog__title),
+:global(.modern-dialog.el-dialog .stat-item strong),
+:global(.modern-dialog .stat-item strong),
+:global(.modern-dialog.el-dialog .empty-state),
+:global(.modern-dialog .empty-state) {
+  color: var(--dialog-text);
+}
+:global(.modern-dialog.el-dialog .dialog-desc),
+:global(.modern-dialog .dialog-desc),
+:global(.modern-dialog.el-dialog .dialog-content),
+:global(.modern-dialog .dialog-content),
+:global(.modern-dialog.el-dialog .text-gray),
+:global(.modern-dialog .text-gray) {
+  color: var(--dialog-muted);
+}
+:global(.modern-dialog.el-dialog .preview-stats),
+:global(.modern-dialog .preview-stats) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+:global(.modern-dialog.el-dialog .stat-item),
+:global(.modern-dialog .stat-item) {
+  background: var(--dialog-surface-muted);
+  border: 1px solid var(--dialog-border);
+  border-radius: 8px;
+  padding: 12px;
+}
+:global(.modern-dialog.el-dialog .stat-item strong),
+:global(.modern-dialog .stat-item strong) {
+  display: block;
+  font-size: 20px;
+  line-height: 1.1;
+}
+:global(.modern-dialog.el-dialog .stat-item span),
+:global(.modern-dialog .stat-item span) {
+  color: var(--dialog-muted);
+  font-size: 12px;
+}
+:global(.modern-dialog.el-dialog .empty-state),
+:global(.modern-dialog .empty-state) {
+  padding: 28px 0;
+  text-align: center;
+}
+
+:global(html.dark .modern-dialog.el-dialog),
+:global(html.dark .modern-dialog .el-dialog) {
+  --dialog-surface: #1d1e1f;
+  --dialog-surface-muted: #262728;
+  --dialog-border: #3a3a3c;
+  --dialog-text: #e5eaf3;
+  --dialog-muted: #a3a6ad;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 }
 
 /* 响应式 */
