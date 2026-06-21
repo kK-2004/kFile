@@ -153,7 +153,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             下载选中
           </button>
-          <button class="share-action-btn share-action-cancel" @click="selectedIndexes = new Set()">取消</button>
+          <button class="share-action-btn share-action-cancel" @click="clearSelection">取消</button>
         </div>
       </div>
     </transition>
@@ -276,20 +276,37 @@ const toggleSelectAll = (checked) => {
   if (checked) {
     selectedIndexes.value = new Set(shareData.value.e.map((_, i) => i))
   } else {
-    selectedIndexes.value = new Set()
+    clearSelection()
   }
 }
 const allSelected = computed(() =>
   shareData.value?.e?.length > 0 && selectedIndexes.value.size === shareData.value.e.length
 )
 
+const clearSelection = () => {
+  selectedIndexes.value = new Set()
+}
+
+const buildDownloadEntries = (indexes) => {
+  if (!shareData.value) return []
+  return indexes
+    .map((entryIndex) => {
+      const entry = shareData.value.e[entryIndex]
+      return entry ? { ...entry, _entryIndex: entryIndex } : null
+    })
+    .filter(Boolean)
+}
+
 // 记录下载计数
-const recordDownload = async (entryIndex) => {
+const recordDownload = async (entryIndexes) => {
+  if (!shareCode.value) return
+  const indexes = Array.isArray(entryIndexes) ? entryIndexes : [entryIndexes]
+  const validIndexes = indexes.filter(i => Number.isInteger(i))
   try {
     await fetch(`/api/share/${shareCode.value}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entryIndex != null ? { entryIndex } : {})
+      body: JSON.stringify(validIndexes.length === 1 ? { entryIndex: validIndexes[0] } : { entryIndexes: validIndexes })
     })
   } catch { /* ignore */ }
 }
@@ -362,18 +379,22 @@ function fileTypeClass(name) {
 const downloadSelected = async () => {
   if (!shareData.value || downloading.value || selectedIndexes.value.size === 0) return
   const indexes = [...selectedIndexes.value].sort((a, b) => a - b)
-  const entries = indexes.map(i => shareData.value.e[i]).filter(Boolean)
+  const entries = buildDownloadEntries(indexes)
   if (!entries.length) return
   // 记录计数（每个选中文件）
-  indexes.forEach(i => recordDownload(i))
+  recordDownload(entries.map(e => e._entryIndex))
+  clearSelection()
   await doZipDownload(entries)
 }
 
 const startDownload = async () => {
   if (!shareData.value || downloading.value) return
+  const entries = buildDownloadEntries(shareData.value.e.map((_, i) => i))
+  if (!entries.length) return
   // 记录每个文件下载计数
-  shareData.value.e.forEach((_, i) => recordDownload(i))
-  await doZipDownload(shareData.value.e)
+  recordDownload(entries.map(e => e._entryIndex))
+  clearSelection()
+  await doZipDownload(entries)
 }
 
 // 核心打包逻辑（entries → fetch → JSZip → 保存）

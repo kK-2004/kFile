@@ -1,9 +1,11 @@
 package com.kk.share.repo;
 
 import com.kk.share.entity.ShareLink;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +15,10 @@ import java.util.Optional;
 
 public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
     Optional<ShareLink> findByCode(String code);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from ShareLink s where s.code = :code")
+    Optional<ShareLink> findByCodeForUpdate(@Param("code") String code);
 
     @Modifying
     @Query("DELETE FROM ShareLink s WHERE s.expireAt IS NOT NULL AND s.expireAt < :now")
@@ -29,8 +35,4 @@ public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
     /** 列出所有（SUPER 用），分页 */
     Page<ShareLink> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
-    /** 原子自增链接维度下载计数（兼容旧行 NULL，COALESCE 兜底为 0） */
-    @Modifying
-    @Query("update ShareLink s set s.downloadCount = coalesce(s.downloadCount, 0) + 1 where s.code = :code")
-    int incrementDownloadCount(@Param("code") String code);
 }

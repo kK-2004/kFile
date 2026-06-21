@@ -9,13 +9,17 @@ import lombok.Data;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 public class ShareController {
@@ -102,8 +106,9 @@ public class ShareController {
 
     /** 记录下载（permitAll，无鉴权）：链接维度 +1，可选 entryIndex 指定文件维度 +1 */
     @PostMapping("/api/share/{code}/download")
+    @Transactional
     public ResponseEntity<?> recordDownload(@PathVariable String code, @RequestBody(required = false) java.util.Map<String, Object> body) {
-        ShareLink link = shareLinkRepository.findByCode(code).orElse(null);
+        ShareLink link = shareLinkRepository.findByCodeForUpdate(code).orElse(null);
         if (link == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "分享链接不存在"));
         }
@@ -111,33 +116,62 @@ public class ShareController {
             return ResponseEntity.status(HttpStatus.GONE).body(Map.of("message", "分享链接已过期"));
         }
         try {
-            // 链接维度 +1（原子自增，兼容旧行 NULL）
-            shareLinkRepository.incrementDownloadCount(code);
-            // 文件维度 +1（若指定 entryIndex）：重读最新实体后改 data JSON
-            Integer entryIndex = null;
-            if (body != null && body.get("entryIndex") instanceof Number n) {
-                entryIndex = n.intValue();
-            }
-            if (entryIndex != null) {
-                ShareLink fresh = shareLinkRepository.findByCode(code).orElse(null);
-                if (fresh != null) {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    java.util.Map<String, Object> data = mapper.readValue(fresh.getData(), java.util.Map.class);
-                    @SuppressWarnings("unchecked")
-                    java.util.List<java.util.Map<String, Object>> entries = (java.util.List<java.util.Map<String, Object>>) data.get("entries");
-                    if (entries != null && entryIndex >= 0 && entryIndex < entries.size()) {
+            Set<Integer> entryIndexes = extractEntryIndexes(body);
+            int incrementBy = 1;
+
+            if (!entryIndexes.isEmpty()) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.Map<String, Object> data = mapper.readValue(link.getData(), java.util.Map.class);
+                @SuppressWarnings("unchecked")
+                java.util.List<java.util.Map<String, Object>> entries = (java.util.List<java.util.Map<String, Object>>) data.get("entries");
+                int validCount = 0;
+                if (entries != null) {
+                    for (Integer entryIndex : entryIndexes) {
+                        if (entryIndex == null || entryIndex < 0 || entryIndex >= entries.size()) {
+                            continue;
+                        }
                         java.util.Map<String, Object> e = entries.get(entryIndex);
                         int cur = e.get("downloadCount") instanceof Number num ? num.intValue() : 0;
                         e.put("downloadCount", cur + 1);
-                        fresh.setData(mapper.writeValueAsString(data));
-                        shareLinkRepository.save(fresh);
+                        validCount++;
                     }
                 }
+                if (validCount > 0) {
+                    link.setData(mapper.writeValueAsString(data));
+                    incrementBy = validCount;
+                } else {
+                    incrementBy = 0;
+                }
+            }
+
+            if (incrementBy > 0) {
+                int current = link.getDownloadCount() == null ? 0 : link.getDownloadCount();
+                link.setDownloadCount(current + incrementBy);
+                shareLinkRepository.save(link);
             }
             return ResponseEntity.ok(Map.of("ok", true));
         } catch (Exception e) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "记录失败"));
         }
+    }
+
+    private Set<Integer> extractEntryIndexes(Map<String, Object> body) {
+        Set<Integer> indexes = new LinkedHashSet<>();
+        if (body == null) {
+            return indexes;
+        }
+        if (body.get("entryIndex") instanceof Number n) {
+            indexes.add(n.intValue());
+        }
+        if (body.get("entryIndexes") instanceof Iterable<?> values) {
+            for (Object value : values) {
+                if (value instanceof Number n) {
+                    indexes.add(n.intValue());
+                }
+            }
+        }
+        return indexes;
     }
 
     @Data
