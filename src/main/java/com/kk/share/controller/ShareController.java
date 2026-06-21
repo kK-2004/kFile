@@ -85,7 +85,7 @@ public class ShareController {
                     out.put("f", e.get("f"));
                     out.put("p", e.getOrDefault("p", ""));
                     out.put("s", e.get("s"));
-                    // 过滤掉 storageSource/storageKey（内部字段，不暴露给前端）
+                    out.put("downloadCount", e.getOrDefault("downloadCount", 0));
                     filtered.add(out);
                 }
                 data.put("entries", filtered);
@@ -93,9 +93,47 @@ public class ShareController {
             if (link.getExpireAt() != null) {
                 data.put("expireAt", link.getExpireAt().toEpochMilli());
             }
+            data.put("downloadCount", link.getDownloadCount());
             return ResponseEntity.ok(data);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "数据解析失败"));
+        }
+    }
+
+    /** 记录下载（permitAll，无鉴权）：链接维度 +1，可选 entryIndex 指定文件维度 +1 */
+    @PostMapping("/api/share/{code}/download")
+    public ResponseEntity<?> recordDownload(@PathVariable String code, @RequestBody(required = false) java.util.Map<String, Object> body) {
+        ShareLink link = shareLinkRepository.findByCode(code).orElse(null);
+        if (link == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "分享链接不存在"));
+        }
+        if (link.getExpireAt() != null && java.time.Instant.now().isAfter(link.getExpireAt())) {
+            return ResponseEntity.status(HttpStatus.GONE).body(Map.of("message", "分享链接已过期"));
+        }
+        try {
+            // 链接维度 +1
+            link.setDownloadCount(link.getDownloadCount() + 1);
+            // 文件维度 +1（若指定 entryIndex）
+            Integer entryIndex = null;
+            if (body != null && body.get("entryIndex") instanceof Number n) {
+                entryIndex = n.intValue();
+            }
+            if (entryIndex != null) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.Map<String, Object> data = mapper.readValue(link.getData(), java.util.Map.class);
+                @SuppressWarnings("unchecked")
+                java.util.List<java.util.Map<String, Object>> entries = (java.util.List<java.util.Map<String, Object>>) data.get("entries");
+                if (entries != null && entryIndex >= 0 && entryIndex < entries.size()) {
+                    java.util.Map<String, Object> e = entries.get(entryIndex);
+                    int cur = e.get("downloadCount") instanceof Number num ? num.intValue() : 0;
+                    e.put("downloadCount", cur + 1);
+                    link.setData(mapper.writeValueAsString(data));
+                }
+            }
+            shareLinkRepository.save(link);
+            return ResponseEntity.ok(Map.of("ok", true));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "记录失败"));
         }
     }
 

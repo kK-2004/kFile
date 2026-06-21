@@ -57,6 +57,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/auth/**").permitAll()
                 .requestMatchers("/api/mcp/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/share/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/share/*/download").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(HttpMethod.GET,
                         "/api/projects",

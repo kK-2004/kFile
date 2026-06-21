@@ -1433,10 +1433,6 @@ watch(() => ({ ...submitter.value }), () => {
     padding-right: 1rem;
   }
 
-  .grid-cols-1.md\\:grid-cols-2 {
-    grid-template-columns: 1fr;
-  }
-
   .project-name-highlight {
     font-size: 18px;
   }

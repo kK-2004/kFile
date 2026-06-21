@@ -95,8 +95,8 @@ const onSubmit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: calc(100vh - 112px);
-  min-height: calc(100vh - 112px);
+  height: calc(100vh - 64px);
+  min-height: calc(100vh - 64px);
   padding: 24px;
   box-sizing: border-box;
   overflow: hidden;
@@ -131,11 +131,8 @@ const onSubmit = async () => {
   overflow: hidden;
   background: var(--login-card-bg);
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
-  margin-top: -100px;
-}
-
-.login-card:hover {
-  transform: translateY(-2px);
+  /* 视觉上略微上移，让卡片在视口中偏上居中 */
+  margin-top: -40px;
 }
 
 .login-card :deep(.el-card__header),
@@ -243,7 +240,7 @@ const onSubmit = async () => {
   .login-card {
     width: 100%;
     border-radius: 12px;
-    margin-top: -64px;
+    margin-top: -24px;
   }
 
   .login-title {

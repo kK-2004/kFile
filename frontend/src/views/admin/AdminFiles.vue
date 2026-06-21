@@ -51,6 +51,7 @@
       :data="nodes"
       v-loading="loading"
       @selection-change="onSelectionChange"
+      @row-click="onRowClick"
       row-key="id"
       height="100%"
       style="flex:1; min-height:0;"
@@ -227,7 +228,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import api from '../../api'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -252,10 +253,12 @@ const resumeUpload = (row) => {
 const onResumeFileSelected = async (e) => {
   const file = e.target.files?.[0]
   e.target.value = '' // 重置以便重选
-  if (!file || !pendingResume.value) return
+  if (!file || !pendingResume.value) {
+    return
+  }
   const row = pendingResume.value
   pendingResume.value = null
-  // 校验文件名 + 大小一致（快速校验，跳过 MD5 预计算；完整性由 complete 的 part ETag 兜底）
+  // 校验文件名 + 大小一致
   if (file.name !== row.originalName && file.name !== row.name) {
     ElMessage.warning(`请选择同一个文件（期望：${row.originalName || row.name}）`)
     return
@@ -264,7 +267,7 @@ const onResumeFileSelected = async (e) => {
     ElMessage.error(`文件大小不一致（期望 ${row.size} 字节，实际 ${file.size} 字节），请选择原文件`)
     return
   }
-  // 直接走分片续传（uploadChunked 内部算 MD5 → init 检测续传 → 只传剩余 chunk）
+  // 直接走分片续传
   const uid = `resume-${Date.now()}`
   const item = ref({ uid, name: file.name, percent: 0, status: 'uploading', mode: 'chunk', error: '', _file: file })
   uploads.value.push(item.value)
@@ -398,6 +401,16 @@ const onNameClick = (row) => {
   if (row.type === 'FOLDER') goParent(row.id)
 }
 
+// 点击行切换选中：点击复选框列、操作按钮、文件名链接时不触发（这些元素自身处理交互）
+const onRowClick = (row, _column, event) => {
+  const tag = (event?.target?.tagName || '').toUpperCase()
+  // 复选框 / 单元格内按钮 / 链接自身已处理，避免双触发
+  if (['INPUT', 'BUTTON', 'A', 'LABEL'].includes(tag)) return
+  // el-checkbox 内部还会包一层 .el-checkbox__input，忽略
+  if (event?.target?.closest?.('.el-checkbox')) return
+  tableRef.value?.toggleRowSelection(row)
+}
+
 const openMkdir = () => {
   mkdirName.value = ''
   mkdirVisible.value = true
@@ -495,7 +508,7 @@ const processUpload = async (item) => {
     item.status = 'done'
     ElMessage.success(`已上传：${file.name}`)
     await load()
-    loadQuota() // 刷新配额显示
+    loadQuota()
   } catch (e) {
     item.status = 'error'
     item.error = e?.response?.data?.message || e?.message || ''
@@ -505,6 +518,11 @@ const processUpload = async (item) => {
     // 清理已完成/失败太久的，保留最近若干
     refreshUploads()
     pumpQueue()
+    // 队列全部完成（无 uploading/queued）时自动关闭模态框，露出已刷新的文件列表
+    const hasActive = uploads.value.some(u => u.status === 'uploading' || u.status === 'queued')
+    if (!hasActive) {
+      setTimeout(() => { uploadModalVisible.value = false }, 800)
+    }
   }
 }
 
@@ -519,7 +537,8 @@ const queueStatusText = (u) => {
   if (u.status === 'done') return '完成'
   if (u.status === 'error') return '失败'
   if (u.status === 'queued') return '排队中'
-  return (u.mode === 'chunk' ? '分片 ' : '') + u.percent + '%'
+  if (u.mode === 'hash') return '指纹 ' + u.percent + '%'
+  return (u.mode === 'chunk' ? '分片上传中 ' : '') + u.percent + '%'
 }
 
 // 单次直传（≤50MB 或 oss）：init→PUT→complete
@@ -531,7 +550,8 @@ const uploadSingle = async (file, item) => {
     originalName: file.name,
     contentType
   })
-  // 如果是续传命中的已上传文件（理论上单次不命中），直接返回
+  // init 已写入 StoredFile(UPLOADING)，立即刷新列表让文件显示
+  load()
   await api.directPutObject(init.putUrl, file, contentType, (e) => {
     if (e.total) item.percent = Math.min(99, Math.round((e.loaded / e.total) * 100))
   })
@@ -548,11 +568,14 @@ const uploadSingle = async (file, item) => {
 // 分片断点续传（>50MB，minio）：SparkMD5 → init → 循环(sign→PUT→收集etag) → complete
 const uploadChunked = async (file, item) => {
   const contentType = file.type || 'application/octet-stream'
-  // 1. SparkMD5 流式增量算整文件 MD5
-  const contentMd5 = await computeFileMd5(file, (p) => { item.percent = Math.min(5, Math.round(p * 5)) })
+  // 1. SparkMD5 流式增量算整文件 MD5（映射到 0~8%）
+  item.mode = 'hash'
+  const contentMd5 = await computeFileMd5(file, (p) => { item.percent = Math.min(8, Math.round(p * 8)) })
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
 
-  // 2. init（后端 createMultipartUpload + ListParts 续传判断）
+  // 2. init（后端 createMultipartUpload + ListParts 续传判断），进度 8→10%
+  item.mode = 'init'
+  item.percent = 9
   const { data: init } = await api.adminFileMultipartInit({
     parentId: currentParentId.value,
     originalName: file.name,
@@ -562,10 +585,12 @@ const uploadChunked = async (file, item) => {
     contentMd5
   })
   if (init.alreadyDone) {
-    // 已上传完成（幂等命中）
     item.percent = 100
     return
   }
+  item.mode = 'chunk'
+  // init 已写入 StoredFile(UPLOADING)，立即刷新列表让文件显示出来
+  load()
 
   // uploadedParts 是 [{partNumber, etag}]（S3 partNumber 从 1 开始）
   const uploadedMap = new Map()
@@ -890,5 +915,10 @@ onMounted(async () => {
   margin-top: 8px;
   color: var(--kf-muted);
   font-size: 12px;
+}
+
+/* 整行可点击选中：行 hover 提示 */
+.files-card :deep(.el-table__row) {
+  cursor: pointer;
 }
 </style>

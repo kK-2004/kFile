@@ -98,17 +98,30 @@ public class ShareLinkAdminController {
             node.put("expireAt", link.getExpireAt());
             node.put("expired", link.getExpireAt() != null && Instant.now().isAfter(link.getExpireAt()));
             node.put("permanent", link.getExpireAt() == null);
-            // 解析 filename
+            node.put("downloadCount", link.getDownloadCount());
+            // 解析 filename + 文件维度下载量
+            List<Map<String, Object>> fileDownloads = new ArrayList<>();
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 Map<String, Object> data = mapper.readValue(link.getData(), Map.class);
                 node.put("filename", data.get("filename"));
                 Object entries = data.get("entries");
-                node.put("fileCount", entries instanceof List<?> list ? list.size() : 0);
+                if (entries instanceof List<?> list) {
+                    node.put("fileCount", list.size());
+                    for (Object o : list) {
+                        if (!(o instanceof Map<?, ?> em)) continue;
+                        String fname = em.get("f") == null ? "" : String.valueOf(em.get("f"));
+                        int cnt = em.get("downloadCount") instanceof Number num ? num.intValue() : 0;
+                        fileDownloads.add(Map.of("name", fname, "count", cnt));
+                    }
+                } else {
+                    node.put("fileCount", 0);
+                }
             } catch (Exception e) {
                 node.put("filename", "未知");
                 node.put("fileCount", 0);
             }
+            node.put("fileDownloads", fileDownloads);
             nodes.add(node);
         }
 

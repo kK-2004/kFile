@@ -109,6 +109,19 @@ public class StoredFileService {
         String folderPath = resolveFolderPath(parentId);
         String storageKey = StorageKeys.buildDirectUploadKey(rootPrefix, folderPath, originalName);
         String putUrl = svc.presignedPutUrl(storageKey, DEFAULT_DIRECT_EXPIRE_SECONDS, contentType);
+        // 预创建 StoredFile(UPLOADING)，让上传中的文件立即出现在列表里
+        StoredFile pre = new StoredFile();
+        pre.setParentId(parentId);
+        pre.setUploaderId(uploaderId);
+        pre.setName(StorageKeys.baseName(originalName));
+        pre.setType(StoredFile.TYPE_FILE);
+        pre.setStorageSource(svc.sourceId());
+        pre.setStorageKey(storageKey);
+        pre.setOriginalName(originalName);
+        pre.setContentType(contentType);
+        pre.setSize(0);
+        pre.setStatus(StoredFile.STATUS_UPLOADING);
+        storedFileRepository.save(pre);
         return new DirectUploadInit(storageKey, svc.sourceId(), putUrl, DEFAULT_DIRECT_EXPIRE_SECONDS);
     }
 
@@ -116,17 +129,20 @@ public class StoredFileService {
     public StoredFile completeUpload(Long parentId, String source, String storageKey, String originalName, String contentType, Long size, Long uploaderId) {
         validateParentExists(parentId, uploaderId);
         StorageBrowserService svc = resolveUploadService(source);
-        // 不再 stat（部分 MinIO 配置下 stat 返回 AccessDenied）；直接用前端传的 size
         long fileSize = size != null ? size : 0L;
-        // 落库前校验配额
         checkQuota(uploaderId, fileSize);
-        StoredFile f = new StoredFile();
-        f.setParentId(parentId);
-        f.setUploaderId(uploaderId);
+        // 查找 init 时预创建的 UPLOADING 记录，有则更新，无则新建
+        StoredFile f = storedFileRepository.findByStorageKeyAndStatus(storageKey, StoredFile.STATUS_UPLOADING)
+                .orElse(null);
+        if (f == null) {
+            f = new StoredFile();
+            f.setStorageKey(storageKey);
+            f.setStorageSource(svc.sourceId());
+            f.setUploaderId(uploaderId);
+            f.setParentId(parentId);
+        }
         f.setName(StorageKeys.baseName(originalName));
         f.setType(StoredFile.TYPE_FILE);
-        f.setStorageSource(svc.sourceId());
-        f.setStorageKey(storageKey);
         f.setOriginalName(originalName);
         f.setSize(fileSize);
         f.setContentType(contentType);

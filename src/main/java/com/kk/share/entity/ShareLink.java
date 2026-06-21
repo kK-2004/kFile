@@ -24,4 +24,8 @@ public class ShareLink {
     private Instant createdAt;
 
     private Instant expireAt;
+
+    /** 链接维度下载总次数 */
+    @Column(name = "download_count")
+    private int downloadCount;
 }

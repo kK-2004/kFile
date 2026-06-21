@@ -50,7 +50,8 @@
           </div>
 
           <div class="header-right">
-            <el-space :size="8" class="nav-space">
+            <!-- 桌面端：完整导航 -->
+            <el-space :size="8" class="nav-space" v-show="!isMobile">
               <template v-if="auth && auth.user">
                 <el-button
                     v-if="!isUserSubmit && !(isAdminLogin && !auth.user)"
@@ -127,6 +128,11 @@
                 <el-icon size="16"><component :is="themeIconComp" /></el-icon>
               </el-button>
 
+              <!-- 移动端汉堡菜单 -->
+              <el-button v-show="isMobile" class="theme-btn" text @click="drawerVisible = true">
+                <el-icon size="18"><Menu /></el-icon>
+              </el-button>
+
               <template v-if="isAdmin && auth && auth.user">
                 <div class="user-info">
                   <span class="username">{{ auth.user.username }}</span>
@@ -157,6 +163,37 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- 移动端导航抽屉 -->
+    <el-drawer v-model="drawerVisible" direction="ltr" size="70%" :with-header="false">
+      <div class="drawer-nav">
+        <div class="drawer-section">
+          <el-button text class="drawer-btn" @click="navigate('/user/projects'); drawerVisible=false">用户端</el-button>
+          <el-button text class="drawer-btn" @click="navigate('/admin'); drawerVisible=false">管理端</el-button>
+        </div>
+        <template v-if="isAdmin && auth && auth.user">
+          <el-divider />
+          <div class="drawer-section">
+            <el-button text class="drawer-btn" @click="navigate('/admin/projects'); drawerVisible=false">项目</el-button>
+            <el-button v-if="isSuper" text class="drawer-btn" @click="navigate('/admin/templates'); drawerVisible=false">模板管理</el-button>
+            <el-button v-if="isSuper" text class="drawer-btn" @click="navigate('/admin/users'); drawerVisible=false">管理员与权限</el-button>
+            <el-button v-if="isSuper" text class="drawer-btn" @click="navigate('/admin/settings'); drawerVisible=false">系统设置</el-button>
+            <el-button text class="drawer-btn" @click="navigate('/admin/files'); drawerVisible=false">文件管理</el-button>
+            <el-button text class="drawer-btn" @click="navigate('/admin/shares'); drawerVisible=false">分享管理</el-button>
+          </div>
+          <el-divider />
+          <div class="drawer-section">
+            <el-button text class="drawer-btn" @click="cycleTheme">主题：{{ themeModeLabel }}</el-button>
+            <el-button text class="drawer-btn" @click="openChangePwd; drawerVisible=false">修改密码</el-button>
+            <el-button text class="drawer-btn logout" @click="logout; drawerVisible=false">退出</el-button>
+          </div>
+          <div class="drawer-user">
+            <span class="username">{{ auth.user.username }}</span>
+            <span class="user-role">{{ (auth.user.role||'').toUpperCase() }}</span>
+          </div>
+        </template>
+      </div>
+    </el-drawer>
 
     <el-dialog v-model="pwdVisible" title="修改密码" width="420px" class="pwd-dialog">
       <el-form :model="pwdForm" label-width="100px">
@@ -209,7 +246,7 @@ import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 import api from './api'
 import { ElMessage } from 'element-plus'
-import { CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import { CircleCheckFilled, CircleCloseFilled, Menu } from '@element-plus/icons-vue'
 import { Sunny, Moon, Monitor } from '@element-plus/icons-vue'
 import NewYearElements from './components/NewYearElements.vue'
 
@@ -237,6 +274,21 @@ const themeTooltip = computed(() => {
   return '跟随系统（点击切换）'
 })
 const cycleTheme = () => theme.cycleMode()
+const themeModeLabel = computed(() => {
+  if (theme.mode === 'light') return '亮色'
+  if (theme.mode === 'dark') return '暗色'
+  return '跟随系统'
+})
+
+// 移动端导航抽屉
+const isMobile = ref(false)
+const drawerVisible = ref(false)
+const updateMobile = () => { isMobile.value = window.matchMedia('(max-width: 768px)').matches }
+if (typeof window !== 'undefined') {
+  updateMobile()
+  window.matchMedia('(max-width: 768px)').addEventListener('change', updateMobile)
+}
+const navigate = (path) => { router.push(path) }
 const showNewYearElements = computed(() => {
   const now = new Date()
 
@@ -505,6 +557,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 }
 /* 强制覆盖 Element Plus 默认主区域内边距 */
 :deep(.el-main.app-main) { padding: 0 !important; }
+
+/* 移动端导航抽屉 */
+.drawer-nav { display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; }
+.drawer-section { display: flex; flex-direction: column; gap: 2px; }
+.drawer-btn { justify-content: flex-start !important; font-size: 15px !important; padding: 12px 16px !important; color: var(--kf-text) !important; }
+.drawer-btn:hover { background: var(--kf-hover-bg) !important; }
+.drawer-btn.logout { color: var(--kf-danger) !important; }
+.drawer-user { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 12px; }
 
 /* 对话框美化 */
 :deep(.pwd-dialog .el-dialog) {

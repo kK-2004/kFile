@@ -37,4 +37,7 @@ public interface StoredFileRepository extends JpaRepository<StoredFile, Long> {
 
     /** 查某上传者的 UPLOADING 状态文件（未完成上传） */
     List<StoredFile> findByUploaderIdAndStatus(Long uploaderId, String status);
+
+    /** 按 storageKey + UPLOADING 查预创建的记录 */
+    Optional<StoredFile> findByStorageKeyAndStatus(String storageKey, String status);
 }

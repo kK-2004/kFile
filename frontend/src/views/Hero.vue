@@ -45,7 +45,7 @@
         </div>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-6 text-gray-700 dark:text-gray-200 sm:grid-cols-2 lg:gap-8">
+      <div class="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-6 text-gray-700 dark:text-gray-200 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
         <div class="relative rounded-2xl bg-white/60 p-6 ring-1 ring-gray-200/50 backdrop-blur-md transition hover:bg-white/80">
           <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -80,6 +80,33 @@
           <h3 class="text-base font-semibold text-gray-900">一键打包下载</h3>
           <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
             按任务批量打包，省时省力。生成下载直链，支持定时/限时分享，集中分发更安全。
+          </p>
+        </div>
+        <div class="relative rounded-2xl bg-white/60 p-6 ring-1 ring-gray-200/50 backdrop-blur-md transition hover:bg-white/80">
+          <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h3 class="text-base font-semibold text-gray-900">MCP AI 集成</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            通过 <span class="text-cyan-600 font-medium">Model Context Protocol</span> 接入 AI 客户端，让 AI 直接查询项目、查看提交、生成分享链接。
+          </p>
+        </div>
+        <div class="relative rounded-2xl bg-white/60 p-6 ring-1 ring-gray-200/50 backdrop-blur-md transition hover:bg-white/80">
+          <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3 class="text-base font-semibold text-gray-900">文件管理</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            <span class="text-violet-600 font-medium">多级文件夹</span>组织文件，大文件断点续传，按用户分配独立空间配额。
+          </p>
+        </div>
+        <div class="relative rounded-2xl bg-white/60 p-6 ring-1 ring-gray-200/50 backdrop-blur-md transition hover:bg-white/80">
+          <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+          </div>
+          <h3 class="text-base font-semibold text-gray-900">对象存储双源</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            支持 <span class="text-sky-600 font-medium">阿里云 OSS + MinIO</span> 双数据源，浏览器直传不经过服务器，安全高效。
           </p>
         </div>
       </div>

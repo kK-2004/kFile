@@ -18,20 +18,6 @@
       <section class="hero">
         <span class="hero-badge">项目名称</span>
         <h1 class="hero-title">{{ shareData.n }}</h1>
-        <div class="hero-meta">
-          <div class="meta-item">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span>{{ shareData.e.length }} 个文件</span>
-          </div>
-          <div class="meta-item">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-            <span>{{ totalSizeText }}</span>
-          </div>
-          <div class="meta-item">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span>{{ expireText }}</span>
-          </div>
-        </div>
       </section>
 
       <!-- main content -->
@@ -65,12 +51,17 @@
               <table class="file-table">
                 <thead>
                   <tr>
+                    <th style="width:36px;"><input type="checkbox" :checked="allSelected" @change="toggleSelectAll($event.target.checked)" /></th>
                     <th>文件名</th>
-                    <th class="text-right">大小</th>
+                    <th class="text-right" style="width:70px;">下载</th>
+                    <th class="text-right" style="width:80px;">大小</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(f, i) in visibleFiles" :key="i">
+                  <tr v-for="(f, i) in visibleFiles" :key="i"
+                      :class="{ 'row-selected': selectedIndexes.has(f._idx) }"
+                      @click="onRowClick($event, f._idx)">
+                    <td @click.stop><input type="checkbox" :checked="selectedIndexes.has(f._idx)" @change="toggleSelect(f._idx)" /></td>
                     <td>
                       <div class="file-name-cell">
                         <div class="file-type-icon" :class="fileTypeClass(f.f)">
@@ -82,6 +73,11 @@
                         </div>
                         <span class="file-name-text">{{ f.p ? f.p + '/' : '' }}{{ f.f }}</span>
                       </div>
+                    </td>
+                    <td class="text-right">
+                      <button class="dl-single-btn" @click.stop="downloadSingle(f._idx)" title="下载此文件">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </button>
                     </td>
                     <td class="text-right file-size-cell">{{ f.s != null ? formatSize(f.s) : '—' }}</td>
                   </tr>
@@ -115,19 +111,31 @@
           <div class="card info-card">
             <h3 class="card-title" style="margin-bottom:12px;">传输详情</h3>
             <div class="info-row">
-              <span class="info-label">文件总数</span>
+              <div class="meta-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span class="info-label">文件总数</span>
+              </div>
               <span class="info-val">{{ shareData.e.length }} 个</span>
             </div>
             <div class="info-row">
-              <span class="info-label">打包大小</span>
+              <div class="meta-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                <span class="info-label">打包大小</span>
+              </div>
               <span class="info-val">{{ totalSizeText }}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">链接有效期</span>
+              <div class="meta-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span class="info-label">链接有效期</span>
+              </div>
               <span class="info-val">{{ expireText }}</span>
             </div>
             <div class="info-row last">
-              <span class="info-label">文件格式</span>
+              <div class="meta-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                <span class="info-label">文件格式</span>
+              </div>
               <span class="info-val">ZIP 压缩包</span>
             </div>
           </div>
@@ -135,6 +143,20 @@
         </div>
       </div>
     </template>
+
+    <!-- 多选浮动操作栏（与管理端文件管理一致） -->
+    <transition name="fade-up">
+      <div v-if="selectedIndexes.size > 0" class="share-selection-bar">
+        <div class="share-selection-count">已选 {{ selectedIndexes.size }} 项</div>
+        <div class="share-selection-actions">
+          <button class="share-action-btn share-action-primary" :disabled="downloading" @click="downloadSelected">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载选中
+          </button>
+          <button class="share-action-btn share-action-cancel" @click="selectedIndexes = new Set()">取消</button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -145,6 +167,7 @@ import api from '../api'
 import FolderNode from '../components/FolderNode.vue'
 
 const shareData = ref(null)
+const shareCode = ref('')
 const error = ref('')
 const downloading = ref(false)
 const progress = ref(0)
@@ -162,6 +185,7 @@ onMounted(async () => {
     const s = params.get('s')
     const d = params.get('d')
     if (s) {
+      shareCode.value = s
       try {
         const { data } = await api.getShare(s)
         if (!data?.entries || !Array.isArray(data.entries) || data.entries.length === 0) {
@@ -232,8 +256,57 @@ const expireText = computed(() => {
 })
 
 const visibleFiles = computed(() => {
-  return showAllFiles.value ? shareData.value.e : shareData.value.e.slice(0, 10)
+  const files = showAllFiles.value ? shareData.value.e : shareData.value.e.slice(0, 10)
+  // 加上原始索引 _idx（用于选择/单文件下载/计数）
+  return files.map((f, i) => ({ ...f, _idx: shareData.value.e.indexOf(f) }))
 })
+
+// 文件多选
+const selectedIndexes = ref(new Set())
+const toggleSelect = (idx) => {
+  const s = new Set(selectedIndexes.value)
+  if (s.has(idx)) s.delete(idx); else s.add(idx)
+  selectedIndexes.value = s
+}
+// 点击整行切换选中（checkbox 和下载按钮已 stop，不会重复触发）
+const onRowClick = (e, idx) => {
+  toggleSelect(idx)
+}
+const toggleSelectAll = (checked) => {
+  if (checked) {
+    selectedIndexes.value = new Set(shareData.value.e.map((_, i) => i))
+  } else {
+    selectedIndexes.value = new Set()
+  }
+}
+const allSelected = computed(() =>
+  shareData.value?.e?.length > 0 && selectedIndexes.value.size === shareData.value.e.length
+)
+
+// 记录下载计数
+const recordDownload = async (entryIndex) => {
+  try {
+    await fetch(`/api/share/${shareCode.value}/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entryIndex != null ? { entryIndex } : {})
+    })
+  } catch { /* ignore */ }
+}
+
+// 单文件下载（直接 a 标签，不走 zip）
+const downloadSingle = async (idx) => {
+  const e = shareData.value.e[idx]
+  if (!e || !e.u) return
+  recordDownload(idx)
+  const a = document.createElement('a')
+  a.href = e.u
+  a.target = '_blank'
+  a.download = e.f
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
 
 // 是否有任何文件带路径（用于决定是否展示「文件夹视图」选项）
 const hasFolders = computed(() => shareData.value?.e.some(f => f.p))
@@ -285,17 +358,34 @@ function fileTypeClass(name) {
   return 'type-doc'
 }
 
+// 打包下载选中的文件
+const downloadSelected = async () => {
+  if (!shareData.value || downloading.value || selectedIndexes.value.size === 0) return
+  const indexes = [...selectedIndexes.value].sort((a, b) => a - b)
+  const entries = indexes.map(i => shareData.value.e[i]).filter(Boolean)
+  if (!entries.length) return
+  // 记录计数（每个选中文件）
+  indexes.forEach(i => recordDownload(i))
+  await doZipDownload(entries)
+}
+
 const startDownload = async () => {
   if (!shareData.value || downloading.value) return
+  // 记录每个文件下载计数
+  shareData.value.e.forEach((_, i) => recordDownload(i))
+  await doZipDownload(shareData.value.e)
+}
+
+// 核心打包逻辑（entries → fetch → JSZip → 保存）
+const doZipDownload = async (entries) => {
+  if (!entries || !entries.length) return
   downloading.value = true
   progress.value = 0
   downloadDone.value = false
 
-  const entries = shareData.value.e
   const zip = new JSZip()
   const concurrency = 4
   let index = 0
-  // 真实进度：按已下载字节 / 总字节
   const totalBytes = entries.reduce((s, e) => s + (e.s || 0), 0)
   let downloadedBytes = 0
   const updateProgress = () => {
@@ -310,26 +400,21 @@ const startDownload = async () => {
       try {
         const resp = await fetch(e.u)
         if (!resp.ok) throw new Error(`下载失败: ${resp.status}`)
-        // 流式读取以跟踪真实下载字节
         const contentLength = Number(resp.headers.get('content-length') || e.s || 0)
         if (resp.body && contentLength > 0) {
           const reader = resp.body.getReader()
           const chunks = []
-          let received = 0
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
             chunks.push(value)
-            received += value.length
             downloadedBytes += value.length
             updateProgress()
           }
-          const blob = new Blob(chunks)
-          const buf = await blob.arrayBuffer()
+          const buf = await new Blob(chunks).arrayBuffer()
           const zipPath = e.p ? `${e.p}/${e.f}` : (e.f || `file-${current + 1}`)
           zip.file(zipPath, buf)
         } else {
-          // 无法流式（无 body 或无 content-length），回退整体读取
           const buf = await resp.arrayBuffer()
           downloadedBytes += contentLength || buf.byteLength
           updateProgress()
@@ -338,7 +423,7 @@ const startDownload = async () => {
         }
       } catch (err) {
         console.warn('download failed for entry', e, err)
-        downloadedBytes += (e.s || 0) // 失败也算进度（避免卡住）
+        downloadedBytes += (e.s || 0)
         updateProgress()
       }
     }
@@ -422,6 +507,9 @@ const startDownload = async () => {
   margin: 0 auto;
   padding: 0 24px;
 }
+@media (max-width: 768px) {
+  .share-page > * { padding: 0 12px; }
+}
 .share-page > .bento-grid {
   padding-bottom: 48px;
 }
@@ -458,7 +546,7 @@ const startDownload = async () => {
 
 /* ── hero ── */
 .hero {
-  padding: 64px 0 40px;
+  padding: 32px 0 20px;
 }
 .hero-badge {
   display: inline-block;
@@ -681,6 +769,38 @@ const startDownload = async () => {
 .dl-btn:hover:not(:disabled) { transform: scale(1.02); }
 .dl-btn:active:not(:disabled) { transform: scale(0.98); }
 .dl-btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+.dl-single-btn {
+  background: none; border: none; cursor: pointer; font-size: 14px;
+  color: var(--text-secondary); padding: 4px 8px; border-radius: 4px;
+  display: inline-flex; align-items: center;
+}
+.dl-single-btn:hover { background: var(--surface-container); color: var(--primary); }
+.file-table input[type="checkbox"] { cursor: pointer; }
+.file-table tbody tr { cursor: pointer; transition: background 0.15s; }
+.file-table tbody tr:hover { background: var(--surface-container); }
+.file-table tbody tr.row-selected { background: var(--primary-light); }
+
+/* 多选浮动操作栏（与管理端一致） */
+.share-selection-bar {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 2000; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 24px; background: var(--surface); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); border: 1px solid var(--border);
+}
+.share-selection-count { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+.share-selection-actions { display: flex; align-items: center; gap: 12px; }
+.share-action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+  cursor: pointer; border: none; transition: all 0.25s ease;
+}
+.share-action-primary { background: var(--primary); color: #fff; }
+.share-action-primary:hover { opacity: 0.9; }
+.share-action-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.share-action-cancel { background: transparent; color: var(--text-muted); }
+.share-action-cancel:hover { background: var(--surface-container); }
+.fade-up-enter-active, .fade-up-leave-active { transition: all 0.25s ease; }
+.fade-up-enter-from, .fade-up-leave-to { opacity: 0; transform: translateX(-50%) translateY(20px); }
 
 .progress-track {
   height: 3px;

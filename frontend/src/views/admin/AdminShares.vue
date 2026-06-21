@@ -29,6 +29,27 @@
       </el-table-column>
       <el-table-column label="文件名" min-width="160" prop="filename" />
       <el-table-column label="文件数" width="80" prop="fileCount" />
+      <el-table-column label="下载量" width="90">
+        <template #default="{row}">
+          <el-tooltip
+            v-if="row.fileDownloads && row.fileDownloads.length"
+            placement="top"
+            effect="light"
+            popper-class="share-dl-tooltip"
+          >
+            <template #content>
+              <div class="dl-tip">
+                <div class="dl-tip-row" v-for="(f, i) in row.fileDownloads" :key="i">
+                  <span class="dl-tip-name" :title="f.name">{{ f.name }}</span>
+                  <span class="dl-tip-count">{{ f.count }}</span>
+                </div>
+              </div>
+            </template>
+            <span class="dl-total">{{ row.downloadCount }}</span>
+          </el-tooltip>
+          <span v-else class="dl-total">{{ row.downloadCount || 0 }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{row}">
           <el-tag v-if="row.permanent" size="small" type="warning">永久</el-tag>
@@ -139,4 +160,17 @@ onMounted(load)
 .header-right { display: flex; align-items: center; gap: 8px; }
 .page-title { margin: 0; font-size: 18px; font-weight: 600; }
 .shares-pagination { margin-top: 12px; display: flex; justify-content: flex-end; flex-shrink: 0; }
+.dl-total { cursor: default; font-variant-numeric: tabular-nums; }
+.share-dl-tooltip { max-width: 360px; }
+.dl-tip { display: flex; flex-direction: column; gap: 2px; }
+.dl-tip-row { display: flex; align-items: center; gap: 16px; min-width: 180px; }
+.dl-tip-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; color: var(--kf-text);
+}
+.dl-tip-count {
+  font-size: 12px; font-weight: 600; color: var(--kf-primary);
+  font-variant-numeric: tabular-nums;
+}
 </style>
