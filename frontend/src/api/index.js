@@ -181,6 +181,9 @@ export default {
   ,adminGetConfig() { return instance.get('/api/admin/config') }
   ,adminUpdateConfig(payload) { return instance.put('/api/admin/config', payload) }
 
+  // ===== 首页 Hero 内容（公开）=====
+  ,getHeroData() { return instance.get('/api/hero') }
+
   // ===== 项目模板 =====
   ,adminListTemplates() { return instance.get('/api/admin/templates') }
   ,adminListUsableTemplates() { return instance.get('/api/admin/templates/usable') }

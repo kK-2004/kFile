@@ -29,11 +29,13 @@ public class AdminConfigController {
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
         java.util.List<String> types = appConfigService.getStringList(AppConfigService.KEY_USER_ALLOWED_FILE_TYPES);
         java.util.List<String> mcpRedirectPrefixes = appConfigService.getStringList(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_PREFIXES);
+        java.util.List<java.util.Map<String, Object>> roadmap = appConfigService.getObjectList(AppConfigService.KEY_HERO_ROADMAP);
         return Map.of(
                 "monthlyLimitUser", monthly,
                 "userTotalQuotaBytes", totalQuota,
                 "allowedFileTypes", types,
-                "mcpRedirectPrefixes", mcpRedirectPrefixes
+                "mcpRedirectPrefixes", mcpRedirectPrefixes,
+                "roadmapItems", roadmap
         );
     }
 
@@ -68,6 +70,21 @@ public class AdminConfigController {
                 return ResponseEntity.badRequest().body(Map.of("message", "mcpRedirectPrefixes 非法"));
             }
         }
+        if (req.getRoadmapItems() != null) {
+            // 校验：每项必须有 status/statusText/title/desc；status 限定枚举
+            for (java.util.Map<String, Object> item : req.getRoadmapItems()) {
+                String status = item.get("status") == null ? "" : String.valueOf(item.get("status")).trim();
+                if (!"done".equals(status) && !"developing".equals(status) && !"planned".equals(status)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "roadmap status 必须为 done/developing/planned"));
+                }
+            }
+            try {
+                String json = objectMapper.writeValueAsString(req.getRoadmapItems());
+                appConfigService.setRaw(AppConfigService.KEY_HERO_ROADMAP, json);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("message", "roadmapItems 非法"));
+            }
+        }
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -77,5 +94,6 @@ public class AdminConfigController {
         private Long userTotalQuotaBytes;    // USER总存储配额（字节）
         private List<String> allowedFileTypes; // USER可用文件扩展名白名单
         private List<String> mcpRedirectPrefixes; // MCP 授权回调 redirect_uri 白名单前缀
+        private List<java.util.Map<String, Object>> roadmapItems; // 首页 Hero 产品路线图（status/statusText/title/desc）
     }
 }

@@ -124,13 +124,9 @@
                 <el-divider direction="vertical" class="nav-divider" />
               </template>
 
+              <!-- 桌面端：主题 + 用户区 + 操作 -->
               <el-button class="theme-btn" text @click="cycleTheme" :title="themeTooltip">
                 <el-icon size="16"><component :is="themeIconComp" /></el-icon>
-              </el-button>
-
-              <!-- 移动端汉堡菜单 -->
-              <el-button v-show="isMobile" class="theme-btn" text @click="drawerVisible = true">
-                <el-icon size="18"><Menu /></el-icon>
               </el-button>
 
               <template v-if="isAdmin && auth && auth.user">
@@ -155,6 +151,16 @@
                 </el-button>
               </template>
             </el-space>
+
+            <!-- 始终显示：移动端汉堡菜单（小屏）/ 主题按钮（小屏兜底，桌面已含主题按钮） -->
+            <div v-show="isMobile" class="mobile-actions">
+              <el-button class="theme-btn" text @click="cycleTheme" :title="themeTooltip">
+                <el-icon size="16"><component :is="themeIconComp" /></el-icon>
+              </el-button>
+              <el-button class="theme-btn" text @click="drawerVisible = true">
+                <el-icon size="20"><Menu /></el-icon>
+              </el-button>
+            </div>
           </div>
         </div>
       </el-header>
@@ -167,25 +173,35 @@
     <!-- 移动端导航抽屉 -->
     <el-drawer v-model="drawerVisible" direction="ltr" size="70%" :with-header="false">
       <div class="drawer-nav">
-        <div class="drawer-section">
-          <el-button text class="drawer-btn" @click="navigate('/user/projects'); drawerVisible=false">用户端</el-button>
-          <el-button text class="drawer-btn" @click="navigate('/admin'); drawerVisible=false">管理端</el-button>
-        </div>
-        <template v-if="isAdmin && auth && auth.user">
-          <el-divider />
+        <!-- 未登录：仅入口 -->
+        <template v-if="!isAdmin || !auth || !auth.user">
           <div class="drawer-section">
-            <el-button text class="drawer-btn" @click="navigate('/admin/projects'); drawerVisible=false">项目</el-button>
-            <el-button v-if="isSuper" text class="drawer-btn" @click="navigate('/admin/templates'); drawerVisible=false">模板管理</el-button>
-            <el-button v-if="isSuper" text class="drawer-btn" @click="navigate('/admin/users'); drawerVisible=false">管理员与权限</el-button>
-            <el-button v-if="isSuper" text class="drawer-btn" @click="navigate('/admin/settings'); drawerVisible=false">系统设置</el-button>
-            <el-button text class="drawer-btn" @click="navigate('/admin/files'); drawerVisible=false">文件管理</el-button>
-            <el-button text class="drawer-btn" @click="navigate('/admin/shares'); drawerVisible=false">分享管理</el-button>
+            <el-button text class="drawer-btn" @click="goDrawer('/admin/login')">登录</el-button>
           </div>
+        </template>
+
+        <!-- 已登录：用户端/管理端入口 -->
+        <template v-else>
+          <div class="drawer-section">
+            <el-button v-if="!isUserSubmit" text class="drawer-btn" @click="goDrawer('/user/projects')">用户端</el-button>
+            <el-button v-if="!isUserSubmit" text class="drawer-btn" @click="goDrawer('/admin')">管理端</el-button>
+          </div>
+          <template v-if="isAdmin">
+            <el-divider />
+            <div class="drawer-section">
+              <el-button text class="drawer-btn" @click="goDrawer('/admin/projects')">项目</el-button>
+              <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/templates')">模板管理</el-button>
+              <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/users')">管理员与权限</el-button>
+              <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/settings')">系统设置</el-button>
+              <el-button text class="drawer-btn" @click="goDrawer('/admin/files')">文件管理</el-button>
+              <el-button text class="drawer-btn" @click="goDrawer('/admin/shares')">分享管理</el-button>
+            </div>
+          </template>
           <el-divider />
           <div class="drawer-section">
-            <el-button text class="drawer-btn" @click="cycleTheme">主题：{{ themeModeLabel }}</el-button>
-            <el-button text class="drawer-btn" @click="openChangePwd; drawerVisible=false">修改密码</el-button>
-            <el-button text class="drawer-btn logout" @click="logout; drawerVisible=false">退出</el-button>
+            <el-button text class="drawer-btn" @click="onDrawerTheme">主题：{{ themeModeLabel }}</el-button>
+            <el-button text class="drawer-btn" @click="onDrawerChangePwd">修改密码</el-button>
+            <el-button text class="drawer-btn logout" @click="onDrawerLogout">退出</el-button>
           </div>
           <div class="drawer-user">
             <span class="username">{{ auth.user.username }}</span>
@@ -288,7 +304,11 @@ if (typeof window !== 'undefined') {
   updateMobile()
   window.matchMedia('(max-width: 768px)').addEventListener('change', updateMobile)
 }
-const navigate = (path) => { router.push(path) }
+// 抽屉内点击：跳转后关闭
+const goDrawer = (path) => {
+  drawerVisible.value = false
+  router.push(path)
+}
 const showNewYearElements = computed(() => {
   const now = new Date()
 
@@ -366,6 +386,19 @@ const changePwd = async () => {
 }
 
 const logout = async () => { await auth.logout(); router.push('/admin/login') }
+
+// 抽屉内：切主题（不关闭抽屉，让用户可连续切换/查看效果）
+const onDrawerTheme = () => { cycleTheme() }
+// 抽屉内：改密码
+const onDrawerChangePwd = () => {
+  drawerVisible.value = false
+  openChangePwd()
+}
+// 抽屉内：退出登录
+const onDrawerLogout = async () => {
+  drawerVisible.value = false
+  await logout()
+}
 </script>
 
 <style>
@@ -565,6 +598,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .drawer-btn:hover { background: var(--kf-hover-bg) !important; }
 .drawer-btn.logout { color: var(--kf-danger) !important; }
 .drawer-user { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 12px; }
+
+/* 移动端：主题 + 汉堡按钮容器 */
+.mobile-actions { display: flex; align-items: center; gap: 4px; }
 
 /* 对话框美化 */
 :deep(.pwd-dialog .el-dialog) {

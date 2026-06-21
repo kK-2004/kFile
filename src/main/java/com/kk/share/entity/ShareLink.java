@@ -25,7 +25,7 @@ public class ShareLink {
 
     private Instant expireAt;
 
-    /** 链接维度下载总次数 */
+    /** 链接维度下载总次数（包装类型兼容旧行 NULL） */
     @Column(name = "download_count")
-    private int downloadCount;
+    private Integer downloadCount = 0;
 }

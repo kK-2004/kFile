@@ -6,7 +6,7 @@
           <span class="header-title">
             提交记录 - <span class="project-name-highlight">{{ projectName }}</span>
           </span>
-          <el-space>
+          <el-space class="header-actions" wrap>
             <el-button @click="$router.back()">返回</el-button>
             <el-button type="primary" @click="exportCsv">导出CSV</el-button>
             <el-button type="success" @click="manualVisible = true">手动上传</el-button>
@@ -17,7 +17,7 @@
 
       <div class="filter-section">
         <el-form inline class="filter-form">
-          <el-form-item style="margin-right: 20px; margin-bottom: 0;">
+          <el-form-item class="filter-item-sort">
             <div class="sort-pill" @click="toggleSort" title="点击切换排序顺序">
               <span class="sort-label">时间</span>
               <span class="sort-value">{{ latestSortOrder === 'desc' ? '最新' : '最早' }}</span>
@@ -28,15 +28,15 @@
               </div>
             </div>
           </el-form-item>
-          <el-form-item label="字段">
+          <el-form-item label="字段" class="filter-item-field">
             <el-select v-model="filterKey" placeholder="选择字段" style="width: 200px;">
               <el-option v-for="f in expectedFields" :key="f.key" :label="f.label + ' ('+f.key+')'" :value="f.key" />
             </el-select>
           </el-form-item>
-          <el-form-item label="值">
+          <el-form-item label="值" class="filter-item-value">
             <el-input v-model="filterValue" placeholder="输入匹配值" />
           </el-form-item>
-          <el-form-item>
+          <el-form-item class="filter-item-actions">
             <el-button type="primary" @click="applyFilter">搜索</el-button>
             <el-button @click="resetFilter">重置</el-button>
             <el-button type="success" @click="startArchive(false)">打包</el-button>
@@ -47,9 +47,8 @@
             >
               <span class="help-icon">?</span>
             </el-tooltip>
-            <el-button type="warning" @click="openArchivePresign(false)" style="margin-left: 8px;">分享链接</el-button>
-            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="startArchive(true)"
-                       style="margin-left: 8px;">按条件打包</el-button>
+            <el-button type="warning" @click="openArchivePresign(false)" class="btn-share">分享链接</el-button>
+            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="startArchive(true)">按条件打包</el-button>
             <el-tooltip
                 effect="dark"
                 placement="top"
@@ -57,8 +56,7 @@
             >
               <span class="help-icon">?</span>
             </el-tooltip>
-            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="openArchivePresign(true)"
-                       style="margin-left: 8px;">按条件分享</el-button>
+            <el-button class="cond-zip-btn" :disabled="!hasFilteredResult" @click="openArchivePresign(true)">按条件分享</el-button>
           </el-form-item>
         </el-form>
       </div>
@@ -172,10 +170,10 @@
           <el-table-column label="逾期" width="80">
             <template #default="{row}"><el-tag :type="isOverdue(row)?'danger':'success'">{{ isOverdue(row)?'是':'否' }}</el-tag></template>
           </el-table-column>
-          <el-table-column prop="ipAddress" label="IP" width="140"/>
-          <el-table-column prop="osName" label="系统" />
-          <el-table-column prop="browserName" label="浏览器" />
-          <el-table-column prop="deviceType" label="设备" width="100"/>
+          <el-table-column prop="ipAddress" label="IP" width="140" class-name="col-secondary"/>
+          <el-table-column prop="osName" label="系统" class-name="col-secondary"/>
+          <el-table-column prop="browserName" label="浏览器" class-name="col-secondary"/>
+          <el-table-column prop="deviceType" label="设备" width="100" class-name="col-secondary"/>
           <el-table-column label="创建时间" width="200">
             <template #default="{row}">{{ formatDateTimeLocal(row.createdAt) }}</template>
           </el-table-column>
@@ -931,11 +929,15 @@ const formatDateTime = (dateTimeStr) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 0 24px;
   font-size: 20px;
   font-weight: 600;
   color: var(--kf-text);
 }
+.header-title { min-width: 0; }
+.header-actions { justify-content: flex-end; }
 
 /* 突出显示当前项目名称 */
 .project-tag {
@@ -1169,16 +1171,25 @@ const formatDateTime = (dateTimeStr) => {
   color: var(--kf-text);
 }
 
-/* 过滤工具条居中 */
+/* 过滤工具条：左对齐换行，小屏友好 */
 .filter-form {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px 16px;
 }
 .filter-form .el-form-item {
   margin-bottom: 0;
+  margin-right: 0;
+}
+/* 搜索/操作组：内部按钮可换行 */
+.filter-item-actions :deep(.el-form-item__content) {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-item-actions :deep(.el-button) {
+  margin-left: 0;
 }
 
 /* 按条件打包按钮：改为白色风格 */
@@ -1291,4 +1302,74 @@ const formatDateTime = (dateTimeStr) => {
   background-color: var(--kf-hover-bg);
   color: var(--kf-primary);
 }
+
+/* ── 移动端响应式（<768px）── */
+@media (max-width: 768px) {
+  /* 全屏容器：允许纵向滚动（桌面端固定 100vh 不滚，移动端放开） */
+  .admin-submissions-fullscreen {
+    height: auto;
+    min-height: calc(100vh - 64px - 2px);
+    overflow: visible;
+  }
+  .submissions-card {
+    height: auto;
+    overflow: visible;
+  }
+  .submissions-card :deep(.el-card__body) {
+    overflow: visible;
+  }
+
+  /* card-header：标题与操作分两行 */
+  .card-header {
+    font-size: 18px;
+    padding: 0 16px;
+  }
+  .project-name-highlight {
+    font-size: 18px;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* 筛选区：紧凑间距，元素铺满 */
+  .filter-section {
+    padding: 16px 12px;
+  }
+  .filter-form {
+    gap: 8px 12px;
+  }
+  .filter-item-field :deep(.el-select),
+  .filter-item-value :deep(.el-input) {
+    width: 100% !important;
+  }
+  .filter-item-field,
+  .filter-item-value {
+    width: 100%;
+  }
+  .filter-item-field :deep(.el-form-item__content),
+  .filter-item-value :deep(.el-form-item__content) {
+    width: 100%;
+  }
+
+  /* 表格容器：高度自适应，允许内部横滚 */
+  .table-container {
+    overflow: auto;
+    min-height: 360px;
+  }
+  /* 表格：移动端用固定高度撑开，避免 height="100%" 在自适应容器里塌缩 */
+  .table-container :deep(.el-table) {
+    height: 420px !important;
+  }
+  /* 隐藏次要列（IP/系统/浏览器/设备） */
+  .table-container :deep(.col-secondary) {
+    display: none;
+  }
+
+  /* 时间线展开区：收窄内边距 */
+  .timeline-container {
+    padding: 16px;
+  }
+}
+
 </style>

@@ -98,7 +98,7 @@ public class ShareLinkAdminController {
             node.put("expireAt", link.getExpireAt());
             node.put("expired", link.getExpireAt() != null && Instant.now().isAfter(link.getExpireAt()));
             node.put("permanent", link.getExpireAt() == null);
-            node.put("downloadCount", link.getDownloadCount());
+            node.put("downloadCount", link.getDownloadCount() == null ? 0 : link.getDownloadCount());
             // 解析 filename + 文件维度下载量
             List<Map<String, Object>> fileDownloads = new ArrayList<>();
             try {

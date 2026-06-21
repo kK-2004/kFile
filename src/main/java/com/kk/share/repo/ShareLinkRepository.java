@@ -28,4 +28,9 @@ public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
 
     /** 列出所有（SUPER 用），分页 */
     Page<ShareLink> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /** 原子自增链接维度下载计数（兼容旧行 NULL，COALESCE 兜底为 0） */
+    @Modifying
+    @Query("update ShareLink s set s.downloadCount = coalesce(s.downloadCount, 0) + 1 where s.code = :code")
+    int incrementDownloadCount(@Param("code") String code);
 }
