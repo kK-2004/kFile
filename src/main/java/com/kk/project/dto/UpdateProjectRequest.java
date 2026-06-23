@@ -15,6 +15,8 @@ public class UpdateProjectRequest {
     private List<Map<String, Object>> expectedUserFields;
     private Long startAt; // epoch millis
     private Long endAt;   // epoch millis
+    private Boolean deadlineNotifyEnabled; // 项目级截止提醒开关
+    private Integer deadlineNotifyHours;   // 截止提醒提前小时数（范围 1-720）
     private Boolean allowResubmit;
     private Boolean allowMultiFiles;
     private Boolean allowOverdue;

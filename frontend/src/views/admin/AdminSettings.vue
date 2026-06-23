@@ -26,6 +26,12 @@
         </el-select>
         <div class="hint">MCP 网页授权的 redirect_uri 必须命中以下前缀之一；留空表示拒绝全部回调（最安全）。例如 http://localhost:、https://file.example.com/</div>
       </el-form-item>
+
+      <el-divider content-position="left">kMessage 截止提醒</el-divider>
+      <el-form-item label="接收群 ID">
+        <el-input v-model="kmsg.groupId" placeholder="飞书群 groupId（接收提醒卡片的群）" clearable style="width:100%"/>
+        <div class="hint">由 kMessage 端托管的飞书群 groupId；k-File 仅向该群发送，渠道实例由 kMessage 内部根据 groupId 自动解析。</div>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
       </el-form-item>
@@ -42,6 +48,7 @@ const form = ref({ monthlyLimitUser: null, userTotalQuotaBytes: null, allowedFil
 const quotaGB = ref(null)
 const types = ref([])
 const mcpPrefixes = ref([])
+const kmsg = ref({ groupId: '' })
 const typeSelectable = computed(()=> Array.from(new Set([...(types.value||[])])))
 const saving = ref(false)
 
@@ -52,6 +59,7 @@ const load = async () => {
     form.value.userTotalQuotaBytes = data.userTotalQuotaBytes ?? null
     types.value = Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : []
     mcpPrefixes.value = Array.isArray(data.mcpRedirectPrefixes) ? data.mcpRedirectPrefixes : []
+    kmsg.value.groupId = data.kmessageGroupId || ''
     quotaGB.value = (data.userTotalQuotaBytes === null || data.userTotalQuotaBytes === undefined)
       ? null
       : Math.round(Number(data.userTotalQuotaBytes)/1024/1024/1024)
@@ -66,7 +74,8 @@ const save = async () => {
       monthlyLimitUser: form.value.monthlyLimitUser ?? null,
       userTotalQuotaBytes: (quotaGB.value && quotaGB.value > 0) ? Math.round(Number(quotaGB.value) * 1024 * 1024 * 1024) : 0,
       allowedFileTypes: (types.value || []).map(s => String(s||'').replace(/^\./,'')),
-      mcpRedirectPrefixes: (mcpPrefixes.value || []).map(s => String(s||'').trim()).filter(Boolean)
+      mcpRedirectPrefixes: (mcpPrefixes.value || []).map(s => String(s||'').trim()).filter(Boolean),
+      kmessageGroupId: (kmsg.value.groupId || '').trim()
     }
     if (payload.userTotalQuotaBytes === 0) payload.userTotalQuotaBytes = null
     await api.adminUpdateConfig(payload)

@@ -9,6 +9,7 @@ import com.kk.project.repo.ProjectRepository;
 import com.kk.project.repo.SubmissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -30,6 +31,11 @@ public class ProjectService {
     private final com.kk.security.repo.AdminUserRepository adminUserRepository;
     private final com.kk.oss.OssService ossService;
     private final com.kk.common.service.AppConfigService appConfigService;
+
+    /** 截止提醒调度（仅 app.kmessage.enabled=true 时装配） */
+    @Autowired(required = false)
+    private ProjectDeadlineReminderService deadlineReminderService;
+
     @Value("${app.project.monthly-limit.user:3}")
     private int userMonthlyCreateLimitDefault;
 
@@ -111,6 +117,8 @@ public class ProjectService {
         p.setAllowOverdue(Boolean.TRUE.equals(req.getAllowOverdue()));
         p.setStartAt(req.getStartAt() == null ? null : Instant.ofEpochMilli(req.getStartAt()));
         p.setEndAt(req.getEndAt() == null ? null : Instant.ofEpochMilli(req.getEndAt()));
+        p.setDeadlineNotifyEnabled(Boolean.TRUE.equals(req.getDeadlineNotifyEnabled()));
+        p.setDeadlineNotifyHours(req.getDeadlineNotifyHours());
         p.setPathFieldKey(req.getPathFieldKey());
         p.setUserSubmitStatusType(req.getUserSubmitStatusType());
         p.setUserSubmitStatusText(req.getUserSubmitStatusText());
@@ -123,6 +131,12 @@ public class ProjectService {
         }
         Project saved = projectRepository.save(p);
         grantCreatorPermissionIfAdmin(saved, authentication);
+        // 截止时间提醒调度（未启用时 deadlineReminderService 为 null，直接跳过）
+        // 项目级开关 deadlineNotifyEnabled 默认关；只有显式开启才创建调度任务
+        if (deadlineReminderService != null && Boolean.TRUE.equals(saved.getDeadlineNotifyEnabled())
+                && saved.getEndAt() != null) {
+            deadlineReminderService.scheduleFor(saved);
+        }
         log.info("BIZ action=PROJECT_CREATE projectId={} projectName={} actor={} roles={} isAdmin={}",
                 saved.getId(),
                 com.kk.common.logging.AuditLogUtil.safe(saved.getName()),
@@ -214,6 +228,9 @@ public class ProjectService {
     @Transactional
     public Project update(Long id, UpdateProjectRequest req, Authentication authentication) {
         Project p = get(id);
+        Instant oldEndAt = p.getEndAt();
+        boolean oldNotify = Boolean.TRUE.equals(p.getDeadlineNotifyEnabled());
+        Integer oldHours = p.getDeadlineNotifyHours();
         boolean isAdmin = false;
         if (authentication != null) {
             for (GrantedAuthority ga : authentication.getAuthorities()) {
@@ -223,8 +240,20 @@ public class ProjectService {
         }
         if (req.getName() != null) p.setName(req.getName());
         if (req.getFileSizeLimitBytes() != null) p.setFileSizeLimitBytes(req.getFileSizeLimitBytes());
+        Instant newEndAt = oldEndAt;
         if (req.getStartAt() != null) p.setStartAt(Instant.ofEpochMilli(req.getStartAt()));
-        if (req.getEndAt() != null) p.setEndAt(Instant.ofEpochMilli(req.getEndAt()));
+        if (req.getEndAt() != null) {
+            newEndAt = Instant.ofEpochMilli(req.getEndAt());
+            p.setEndAt(newEndAt);
+        }
+        if (req.getDeadlineNotifyEnabled() != null) {
+            p.setDeadlineNotifyEnabled(Boolean.TRUE.equals(req.getDeadlineNotifyEnabled()));
+        }
+        if (req.getDeadlineNotifyHours() != null) {
+            p.setDeadlineNotifyHours(req.getDeadlineNotifyHours());
+        }
+        boolean newNotify = Boolean.TRUE.equals(p.getDeadlineNotifyEnabled());
+        Integer newHours = p.getDeadlineNotifyHours();
         if (req.getAllowResubmit() != null) p.setAllowResubmit(req.getAllowResubmit());
         if (req.getAllowMultiFiles() != null) p.setAllowMultiFiles(req.getAllowMultiFiles());
         if (req.getAllowOverdue() != null) p.setAllowOverdue(req.getAllowOverdue());
@@ -259,7 +288,24 @@ public class ProjectService {
             throw new IllegalArgumentException("Invalid JSON for project fields", e);
         }
         // 确保立刻持久化（避免某些环境下的延迟刷新导致前端看到旧值）
-        return projectRepository.save(p);
+        Project updated = projectRepository.save(p);
+        // 截止提醒调度同步：
+        //  - 开关关、或开关开但 endAt 缺：取消已有任务
+        //  - 开关开且 endAt 存在：endAt / 开关 / 提前小时数 任一相对旧值有变动才重新调度
+        if (deadlineReminderService != null) {
+            boolean endAtChanged = (oldEndAt == null) != (newEndAt == null)
+                    || (oldEndAt != null && !oldEndAt.equals(newEndAt));
+            boolean notifyChanged = oldNotify != newNotify;
+            boolean hoursChanged = (oldHours == null) ? (newHours != null) : !oldHours.equals(newHours);
+            if (!newNotify || newEndAt == null) {
+                if (notifyChanged || endAtChanged || hoursChanged) {
+                    deadlineReminderService.cancelFor(updated);
+                }
+            } else if (endAtChanged || notifyChanged || hoursChanged) {
+                deadlineReminderService.scheduleFor(updated);
+            }
+        }
+        return updated;
     }
 
     public List<String> parsePathSegments(Project p) {
@@ -299,6 +345,10 @@ public class ProjectService {
         } catch (Exception ignore) {}
         log.info("BIZ action=PROJECT_DELETE projectId={} projectName={} submissions={} files={}",
                 p.getId(), com.kk.common.logging.AuditLogUtil.safe(p.getName()), submissionCount, fileCount);
+        // 删除项目前先取消截止提醒任务
+        if (deadlineReminderService != null) {
+            deadlineReminderService.cancelFor(p);
+        }
         // 删除项目权限，避免外键约束错误
         permRepo.deleteByProject(p);
         submissionRepository.deleteByProject(p);

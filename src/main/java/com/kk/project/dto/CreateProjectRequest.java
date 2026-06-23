@@ -15,6 +15,8 @@ public class CreateProjectRequest {
     private List<Map<String, Object>> expectedUserFields; // optional schema list
     private Long startAt; // epoch millis
     private Long endAt;   // epoch millis
+    private Boolean deadlineNotifyEnabled; // 项目级截止提醒开关（默认关）
+    private Integer deadlineNotifyHours;   // 截止提醒提前小时数（默认 12，范围 1-720）
     private Boolean allowResubmit;
     private Boolean allowMultiFiles;     // 是否允许一次提交多个文件
     private Boolean allowOverdue; // 是否允许逾期提交

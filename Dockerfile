@@ -1,6 +1,14 @@
 ## ==================== Stage 1: Maven build ====================
 FROM crpi-g3stl1c9yrlh5x39.cn-beijing.personal.cr.aliyuncs.com/kk09/maven:latest AS builder
 
+# GitHub Packages 认证（拉取 kK-2004 私有制品如 kmessage-sdk）。
+# 由 deploy.sh 通过 --build-arg 注入；缺失时 Maven 解析私有依赖会失败。
+# 安全说明：token 会写入本 builder 层（Stage 1），但 Stage 2 只 COPY app.jar，
+# 运行镜像不含 token。注意：未来若启用 buildx cache 导出或 push builder 镜像，
+# 需改用 BuildKit 的 --mount=type=secret 挂载，避免 token 落层。
+ARG GITHUB_PACKAGES_USER=kK-2004
+ARG GITHUB_PACKAGES_TOKEN
+
 RUN mkdir -p /root/.m2 && \
     echo '<?xml version="1.0" encoding="UTF-8"?>' > /root/.m2/settings.xml && \
     echo '<settings>' >> /root/.m2/settings.xml && \
@@ -11,6 +19,15 @@ RUN mkdir -p /root/.m2 && \
     echo '      <url>https://maven.aliyun.com/repository/public</url>' >> /root/.m2/settings.xml && \
     echo '    </mirror>' >> /root/.m2/settings.xml && \
     echo '  </mirrors>' >> /root/.m2/settings.xml && \
+    if [ -n "${GITHUB_PACKAGES_TOKEN}" ]; then \
+      echo '  <servers>' >> /root/.m2/settings.xml && \
+      echo '    <server>' >> /root/.m2/settings.xml && \
+      echo "      <id>github</id>" >> /root/.m2/settings.xml && \
+      echo "      <username>${GITHUB_PACKAGES_USER}</username>" >> /root/.m2/settings.xml && \
+      echo "      <password>${GITHUB_PACKAGES_TOKEN}</password>" >> /root/.m2/settings.xml && \
+      echo '    </server>' >> /root/.m2/settings.xml && \
+      echo '  </servers>' >> /root/.m2/settings.xml; \
+    fi && \
     echo '</settings>' >> /root/.m2/settings.xml
 
 WORKDIR /build
