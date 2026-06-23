@@ -40,13 +40,15 @@ jobs:
             echo "container_name=KFile-test" >> "$GITHUB_OUTPUT"
             echo "host_port=8082" >> "$GITHUB_OUTPUT"
             echo "image_tar=kfile-test.tar.gz" >> "$GITHUB_OUTPUT"
-            echo "Deploy context: branch=test → kfile-test / KFile-test / 8082"
+            echo "env_cors=https://test-file.ksite.xin" >> "$GITHUB_OUTPUT"
+            echo "Deploy context: branch=test → kfile-test / KFile-test / 8082 / cors=test-file.ksite.xin"
           else
             echo "image_name=kfile-v2" >> "$GITHUB_OUTPUT"
             echo "container_name=KFile-v2" >> "$GITHUB_OUTPUT"
             echo "host_port=8081" >> "$GITHUB_OUTPUT"
             echo "image_tar=kfile-v2.tar.gz" >> "$GITHUB_OUTPUT"
-            echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081"
+            echo "env_cors=" >> "$GITHUB_OUTPUT"
+            echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081 / cors=default"
           fi
 
       # 国内服务器：配置 Docker 镜像加速（仅当配置了 DOCKER_MIRROR_URL）
@@ -148,6 +150,7 @@ jobs:
           XXL_JOB_ADMIN_USER: ${{ secrets.XXL_JOB_ADMIN_USER || 'admin' }}
           XXL_JOB_ADMIN_PWD: ${{ secrets.XXL_JOB_ADMIN_PWD }}
           XXL_JOB_ACCESS_TOKEN: ${{ secrets.XXL_JOB_ACCESS_TOKEN }}
+          ENV_CORS: ${{ steps.ctx.outputs.env_cors }}
           KEEP_VERSIONS: "5"
         run: |
           set -euo pipefail
@@ -197,7 +200,8 @@ jobs:
              KMESSAGE_APP_KEY='$KMESSAGE_APP_KEY' KMESSAGE_APP_SECRET='$KMESSAGE_APP_SECRET' \
              XXL_JOB_ENABLED='$XXL_JOB_ENABLED' XXL_JOB_ADMIN_ADDR='$XXL_JOB_ADMIN_ADDR' \
              XXL_JOB_ADMIN_USER='$XXL_JOB_ADMIN_USER' XXL_JOB_ADMIN_PWD='$XXL_JOB_ADMIN_PWD' \
-             XXL_JOB_ACCESS_TOKEN='$XXL_JOB_ACCESS_TOKEN' bash -s" <<'REMOTE'
+             XXL_JOB_ACCESS_TOKEN='$XXL_JOB_ACCESS_TOKEN' \
+             ENV_CORS='$ENV_CORS' bash -s" <<'REMOTE'
           set -euo pipefail
           echo "=== Starting deployment ==="
           cd "$DEPLOY_PATH"
@@ -217,6 +221,14 @@ jobs:
           echo "Stopping old container..."
           docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
           sleep 2
+
+          EXTRA_ENV=()
+          if [[ -n "$ENV_CORS" ]]; then
+            EXTRA_ENV+=( -e "ENV_CORS=$ENV_CORS" )
+            echo "Injecting ENV_CORS=$ENV_CORS"
+          else
+            echo "ENV_CORS empty → use application-prod.yml default"
+          fi
 
           echo "Starting new container..."
           docker run -d --name "$CONTAINER_NAME" \
@@ -246,6 +258,7 @@ jobs:
             -e XXL_JOB_ADMIN_USER="$XXL_JOB_ADMIN_USER" \
             -e XXL_JOB_ADMIN_PWD="$XXL_JOB_ADMIN_PWD" \
             -e XXL_JOB_ACCESS_TOKEN="$XXL_JOB_ACCESS_TOKEN" \
+            "${EXTRA_ENV[@]}" \
             "${IMAGE_NAME}:latest"
 
           sleep 3
