@@ -38,6 +38,5 @@ geoip:
   enabled: ${GEOIP_ENABLED:false}
   mmdbPath: ${GEOIP_MMDB_PATH:}
 
-# MinIO：prod 环境留空占位，需启用时通过 MINIO_* 环境变量注入
 minio:
-  enabled: ${MINIO_ENABLED:false}
+  enabled: ${MINIO_ENABLED:true}

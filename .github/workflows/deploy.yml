@@ -1,0 +1,297 @@
+name: Deploy to Server
+
+# 触发：push 到 test 分支，或手动触发（可在 Actions 页面选择分支）
+on:
+  push:
+    branches:
+      - test
+  workflow_dispatch:
+
+# 同一时间只允许一个部署任务，避免并发互相覆盖
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      # 国内服务器才需要 Docker 镜像加速；secrets 为空则跳过此步骤
+      # 注意：if 条件求值时拿不到 step 级 env，必须经 job 级 env 中转
+      NEED_DOCKER_MIRROR: ${{ secrets.DOCKER_MIRROR_URL != '' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      # 按分支区分部署上下文：test 用 kfile-test + 8082，其它分支用 kfile-v2 + 8081
+      # 这样测试与正式环境在同一台服务器上可并存，互不覆盖（镜像名/容器名/端口都隔离）
+      - name: Set deployment context
+        id: ctx
+        run: |
+          BRANCH="${GITHUB_REF_NAME:-}"
+          if [[ "$BRANCH" == "test" ]]; then
+            echo "image_name=kfile-test" >> "$GITHUB_OUTPUT"
+            echo "container_name=KFile-test" >> "$GITHUB_OUTPUT"
+            echo "host_port=8082" >> "$GITHUB_OUTPUT"
+            echo "image_tar=kfile-test.tar.gz" >> "$GITHUB_OUTPUT"
+            echo "Deploy context: branch=test → kfile-test / KFile-test / 8082"
+          else
+            echo "image_name=kfile-v2" >> "$GITHUB_OUTPUT"
+            echo "container_name=KFile-v2" >> "$GITHUB_OUTPUT"
+            echo "host_port=8081" >> "$GITHUB_OUTPUT"
+            echo "image_tar=kfile-v2.tar.gz" >> "$GITHUB_OUTPUT"
+            echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081"
+          fi
+
+      # 国内服务器：配置 Docker 镜像加速（仅当配置了 DOCKER_MIRROR_URL）
+      - name: Configure Docker registry mirror
+        if: ${{ env.NEED_DOCKER_MIRROR == 'true' }}
+        env:
+          DOCKER_MIRROR_URL: ${{ secrets.DOCKER_MIRROR_URL }}
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /etc/docker
+          sudo tee /etc/docker/daemon.json > /dev/null <<EOF
+          {
+            "registry-mirrors": ["$DOCKER_MIRROR_URL"],
+            "max-concurrent-downloads": 10,
+            "max-concurrent-uploads": 5
+          }
+          EOF
+          sudo systemctl restart docker
+          sleep 5
+          docker info | grep -A 5 "Registry Mirrors" || true
+
+      # 登录阿里云 ACR：Dockerfile 的基础镜像来自私有仓库 crpi-...aliyuncs.com/kk09
+      # 缺少凭据会拉取失败。设置过则登录；未设置则在构建时给出明确报错。
+      - name: Login to Aliyun ACR
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${ACR_REGISTRY:?请在 GitHub Action secret 中设置 ACR_REGISTRY（如 crpi-g3stl1c9yrlh5x39.cn-beijing.personal.cr.aliyuncs.com）}"
+          : "${ACR_USERNAME:?请在 GitHub Action secret 中设置 ACR_USERNAME}"
+          : "${ACR_PASSWORD:?请在 GitHub Action secret 中设置 ACR_PASSWORD}"
+          echo "${ACR_PASSWORD}" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
+
+      # 构建镜像：双标签（latest 滚动 + run_number 历史），便于回滚
+      # GITHUB_PACKAGES_TOKEN 用于拉取 kK-2004 私有制品（如 kmessage-sdk）；
+      # 仅写入 builder 层（Stage 1），运行镜像（Stage 2）不含 token。
+      - name: Build Docker image
+        env:
+          IMAGE_NAME: ${{ steps.ctx.outputs.image_name }}
+          IMAGE_TAR: ${{ steps.ctx.outputs.image_tar }}
+          # 注意：GitHub 保留 GITHUB_ 前缀，secret 名不能用 GITHUB_PACKAGES_*。
+          # 这里用 PACKAGES_USER / PACKAGES_TOKEN，但下传给 Docker 的 build-arg 名
+          # 仍为 GITHUB_PACKAGES_*（与 Dockerfile ARG 保持一致，无需改 Dockerfile）。
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${GITHUB_PACKAGES_USER:=kK-2004}"
+          : "${GITHUB_PACKAGES_TOKEN:?请在 GitHub Action secret 中设置 PACKAGES_TOKEN}"
+          echo "Building ${IMAGE_NAME}:latest (= build #${BUILD_NUMBER})"
+          docker build --progress=plain \
+            -t "${IMAGE_NAME}:latest" \
+            -t "${IMAGE_NAME}:${BUILD_NUMBER}" \
+            --build-arg MAVEN_PROFILE=prod \
+            --build-arg SKIP_TESTS=true \
+            --build-arg BUILD_NUMBER="${BUILD_NUMBER}" \
+            --build-arg GITHUB_PACKAGES_USER="${GITHUB_PACKAGES_USER}" \
+            --build-arg GITHUB_PACKAGES_TOKEN="${GITHUB_PACKAGES_TOKEN}" \
+            .
+          docker images "${IMAGE_NAME}"
+          echo "Saving image to ${IMAGE_TAR}"
+          docker save "${IMAGE_NAME}:latest" "${IMAGE_NAME}:${BUILD_NUMBER}" | gzip > "${IMAGE_TAR}"
+          ls -lh "${IMAGE_TAR}"
+
+      - name: Deploy to server
+        env:
+          IMAGE_NAME: ${{ steps.ctx.outputs.image_name }}
+          IMAGE_TAR: ${{ steps.ctx.outputs.image_tar }}
+          CONTAINER_NAME: ${{ steps.ctx.outputs.container_name }}
+          HOST_PORT: ${{ steps.ctx.outputs.host_port }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          # SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME 写死默认值，
+          # 仍可用同名 secret 覆盖（secrets 为空时取默认）
+          SSH_USER: ${{ secrets.SSH_USER || 'root' }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/root/k-file' }}
+          # 应用运行配置（全部来自 secrets，不在服务器维护 .env）
+          SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME || 'kfile' }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          OSS_AK: ${{ secrets.OSS_AK }}
+          OSS_SK: ${{ secrets.OSS_SK }}
+          # MinIO：默认启用（test 环境用 MinIO），secret 可覆盖
+          MINIO_ENABLED: ${{ secrets.MINIO_ENABLED || 'true' }}
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET: ${{ secrets.MINIO_BUCKET || 'k-file' }}
+          # kMessage（飞书卡片提醒）：app-key 为公开值可直接写默认
+          KMESSAGE_ENABLED: ${{ secrets.KMESSAGE_ENABLED || 'true' }}
+          KMESSAGE_ENDPOINT: ${{ secrets.KMESSAGE_ENDPOINT }}
+          KMESSAGE_APP_KEY: ${{ secrets.KMESSAGE_APP_KEY || 'app_SLeiC8yZdbX7KU2b' }}
+          KMESSAGE_APP_SECRET: ${{ secrets.KMESSAGE_APP_SECRET }}
+          # XXL-Job（项目截止提醒调度）
+          XXL_JOB_ENABLED: ${{ secrets.XXL_JOB_ENABLED || 'true' }}
+          XXL_JOB_ADMIN_ADDR: ${{ secrets.XXL_JOB_ADMIN_ADDR || 'http://127.0.0.1:8080/xxl-job-admin' }}
+          XXL_JOB_ADMIN_USER: ${{ secrets.XXL_JOB_ADMIN_USER || 'admin' }}
+          XXL_JOB_ADMIN_PWD: ${{ secrets.XXL_JOB_ADMIN_PWD }}
+          XXL_JOB_ACCESS_TOKEN: ${{ secrets.XXL_JOB_ACCESS_TOKEN }}
+          KEEP_VERSIONS: "5"
+        run: |
+          set -euo pipefail
+          # 必填校验：缺一项立即报错，避免空值起库
+          # 注：SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME / MINIO_ENABLED 等已有默认值，无需校验
+          : "${SSH_HOST:?missing SSH_HOST secret}"
+          : "${SSH_KEY:?missing SSH_KEY secret}"
+          : "${OSS_AK:?missing OSS_AK secret}"
+          : "${OSS_SK:?missing OSS_SK secret}"
+          : "${SPRING_DATASOURCE_PASSWORD:?missing SPRING_DATASOURCE_PASSWORD secret}"
+          : "${KMESSAGE_APP_SECRET:?missing KMESSAGE_APP_SECRET secret}"
+          : "${XXL_JOB_ADMIN_PWD:?missing XXL_JOB_ADMIN_PWD secret}"
+          : "${XXL_JOB_ACCESS_TOKEN:?missing XXL_JOB_ACCESS_TOKEN secret}"
+
+          SSH_PORT="${SSH_PORT:-22}"
+
+          # 配置 SSH
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -t rsa,ecdsa,ed25519 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30"
+
+          # 确保部署目录存在
+          ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" "mkdir -p '$DEPLOY_PATH'"
+
+          # 上传镜像
+          scp -P "$SSH_PORT" $SSH_OPTS "${IMAGE_TAR}" \
+            "${SSH_USER}@${SSH_HOST}:$DEPLOY_PATH/${IMAGE_TAR}"
+
+          # 远程部署：加载镜像 → 停旧容器 → 起新容器 → 清理 → 重载 nginx
+          # 容器名/端口按分支隔离（test=KFile-test/8082，正式=KFile-v2/8081），
+          # 网络共用 common-net，与 deploy.sh 保持一致
+          ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
+            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_TAR='$IMAGE_TAR' \
+             IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$BUILD_NUMBER' \
+             CONTAINER_NAME='$CONTAINER_NAME' HOST_PORT='$HOST_PORT' \
+             KEEP_VERSIONS='$KEEP_VERSIONS' \
+             SPRING_DATASOURCE_USERNAME='$SPRING_DATASOURCE_USERNAME' \
+             SPRING_DATASOURCE_PASSWORD='$SPRING_DATASOURCE_PASSWORD' \
+             OSS_AK='$OSS_AK' OSS_SK='$OSS_SK' \
+             MINIO_ENABLED='$MINIO_ENABLED' MINIO_ENDPOINT='$MINIO_ENDPOINT' \
+             MINIO_ACCESS_KEY='$MINIO_ACCESS_KEY' MINIO_SECRET_KEY='$MINIO_SECRET_KEY' \
+             MINIO_BUCKET='$MINIO_BUCKET' \
+             KMESSAGE_ENABLED='$KMESSAGE_ENABLED' KMESSAGE_ENDPOINT='$KMESSAGE_ENDPOINT' \
+             KMESSAGE_APP_KEY='$KMESSAGE_APP_KEY' KMESSAGE_APP_SECRET='$KMESSAGE_APP_SECRET' \
+             XXL_JOB_ENABLED='$XXL_JOB_ENABLED' XXL_JOB_ADMIN_ADDR='$XXL_JOB_ADMIN_ADDR' \
+             XXL_JOB_ADMIN_USER='$XXL_JOB_ADMIN_USER' XXL_JOB_ADMIN_PWD='$XXL_JOB_ADMIN_PWD' \
+             XXL_JOB_ACCESS_TOKEN='$XXL_JOB_ACCESS_TOKEN' bash -s" <<'REMOTE'
+          set -euo pipefail
+          echo "=== Starting deployment ==="
+          cd "$DEPLOY_PATH"
+
+          CONTAINER_PORT="8081"
+          DOCKER_NETWORK="common-net"
+          # 与 docker-compose.yml 保持一致的 MySQL 连接（DB 在 common-net 上，外部已有）
+          SPRING_DATASOURCE_URL="jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+
+          # 复用既有外部网络（MySQL 在其上），不重建数据库
+          docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1 || docker network create "$DOCKER_NETWORK"
+
+          echo "Loading Docker image..."
+          docker load < "$IMAGE_TAR"
+          docker tag "${IMAGE_NAME}:${BUILD_NUMBER}" "${IMAGE_NAME}:latest"
+
+          echo "Stopping old container..."
+          docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+          sleep 2
+
+          echo "Starting new container..."
+          docker run -d --name "$CONTAINER_NAME" \
+            -p "${HOST_PORT}:${CONTAINER_PORT}" \
+            --restart always \
+            --network "$DOCKER_NETWORK" \
+            -e SPRING_PROFILES_ACTIVE=prod \
+            -e BUILD_NUMBER="$BUILD_NUMBER" \
+            -e TZ=Asia/Shanghai \
+            -e LOG_PATH=/app/logs \
+            -e SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
+            -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
+            -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
+            -e OSS_AK="$OSS_AK" \
+            -e OSS_SK="$OSS_SK" \
+            -e MINIO_ENABLED="$MINIO_ENABLED" \
+            -e MINIO_ENDPOINT="$MINIO_ENDPOINT" \
+            -e MINIO_ACCESS_KEY="$MINIO_ACCESS_KEY" \
+            -e MINIO_SECRET_KEY="$MINIO_SECRET_KEY" \
+            -e MINIO_BUCKET="$MINIO_BUCKET" \
+            -e KMESSAGE_ENABLED="$KMESSAGE_ENABLED" \
+            -e KMESSAGE_ENDPOINT="$KMESSAGE_ENDPOINT" \
+            -e KMESSAGE_APP_KEY="$KMESSAGE_APP_KEY" \
+            -e KMESSAGE_APP_SECRET="$KMESSAGE_APP_SECRET" \
+            -e XXL_JOB_ENABLED="$XXL_JOB_ENABLED" \
+            -e XXL_JOB_ADMIN_ADDR="$XXL_JOB_ADMIN_ADDR" \
+            -e XXL_JOB_ADMIN_USER="$XXL_JOB_ADMIN_USER" \
+            -e XXL_JOB_ADMIN_PWD="$XXL_JOB_ADMIN_PWD" \
+            -e XXL_JOB_ACCESS_TOKEN="$XXL_JOB_ACCESS_TOKEN" \
+            "${IMAGE_NAME}:latest"
+
+          sleep 3
+          if ! docker ps --filter "name=^${CONTAINER_NAME}$" --filter "status=running" | grep -q "$CONTAINER_NAME"; then
+            echo "=== Container failed to start! ==="
+            docker logs "$CONTAINER_NAME" || true
+            exit 1
+          fi
+
+          # 重载 Nginx（与 deploy.sh 一致）
+          echo "=== Reload Nginx ==="
+          if command -v nginx &>/dev/null; then
+            nginx -t 2>/dev/null && nginx -s reload 2>/dev/null && echo "Nginx reloaded" || echo "WARN: nginx reload failed"
+          elif systemctl is-active --quiet nginx 2>/dev/null; then
+            systemctl reload nginx 2>/dev/null && echo "Nginx reloaded" || echo "WARN: nginx reload failed"
+          else
+            echo "WARN: nginx not detected, skip reload"
+          fi
+
+          # 清理：删 tar + 保留最近 N 个构建号镜像（latest 永不删）
+          echo "=== Cleanup ==="
+          rm -f "$IMAGE_TAR"
+          KEEP="${KEEP_VERSIONS:-5}"
+          docker image prune -f 2>/dev/null || true
+          docker images "$IMAGE_NAME" --format '{{.Tag}} {{.ID}}' \
+            | grep -v '<none>' \
+            | grep -v '^latest ' \
+            | sort -t' ' -k1 -n -r \
+            | tail -n +"$((KEEP + 1))" \
+            | awk '{print $2}' \
+            | while read -r id; do
+                echo "Removing old image: $id"
+                docker rmi "$id" 2>/dev/null || true
+              done
+
+          echo "=== Container status ==="
+          docker ps --filter "name=$CONTAINER_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          echo "=== App logs (last 20 lines) ==="
+          docker logs --tail 20 "$CONTAINER_NAME" || true
+          echo "=== Deployment completed ==="
+          REMOTE
+
+      - name: Cleanup runner artifacts
+        if: always()
+        env:
+          IMAGE_TAR: ${{ steps.ctx.outputs.image_tar }}
+        run: |
+          rm -f "$IMAGE_TAR"
+          echo "Cleaned up local tarball"
