@@ -34,10 +34,8 @@ build/
 
 frontend/node_modules/
 
-# Logs (runtime)
-logs/*.log
-logs/*.log.gz
-logs/*.log.zip
+# Logs (runtime，含子目录如 logs/xxl-job/)
+logs/
 
 
 ## test

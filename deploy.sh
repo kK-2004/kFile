@@ -22,6 +22,10 @@ SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-}
 OSS_AK=${OSS_AK:-}
 OSS_SK=${OSS_SK:-}
 
+# GitHub Packages 拉取私有制品所需的 PAT（Jenkins 注入）
+GITHUB_PACKAGES_USER=${GITHUB_PACKAGES_USER:-kK-2004}
+GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN:-}
+
 # MinIO 配置（可选；未提供时默认禁用）
 MINIO_ENABLED=${MINIO_ENABLED:-false}
 MINIO_ENDPOINT=${MINIO_ENDPOINT:-}
@@ -153,6 +157,10 @@ if [[ -z "${OSS_AK}" ]] || [[ -z "${OSS_SK}" ]]; then
   log_error "OSS_AK 和 OSS_SK 环境变量必须设置（通过 Jenkins Credentials 注入）"
   exit 1
 fi
+if [[ -z "${GITHUB_PACKAGES_TOKEN}" ]]; then
+  log_error "GITHUB_PACKAGES_TOKEN 未设置（Jenkins credentials 'github-packages-token' 缺失）"
+  exit 1
+fi
 
 # ==================== 构建镜像 ====================
 # 注意：必须先构建并验证新镜像成功，再停止旧容器。
@@ -165,6 +173,8 @@ docker build \
   --build-arg MAVEN_PROFILE="${MAVEN_PROFILE}" \
   --build-arg SKIP_TESTS="${SKIP_TESTS}" \
   --build-arg BUILD_NUMBER="${BUILD_NUMBER}" \
+  --build-arg GITHUB_PACKAGES_USER="${GITHUB_PACKAGES_USER}" \
+  --build-arg GITHUB_PACKAGES_TOKEN="${GITHUB_PACKAGES_TOKEN}" \
   "${BUILD_CONTEXT}"
 
 # ==================== 验证镜像 ====================

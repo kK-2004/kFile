@@ -73,6 +73,28 @@
                 </el-form-item>
               </div>
 
+              <div class="deadline-notify-row">
+                <div class="switch-card">
+                  <span class="switch-label">截止提醒</span>
+                  <el-switch v-model="form.deadlineNotifyEnabled" />
+                </div>
+                <el-form-item
+                    v-if="form.deadlineNotifyEnabled"
+                    label="提前小时数"
+                    class="notify-hours-item"
+                >
+                  <el-input-number
+                      v-model="form.deadlineNotifyHours"
+                      :min="1"
+                      :max="720"
+                      :step="1"
+                      controls-position="right"
+                      style="width: 160px;"
+                  />
+                  <div class="form-hint form-hint-top">在截止时间前 N 小时向管理者飞书群发送提醒卡片（范围 1-720）</div>
+                </el-form-item>
+              </div>
+
               <div class="switch-grid">
                 <div class="switch-card">
                   <span class="switch-label">可重复提交</span>
@@ -574,6 +596,8 @@ const form = ref({
   fileSizeLimitBytes: null,
   startAt: null,
   endAt: null,
+  deadlineNotifyEnabled: false,
+  deadlineNotifyHours: 12,
   offline: false,
   allowedSubmitterKeys: []
 })
@@ -967,7 +991,9 @@ function resetFormForNew() {
   form.value = {
     name: '', allowResubmit: true, allowMultiFiles: false, allowOverdue: false,
     userSubmitStatusType: 'info', userSubmitStatusText: '', queryFieldKey: '',
-    fileSizeLimitBytes: null, startAt: null, endAt: null, offline: false, allowedSubmitterKeys: []
+    fileSizeLimitBytes: null, startAt: null, endAt: null,
+    deadlineNotifyEnabled: false, deadlineNotifyHours: 12,
+    offline: false, allowedSubmitterKeys: []
   }
   allowedTypes.value = []
   fileSizeLimitMB.value = null
@@ -1078,6 +1104,8 @@ const load = async () => {
     fileSizeLimitBytes: data.fileSizeLimitBytes,
     startAt: data.startAt,
     endAt: data.endAt,
+    deadlineNotifyEnabled: !!data.deadlineNotifyEnabled,
+    deadlineNotifyHours: data.deadlineNotifyHours != null ? data.deadlineNotifyHours : 12,
     offline: data.offline || false,
     // 可复用字段交给 applyTemplateData 还原（与模板回填共用同一逻辑）
     allowResubmit: true, allowMultiFiles: false, allowOverdue: false,
@@ -1160,6 +1188,17 @@ const save = async () => {
     // ensure numeric timestamps or null
     payload.startAt = payload.startAt ? Number(payload.startAt) : null
     payload.endAt = payload.endAt ? Number(payload.endAt) : null
+    // 截止提醒：开启时必须有截止时间 + 合法小时数
+    if (payload.deadlineNotifyEnabled) {
+      if (!payload.endAt) {
+        throw new Error('开启截止提醒需要先设置截止时间')
+      }
+      const h = Number(payload.deadlineNotifyHours)
+      if (!Number.isFinite(h) || h < 1 || h > 720) {
+        throw new Error('提前小时数必须在 1-720 之间')
+      }
+      payload.deadlineNotifyHours = Math.round(h)
+    }
     // 校验 expectedFields
     const keys = new Set()
     for (const f of expectedFields.value) {
@@ -1436,6 +1475,21 @@ function bindAutoNameDrag() {
 
 <style scoped>
 .hidden { display: none; }
+
+.deadline-notify-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.deadline-notify-row .switch-card {
+  margin-top: 4px;
+}
+.notify-hours-item {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
 
 .header-right-inline {
   display: flex;

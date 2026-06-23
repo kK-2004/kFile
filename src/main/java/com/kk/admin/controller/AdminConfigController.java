@@ -29,14 +29,16 @@ public class AdminConfigController {
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
         java.util.List<String> types = appConfigService.getStringList(AppConfigService.KEY_USER_ALLOWED_FILE_TYPES);
         java.util.List<String> mcpRedirectPrefixes = appConfigService.getStringList(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_PREFIXES);
+        String kmessageGroupId = appConfigService.getRaw(AppConfigService.KEY_KMESSAGE_GROUP_ID);
         java.util.List<java.util.Map<String, Object>> roadmap = appConfigService.getObjectList(AppConfigService.KEY_HERO_ROADMAP);
-        return Map.of(
-                "monthlyLimitUser", monthly,
-                "userTotalQuotaBytes", totalQuota,
-                "allowedFileTypes", types,
-                "mcpRedirectPrefixes", mcpRedirectPrefixes,
-                "roadmapItems", roadmap
-        );
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("monthlyLimitUser", monthly);
+        resp.put("userTotalQuotaBytes", totalQuota);
+        resp.put("allowedFileTypes", types);
+        resp.put("mcpRedirectPrefixes", mcpRedirectPrefixes);
+        resp.put("kmessageGroupId", kmessageGroupId);
+        resp.put("roadmapItems", roadmap);
+        return resp;
     }
 
     @PutMapping
@@ -85,6 +87,10 @@ public class AdminConfigController {
                 return ResponseEntity.badRequest().body(Map.of("message", "roadmapItems 非法"));
             }
         }
+        if (req.getKmessageGroupId() != null) {
+            String v = req.getKmessageGroupId().trim();
+            appConfigService.setRaw(AppConfigService.KEY_KMESSAGE_GROUP_ID, v.isEmpty() ? null : v);
+        }
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -94,6 +100,7 @@ public class AdminConfigController {
         private Long userTotalQuotaBytes;    // USER总存储配额（字节）
         private List<String> allowedFileTypes; // USER可用文件扩展名白名单
         private List<String> mcpRedirectPrefixes; // MCP 授权回调 redirect_uri 白名单前缀
+        private String kmessageGroupId; // kMessage 默认接收飞书群 groupId
         private List<java.util.Map<String, Object>> roadmapItems; // 首页 Hero 产品路线图（status/statusText/title/desc）
     }
 }

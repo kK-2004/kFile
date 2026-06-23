@@ -23,6 +23,8 @@ public class AppConfigService {
     public static final String KEY_MCP_REDIRECT_ALLOWED_PREFIXES = "MCP_REDIRECT_ALLOWED_PREFIXES";
     /** 首页 Hero 产品路线图（JSON 数组，每项 status/statusText/title/desc） */
     public static final String KEY_HERO_ROADMAP = "HERO_ROADMAP";
+    // kMessage 飞书渠道默认接收群 groupId（SUPER 在后台维护）
+    public static final String KEY_KMESSAGE_GROUP_ID = "KMESSAGE_GROUP_ID";
 
     private final ConfigRepository repo;
     private final ObjectMapper objectMapper = new ObjectMapper();
