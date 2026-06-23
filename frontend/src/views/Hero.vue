@@ -376,7 +376,7 @@ onMounted(async () => {
 }
 
 .hero-title {
-  font-size: clamp(2.5rem, 4.5vw, 4.5rem);
+  font-size: clamp(2rem, 3.5vw, 3.5rem);
   line-height: 1.1;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -384,6 +384,7 @@ onMounted(async () => {
 }
 
 .text-gradient {
+  font-size: clamp(2.5rem, 4.5vw, 4.5rem);
   background: linear-gradient(135deg, var(--primary), #FF8A00);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

@@ -43,3 +43,26 @@ geoip:
 app:
   mcp:
     token-validity: P182D
+  kmessage:
+    enabled: ${KMESSAGE_ENABLED:true}
+    endpoint: ${KMESSAGE_ENDPOINT:https://message.ksite.xin}
+    app-key: ${KMESSAGE_APP_KEY:app_SLeiC8yZdbX7KU2b}
+    app-secret: ${KMESSAGE_APP_SECRET:}
+
+xxl:
+  job:
+    enabled: ${XXL_JOB_ENABLED:true}
+    admin:
+      addresses: ${XXL_JOB_ADMIN_ADDR:http://127.0.0.1:8080/xxl-job-admin}
+      username: ${XXL_JOB_ADMIN_USER:admin}
+      password: ${XXL_JOB_ADMIN_PWD:}
+    accessToken: ${XXL_JOB_ACCESS_TOKEN:}
+    executor:
+      appname: ${XXL_JOB_APPNAME:kfile-executor}
+      address:
+      ip:
+      # 执行器端口：留空（默认）= 自动选可用端口，避免本机多实例/调试时端口冲突
+      port: ${XXL_JOB_EXECUTOR_PORT:}
+      logpath: ${XXL_JOB_LOGPATH:/data/applogs/xxl-job/jobhandler}
+      logretentiondays: 30
+      job-group: ${XXL_JOB_JOB_GROUP:2}

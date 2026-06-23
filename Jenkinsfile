@@ -12,6 +12,9 @@ pipeline {
         MINIO_ACCESS_KEY               = credentials('kfile-minio-access-key')
         MINIO_SECRET_KEY               = credentials('kfile-minio-secret-key')
         MINIO_BUCKET                   = 'k-file'
+        // GitHub Packages 拉取私有制品（kmessage-sdk 等）所需 PAT
+        // 在 Jenkins → 凭据里新建 "Secret text" 类型，ID=github-packages-token
+        GITHUB_PACKAGES_TOKEN          = credentials('github-packages-token')
     }
 
     triggers {

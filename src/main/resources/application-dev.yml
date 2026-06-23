@@ -44,3 +44,8 @@ app:
   project:
     monthly-limit:
       user: 3
+
+xxl:
+  job:
+    executor:
+      logpath: ./logs/xxl-job/jobhandler

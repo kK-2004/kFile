@@ -46,6 +46,12 @@ public class Project {
     // 下线标记：true 表示项目已下线，禁止提交
     private Boolean offline = false;
 
+    // 项目级截止提醒开关：true 时在 endAt-N 小时通过 kMessage/飞书向管理者群发送提醒卡片
+    private Boolean deadlineNotifyEnabled = false;
+
+    // 截止提醒的提前小时数（endAt 前 N 小时触发），默认 12；范围 [1, 720]
+    private Integer deadlineNotifyHours = 12;
+
     // 上传路径字段key：提交者信息里用于作为二级目录的字段
     @Column(length = 64)
     private String pathFieldKey;

@@ -1,6 +1,7 @@
 env:
   name: prod
-  cors: https://file.ksite.xin
+  # 支持环境变量覆盖：test 环境由 CI 注入 ENV_CORS=https://test-file.ksite.xin
+  cors: ${ENV_CORS:https://file.ksite.xin}
 
 spring:
   datasource:
