@@ -7,12 +7,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.EnableAsync;
 import com.kk.config.OssProperties;
 import com.kk.config.MinioProperties;
+import com.kk.config.KMessageProperties;
 import com.kk.geoip.GeoIpProperties;
 
 @SpringBootApplication
 @EnableScheduling
 @EnableAsync
-@EnableConfigurationProperties({OssProperties.class, MinioProperties.class, GeoIpProperties.class})
+@EnableConfigurationProperties({OssProperties.class, MinioProperties.class, GeoIpProperties.class, KMessageProperties.class})
 public class KFileApplication {
 
     public static void main(String[] args) {

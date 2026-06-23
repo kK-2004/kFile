@@ -17,6 +17,8 @@ public class ProjectResponse {
     private Object expectedUserFields;
     private Long startAt; // epoch millis
     private Long endAt;   // epoch millis
+    private Boolean deadlineNotifyEnabled; // 项目级截止提醒开关
+    private Integer deadlineNotifyHours;   // 截止提醒提前小时数
     private Boolean allowResubmit;
     private Boolean allowMultiFiles;
     private Boolean allowOverdue;
@@ -54,6 +56,8 @@ public class ProjectResponse {
         r.setExpectedUserFields(expected);
         r.setStartAt(p.getStartAt() == null ? null : p.getStartAt().toEpochMilli());
         r.setEndAt(p.getEndAt() == null ? null : p.getEndAt().toEpochMilli());
+        r.setDeadlineNotifyEnabled(Boolean.TRUE.equals(p.getDeadlineNotifyEnabled()));
+        r.setDeadlineNotifyHours(p.getDeadlineNotifyHours());
         r.setAllowResubmit(p.getAllowResubmit());
         r.setAllowMultiFiles(p.getAllowMultiFiles());
         r.setAllowOverdue(p.getAllowOverdue());
