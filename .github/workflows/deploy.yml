@@ -150,6 +150,7 @@ jobs:
           XXL_JOB_ADMIN_USER: ${{ secrets.XXL_JOB_ADMIN_USER || 'admin' }}
           XXL_JOB_ADMIN_PWD: ${{ secrets.XXL_JOB_ADMIN_PWD }}
           XXL_JOB_ACCESS_TOKEN: ${{ secrets.XXL_JOB_ACCESS_TOKEN }}
+          XXL_JOB_JOB_GROUP: ${{ secrets.XXL_JOB_JOB_GROUP }}
           ENV_CORS: ${{ steps.ctx.outputs.env_cors }}
           KEEP_VERSIONS: "5"
         run: |
@@ -201,6 +202,7 @@ jobs:
              XXL_JOB_ENABLED='$XXL_JOB_ENABLED' XXL_JOB_ADMIN_ADDR='$XXL_JOB_ADMIN_ADDR' \
              XXL_JOB_ADMIN_USER='$XXL_JOB_ADMIN_USER' XXL_JOB_ADMIN_PWD='$XXL_JOB_ADMIN_PWD' \
              XXL_JOB_ACCESS_TOKEN='$XXL_JOB_ACCESS_TOKEN' \
+             XXL_JOB_JOB_GROUP='$XXL_JOB_JOB_GROUP' \
              ENV_CORS='$ENV_CORS' bash -s" <<'REMOTE'
           set -euo pipefail
           echo "=== Starting deployment ==="
@@ -258,6 +260,7 @@ jobs:
             -e XXL_JOB_ADMIN_USER="$XXL_JOB_ADMIN_USER" \
             -e XXL_JOB_ADMIN_PWD="$XXL_JOB_ADMIN_PWD" \
             -e XXL_JOB_ACCESS_TOKEN="$XXL_JOB_ACCESS_TOKEN" \
+            -e XXL_JOB_JOB_GROUP="$XXL_JOB_JOB_GROUP" \
             "${EXTRA_ENV[@]}" \
             "${IMAGE_NAME}:latest"
 
