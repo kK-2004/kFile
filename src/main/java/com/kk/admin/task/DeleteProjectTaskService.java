@@ -28,6 +28,7 @@ public class DeleteProjectTaskService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PlatformTransactionManager transactionManager;
     private final com.kk.security.repo.ProjectPermissionRepository permRepo;
+    private final com.kk.share.repo.ShareLinkRepository shareLinkRepository;
 
     private final Map<String, Task> tasks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -115,6 +116,8 @@ public class DeleteProjectTaskService {
                 if (ref != null) {
                     // 先删权限，避免外键约束问题
                     permRepo.deleteByProject(ref);
+                    // 级联删除项目下的全部分享链接
+                    shareLinkRepository.deleteByProjectId(ref.getId());
                     submissionRepository.deleteByProject(ref);
                     projectRepository.delete(ref);
                 }
