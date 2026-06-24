@@ -40,7 +40,6 @@ jobs:
             echo "container_name=KFile-test" >> "$GITHUB_OUTPUT"
             echo "host_port=8082" >> "$GITHUB_OUTPUT"
             echo "image_tar=kfile-test.tar.gz" >> "$GITHUB_OUTPUT"
-            # test 用独立 CORS 域名，注入容器 ENV_CORS 覆盖 application-prod.yml 默认值
             echo "env_cors=https://test-file.ksite.xin" >> "$GITHUB_OUTPUT"
             echo "Deploy context: branch=test → kfile-test / KFile-test / 8082 / cors=test-file.ksite.xin"
           else
@@ -48,7 +47,6 @@ jobs:
             echo "container_name=KFile-v2" >> "$GITHUB_OUTPUT"
             echo "host_port=8081" >> "$GITHUB_OUTPUT"
             echo "image_tar=kfile-v2.tar.gz" >> "$GITHUB_OUTPUT"
-            # 正式环境用 application-prod.yml 里的默认值（file.ksite.xin），不注入
             echo "env_cors=" >> "$GITHUB_OUTPUT"
             echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081 / cors=default"
           fi
@@ -152,11 +150,7 @@ jobs:
           XXL_JOB_ADMIN_USER: ${{ secrets.XXL_JOB_ADMIN_USER || 'admin' }}
           XXL_JOB_ADMIN_PWD: ${{ secrets.XXL_JOB_ADMIN_PWD }}
           XXL_JOB_ACCESS_TOKEN: ${{ secrets.XXL_JOB_ACCESS_TOKEN }}
-          # 执行器分组 id（admin 执行器管理里 kfile-executor 分组的 ID），必须与实际一致，
-          # 否则建任务时 admin 回 "请选择执行器"。secret 未配则用默认 2。
-          XXL_JOB_JOB_GROUP: ${{ secrets.XXL_JOB_JOB_GROUP || '2' }}
-          # CORS 域名：test 分支由 context 注入 https://test-file.ksite.xin，
-          # 正式分支为空 → 容器用 application-prod.yml 默认值 https://file.ksite.xin
+          XXL_JOB_JOB_GROUP: ${{ secrets.XXL_JOB_JOB_GROUP }}
           ENV_CORS: ${{ steps.ctx.outputs.env_cors }}
           KEEP_VERSIONS: "5"
         run: |
@@ -230,9 +224,6 @@ jobs:
           docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
           sleep 2
 
-          # CORS 注入：test 分支 ENV_CORS 非空才传 -e，让 Spring 占位符用该值；
-          # 正式分支 ENV_CORS 为空则不传该变量，Spring 回退到 application-prod.yml 默认值。
-          # （若传空串，Spring 会当作"已设但为空"，不会用默认值，故必须条件注入）
           EXTRA_ENV=()
           if [[ -n "$ENV_CORS" ]]; then
             EXTRA_ENV+=( -e "ENV_CORS=$ENV_CORS" )
