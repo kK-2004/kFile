@@ -31,6 +31,7 @@ public class ProjectService {
     private final com.kk.security.repo.AdminUserRepository adminUserRepository;
     private final com.kk.oss.OssService ossService;
     private final com.kk.common.service.AppConfigService appConfigService;
+    private final com.kk.share.repo.ShareLinkRepository shareLinkRepository;
 
     /** 截止提醒调度（仅 app.kmessage.enabled=true 时装配） */
     @Autowired(required = false)
@@ -351,6 +352,8 @@ public class ProjectService {
         }
         // 删除项目权限，避免外键约束错误
         permRepo.deleteByProject(p);
+        // 级联删除项目下的全部分享链接
+        shareLinkRepository.deleteByProjectId(p.getId());
         submissionRepository.deleteByProject(p);
         projectRepository.delete(p);
     }

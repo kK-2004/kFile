@@ -43,19 +43,29 @@ public class XxlJobAdminClient {
 
     /**
      * 创建任务并自动启动（admin 默认创建为 STOPPED，不启动则不会被调度触发）。
-     * 返回 admin 分配的任务 id。
+     * jobDesc 缺省时用 handler 本身作为任务描述。返回 admin 分配的任务 id。
      */
     public long addJob(String handler, String param, String cron) {
-        MultiValueMap<String, String> form = baseForm(handler, param, cron);
+        return addJob(handler, param, cron, null);
+    }
+
+    /** 同上，但允许自定义任务描述（用于 admin 后台区分不同业务来源）。 */
+    public long addJob(String handler, String param, String cron, String jobDesc) {
+        MultiValueMap<String, String> form = baseForm(handler, param, cron, jobDesc);
         String content = postWithRetry("/jobinfo/add", form);
         long jobId = Long.parseLong(content);
         startJob(jobId);
         return jobId;
     }
 
-    /** 更新已有任务的调度配置。admin 的 update 会保留任务原状态，故仍需显式 start 确保处于 RUNNING。 */
+    /** 更新已有任务的调度配置。jobDesc 缺省时用 handler 本身。admin 的 update 会保留任务原状态，故仍需显式 start 确保处于 RUNNING。 */
     public void updateJob(long jobId, String handler, String param, String cron) {
-        MultiValueMap<String, String> form = baseForm(handler, param, cron);
+        updateJob(jobId, handler, param, cron, null);
+    }
+
+    /** 同上，但允许自定义任务描述。 */
+    public void updateJob(long jobId, String handler, String param, String cron, String jobDesc) {
+        MultiValueMap<String, String> form = baseForm(handler, param, cron, jobDesc);
         form.add("id", String.valueOf(jobId));
         postWithRetry("/jobinfo/update", form);
         startJob(jobId);
@@ -78,10 +88,10 @@ public class XxlJobAdminClient {
         postWithRetry("/jobinfo/start", form);
     }
 
-    private MultiValueMap<String, String> baseForm(String handler, String param, String cron) {
+    private MultiValueMap<String, String> baseForm(String handler, String param, String cron, String jobDesc) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("jobGroup", String.valueOf(config.getExecutor().getJobGroup()));
-        form.add("jobDesc", "deadline-remind-" + handler);
+        form.add("jobDesc", jobDesc != null ? jobDesc : handler);
         form.add("author", "kfile");
         form.add("alarmEmail", "");
         form.add("scheduleType", "CRON");
