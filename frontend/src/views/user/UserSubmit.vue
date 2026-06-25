@@ -140,7 +140,8 @@
                       </div>
 
                       <div v-if="idx < versions.length - 1"
-                           class="absolute left-5 top-10 w-px h-6 bg-gray-200"></div>
+                           class="absolute left-5 top-10 bottom-0 w-px bg-gray-200"
+                           style="height: calc(100% + 16px);"></div>
 
                       <div class="ml-4 flex-1 min-w-0">
                         <div class="flex items-center justify-between mb-2">

@@ -32,6 +32,7 @@ public class ProjectService {
     private final com.kk.oss.OssService ossService;
     private final com.kk.common.service.AppConfigService appConfigService;
     private final com.kk.share.repo.ShareLinkRepository shareLinkRepository;
+    private final com.kk.share.repo.ShareLinkItemRepository shareLinkItemRepository;
 
     /** 截止提醒调度（仅 app.kmessage.enabled=true 时装配） */
     @Autowired(required = false)
@@ -241,12 +242,10 @@ public class ProjectService {
         }
         if (req.getName() != null) p.setName(req.getName());
         if (req.getFileSizeLimitBytes() != null) p.setFileSizeLimitBytes(req.getFileSizeLimitBytes());
-        Instant newEndAt = oldEndAt;
-        if (req.getStartAt() != null) p.setStartAt(Instant.ofEpochMilli(req.getStartAt()));
-        if (req.getEndAt() != null) {
-            newEndAt = Instant.ofEpochMilli(req.getEndAt());
-            p.setEndAt(newEndAt);
-        }
+        // startAt / endAt 始终应用：项目编辑表单为全量提交，需支持清空截止日期（null 表示无截止）
+        p.setStartAt(req.getStartAt() == null ? null : Instant.ofEpochMilli(req.getStartAt()));
+        Instant newEndAt = req.getEndAt() == null ? null : Instant.ofEpochMilli(req.getEndAt());
+        p.setEndAt(newEndAt);
         if (req.getDeadlineNotifyEnabled() != null) {
             p.setDeadlineNotifyEnabled(Boolean.TRUE.equals(req.getDeadlineNotifyEnabled()));
         }
@@ -352,7 +351,8 @@ public class ProjectService {
         }
         // 删除项目权限，避免外键约束错误
         permRepo.deleteByProject(p);
-        // 级联删除项目下的全部分享链接
+        // 级联删除项目下的全部分享链接（先清子表 share_link_item，避免外键约束失败）
+        shareLinkItemRepository.deleteByProjectId(p.getId());
         shareLinkRepository.deleteByProjectId(p.getId());
         submissionRepository.deleteByProject(p);
         projectRepository.delete(p);

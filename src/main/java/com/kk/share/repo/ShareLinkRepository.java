@@ -24,6 +24,10 @@ public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
     @Query("DELETE FROM ShareLink s WHERE s.expireAt IS NOT NULL AND s.expireAt < :now")
     int deleteExpiredBefore(@Param("now") Instant now);
 
+    /** 列出过期链接（删除前需先清理子表 share_link_item） */
+    @Query("select s from ShareLink s where s.expireAt is not null and s.expireAt < :now")
+    java.util.List<ShareLink> findByExpireAtBefore(@Param("now") Instant now);
+
     /** 列出分享链接（SUPER: projectId 集合为全部；ADMIN: 仅自己有权限的 projectId）。支持按 projectId 过滤。 */
     @Query("select s from ShareLink s where (:projectId is null or s.projectId = :projectId) order by s.createdAt desc")
     Page<ShareLink> findAllByProjectId(@Param("projectId") Long projectId, Pageable pageable);
