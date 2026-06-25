@@ -206,54 +206,35 @@ public class StoredFileService {
                 .downloadUrl(f.getStorageKey(), download, expireSeconds, f.getOriginalName());
     }
 
-    // ===== 分享（复用 ShareLinkService） =====
+    // ===== 分享（按选中结构分流：单个文件夹→FOLDER_SYNC；其余→FILE_SET） =====
 
     public ShareLinkService.CreatedShare createShare(List<Long> nodeIds, Long expireSeconds, String filename, Long actorId) {
         if (nodeIds == null || nodeIds.isEmpty()) {
             throw new IllegalArgumentException("请至少选择一个文件或文件夹");
         }
-        List<Map<String, Object>> entries = new ArrayList<>();
-        boolean permanent = expireSeconds != null && expireSeconds <= 0;
-        long exp = permanent ? 0 : (expireSeconds != null && expireSeconds > 0 ? expireSeconds : 300);
+        // 校验所有权（actorId=null 表示 SUPER，不限）
         for (Long nid : nodeIds) {
             StoredFile node = storedFileRepository.findById(nid)
                     .orElseThrow(() -> new IllegalArgumentException("节点不存在: " + nid));
-            // 非 owner 不能分享（actorId=null 表示 SUPER）
             if (actorId != null && node.getUploaderId() != null && !actorId.equals(node.getUploaderId())) {
                 throw new IllegalArgumentException("无权分享该文件: " + node.getName());
             }
+        }
+
+        String name = (filename != null && !filename.isBlank()) ? filename : "files.zip";
+
+        // 恰好选中 1 个且为文件夹 → FOLDER_SYNC（实时跟随）；否则 → FILE_SET（冻结快照）
+        if (nodeIds.size() == 1) {
+            StoredFile node = storedFileRepository.findById(nodeIds.get(0)).orElseThrow();
             if (StoredFile.TYPE_FOLDER.equals(node.getType())) {
-                collectShareEntries(node, node.getName(), entries, exp, permanent);
-            } else {
-                entries.add(buildShareEntry(node, "", exp, permanent));
+                return shareLinkService.createFolderSync(node.getId(), expireSeconds, name);
             }
         }
-        if (entries.isEmpty()) {
-            throw new IllegalArgumentException("所选文件夹下没有文件");
-        }
-        String name = (filename != null && !filename.isBlank()) ? filename : "files.zip";
-        return shareLinkService.create(null, name, entries, permanent ? null : exp);
+        return shareLinkService.createFileSet(nodeIds, expireSeconds, name);
     }
 
-    /** 构造单文件的分享 entry；permanent 时 u 留空（读取时现签），额外存 storageSource + storageKey */
-    private Map<String, Object> buildShareEntry(StoredFile node, String pathPrefix, long exp, boolean permanent) {
-        Map<String, Object> entry = new HashMap<>();
-        if (permanent) {
-            entry.put("u", ""); // 永久分享：读取时现签
-        } else {
-            entry.put("u", resolveForSource(node.getStorageSource())
-                    .downloadUrl(node.getStorageKey(), true, exp, node.getOriginalName()));
-        }
-        entry.put("f", StorageKeys.baseName(node.getOriginalName()));
-        entry.put("p", pathPrefix);
-        entry.put("s", node.getSize());
-        // 后端内部用于永久分享现签；getShare 返回前端时过滤掉
-        entry.put("storageSource", node.getStorageSource());
-        entry.put("storageKey", node.getStorageKey());
-        return entry;
-    }
-
-    /** 递归收集文件夹下的文件，构造带相对路径 p 的分享 entry */
+    /** 递归收集文件夹下的文件，构造带相对路径 p 的分享 entry（历史 create 路径保留） */
+    @SuppressWarnings("unused")
     private void collectShareEntries(StoredFile folder, String pathPrefix, List<Map<String, Object>> entries, long exp, boolean permanent) {
         List<StoredFile> children = storedFileRepository.findByParentId(folder.getId());
         for (StoredFile c : children) {
@@ -263,6 +244,23 @@ public class StoredFileService {
                 entries.add(buildShareEntry(c, pathPrefix, exp, permanent));
             }
         }
+    }
+
+    @SuppressWarnings("unused")
+    private Map<String, Object> buildShareEntry(StoredFile node, String pathPrefix, long exp, boolean permanent) {
+        Map<String, Object> entry = new HashMap<>();
+        if (permanent) {
+            entry.put("u", "");
+        } else {
+            entry.put("u", resolveForSource(node.getStorageSource())
+                    .downloadUrl(node.getStorageKey(), true, exp, node.getOriginalName()));
+        }
+        entry.put("f", StorageKeys.baseName(node.getOriginalName()));
+        entry.put("p", pathPrefix);
+        entry.put("s", node.getSize());
+        entry.put("storageSource", node.getStorageSource());
+        entry.put("storageKey", node.getStorageKey());
+        return entry;
     }
 
     // ===== helpers =====

@@ -630,9 +630,11 @@ const doPresign = async () => {
       const { data } = await api.adminArchiveManifest(projectId, params.fieldKey, params.fieldValue, presignExpire.value)
       const entries = data?.entries || []
       if (!entries.length) { ElMessage.warning('没有可分享的文件'); presignLoading.value = false; return }
+      // 提交分享改为实时同步（SUBMISSION_SYNC）：直接传 projectId + 字段过滤，访问时现签 URL
       const { data: shareData } = await api.adminCreateShare(projectId, {
         filename: data.filename || `project-${projectId}.zip`,
-        entries: entries.map(e => ({ u: e.url, f: e.filename, s: e.size })),
+        fieldKey: params.fieldKey,
+        fieldValue: params.fieldValue,
         expireSeconds: presignExpire.value
       })
       const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')

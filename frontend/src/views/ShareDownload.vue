@@ -30,7 +30,7 @@
               <button class="toggle-btn" :class="{ active: viewMode === 'folder' }" @click="viewMode = 'folder'">文件夹视图</button>
               <button class="toggle-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">文件列表</button>
             </div>
-            <span class="file-count">共 {{ shareData.e.length }} 项</span>
+            <span class="file-count">共 {{ activeFileCount }} 项<span v-if="deletedFileCount > 0" class="file-count-deleted">（{{ deletedFileCount }} 项已删除）</span></span>
           </div>
           <div class="file-table-wrap">
             <!-- 文件夹视图 -->
@@ -39,10 +39,11 @@
                 <template v-for="(fld, i) in folderTree.folders" :key="'f'+i">
                   <folder-node :node="fld" :depth="0" />
                 </template>
-                <div v-for="(f, idx) in folderTree.files" :key="'rf'+idx" class="tree-row tree-file" :style="{paddingLeft: '8px'}">
+                <div v-for="(f, idx) in folderTree.files" :key="'rf'+idx" class="tree-row tree-file" :class="{ 'tree-file-deleted': f.deleted }" :style="{paddingLeft: '8px'}">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <span class="tree-name">{{ f.f }}</span>
-                  <span class="tree-size">{{ f.s != null ? formatSize(f.s) : '—' }}</span>
+                  <span v-if="f.deleted" class="tree-deleted-tag">已删除</span>
+                  <span class="tree-size">{{ f.deleted ? '' : (f.s != null ? formatSize(f.s) : '—') }}</span>
                 </div>
               </div>
             </template>
@@ -59,9 +60,9 @@
                 </thead>
                 <tbody>
                   <tr v-for="(f, i) in visibleFiles" :key="i"
-                      :class="{ 'row-selected': selectedIndexes.has(f._idx) }"
+                      :class="{ 'row-selected': selectedIndexes.has(f._idx), 'row-deleted': f.deleted }"
                       @click="onRowClick($event, f._idx)">
-                    <td @click.stop><input type="checkbox" :checked="selectedIndexes.has(f._idx)" @change="toggleSelect(f._idx)" /></td>
+                    <td @click.stop><input type="checkbox" :checked="selectedIndexes.has(f._idx)" @change="toggleSelect(f._idx)" :disabled="f.deleted" /></td>
                     <td>
                       <div class="file-name-cell">
                         <div class="file-type-icon" :class="fileTypeClass(f.f)">
@@ -72,22 +73,25 @@
                           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                         </div>
                         <span class="file-name-text">{{ f.p ? f.p + '/' : '' }}{{ f.f }}</span>
+                        <span v-if="f.deleted" class="deleted-tag">已删除</span>
                       </div>
                     </td>
                     <td class="text-right">
-                      <button class="dl-single-btn" @click.stop="downloadSingle(f._idx)" title="下载此文件">
+                      <button v-if="!f.deleted" class="dl-single-btn" @click.stop="downloadSingle(f._idx)" title="下载此文件">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       </button>
+                      <span v-else class="deleted-cell">—</span>
                     </td>
                     <td class="text-right file-size-cell">{{ f.s != null ? formatSize(f.s) : '—' }}</td>
                   </tr>
                 </tbody>
               </table>
-              <div v-if="shareData.e.length > 10" class="file-card-footer">
+              <div v-if="totalFileCount > 10" class="file-card-footer">
                 <button class="toggle-more-btn" @click="showAllFiles = !showAllFiles">
-                  {{ showAllFiles ? '收起' : `查看全部 ${shareData.e.length} 个文件` }}
+                  {{ showAllFiles ? '收起' : `查看全部 ${totalFileCount} 个文件` }}
                 </button>
               </div>
+              <div v-else-if="totalFileCount === 0" class="empty-share">没有可下载的文件</div>
             </template>
           </div>
         </div>
@@ -115,7 +119,7 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 <span class="info-label">文件总数</span>
               </div>
-              <span class="info-val">{{ shareData.e.length }} 个</span>
+              <span class="info-val">{{ activeFileCount }} 个</span>
             </div>
             <div class="info-row">
               <div class="meta-item">
@@ -194,7 +198,15 @@ onMounted(async () => {
         }
         shareData.value = {
           n: data.filename || 'download.zip',
-          e: data.entries.map(e => ({ u: e.u || e.url, f: e.f || e.filename, p: e.p || '', s: e.s ?? e.size })),
+          e: data.entries.map(e => ({
+            u: e.u || e.url,
+            f: e.f || e.filename,
+            p: e.p || '',
+            s: e.s ?? e.size,
+            id: e.id,
+            kind: e.kind,
+            deleted: !!e.deleted
+          })),
           exp: data.expireAt ? Math.floor(data.expireAt / 1000) : null
         }
       } catch (e) {
@@ -255,10 +267,25 @@ const expireText = computed(() => {
   return `${Math.round(remain / 86400)} 天后过期`
 })
 
+// 实际展示的文件条目：排除 kind=FOLDER（文件夹根元数据行，仅用于置灰判定，不是文件）
+const fileEntries = computed(() => {
+  if (!shareData.value) return []
+  return shareData.value.e.filter(f => f.kind !== 'FOLDER')
+})
+
 const visibleFiles = computed(() => {
-  const files = showAllFiles.value ? shareData.value.e : shareData.value.e.slice(0, 10)
-  // 加上原始索引 _idx（用于选择/单文件下载/计数）
-  return files.map((f, i) => ({ ...f, _idx: shareData.value.e.indexOf(f) }))
+  const files = showAllFiles.value ? fileEntries.value : fileEntries.value.slice(0, 10)
+  // 加上原始索引 _idx（指向完整 e 数组，用于选择/单文件下载/计数）
+  return files.map(f => ({ ...f, _idx: shareData.value.e.indexOf(f) }))
+})
+
+// 可下载条目（排除已删除）
+const downloadableIndexes = computed(() => {
+  if (!shareData.value) return []
+  return shareData.value.e
+    .map((f, i) => ({ f, i }))
+    .filter(x => x.f.kind !== 'FOLDER' && !x.f.deleted)
+    .map(x => x.i)
 })
 
 // 文件多选
@@ -274,13 +301,14 @@ const onRowClick = (e, idx) => {
 }
 const toggleSelectAll = (checked) => {
   if (checked) {
-    selectedIndexes.value = new Set(shareData.value.e.map((_, i) => i))
+    // 全选仅勾选可下载（未删除）条目
+    selectedIndexes.value = new Set(downloadableIndexes.value)
   } else {
     clearSelection()
   }
 }
 const allSelected = computed(() =>
-  shareData.value?.e?.length > 0 && selectedIndexes.value.size === shareData.value.e.length
+  downloadableIndexes.value.length > 0 && selectedIndexes.value.size === downloadableIndexes.value.length
 )
 
 const clearSelection = () => {
@@ -292,21 +320,30 @@ const buildDownloadEntries = (indexes) => {
   return indexes
     .map((entryIndex) => {
       const entry = shareData.value.e[entryIndex]
-      return entry ? { ...entry, _entryIndex: entryIndex } : null
+      // 排除已删除条目（无可用 URL）
+      if (!entry || entry.deleted) return null
+      return { ...entry, _entryIndex: entryIndex }
     })
     .filter(Boolean)
 }
 
-// 记录下载计数
+// 记录下载计数：优先按 itemId（新 item 表），否则回退 entryIndex（历史 JSON 链接）
 const recordDownload = async (entryIndexes) => {
   if (!shareCode.value) return
   const indexes = Array.isArray(entryIndexes) ? entryIndexes : [entryIndexes]
   const validIndexes = indexes.filter(i => Number.isInteger(i))
+  if (!validIndexes.length) return
+  const itemIds = validIndexes
+    .map(i => shareData.value.e[i]?.id)
+    .filter(id => id != null)
+  const body = itemIds.length
+    ? (itemIds.length === 1 ? { itemId: itemIds[0] } : { itemIds })
+    : (validIndexes.length === 1 ? { entryIndex: validIndexes[0] } : { entryIndexes: validIndexes })
   try {
     await fetch(`/api/share/${shareCode.value}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(validIndexes.length === 1 ? { entryIndex: validIndexes[0] } : { entryIndexes: validIndexes })
+      body: JSON.stringify(body)
     })
   } catch { /* ignore */ }
 }
@@ -314,7 +351,7 @@ const recordDownload = async (entryIndexes) => {
 // 单文件下载（直接 a 标签，不走 zip）
 const downloadSingle = async (idx) => {
   const e = shareData.value.e[idx]
-  if (!e || !e.u) return
+  if (!e || !e.u || e.deleted) return
   recordDownload(idx)
   const a = document.createElement('a')
   a.href = e.u
@@ -329,10 +366,11 @@ const downloadSingle = async (idx) => {
 const hasFolders = computed(() => shareData.value?.e.some(f => f.p))
 
 // 文件夹树：{ folders: [{name, children: <tree>}], files: [entry] }
+// 已删除文件保留在原位置（置灰展示「已删除」）；kind=FOLDER 元数据行不进树（文件夹由文件路径推导）
 const folderTree = computed(() => {
   if (!shareData.value) return { folders: [], files: [] }
   const root = { folders: [], files: [] }
-  for (const e of shareData.value.e) {
+  for (const e of fileEntries.value) {
     const segs = (e.p || '').split('/').filter(Boolean)
     let node = root
     for (const seg of segs) {
@@ -345,9 +383,15 @@ const folderTree = computed(() => {
   return root
 })
 
+// 可下载（未删除）条目数（排除 FOLDER 元数据行）
+const activeFileCount = computed(() => fileEntries.value.filter(f => !f.deleted).length)
+// 全部文件条目数（排除 FOLDER 元数据行），用于「已删除 N 项」计数
+const totalFileCount = computed(() => fileEntries.value.length)
+// 已删除文件数（仅统计真实文件，不含 FOLDER 元数据行）
+const deletedFileCount = computed(() => fileEntries.value.filter(f => f.deleted).length)
+
 const totalBytes = computed(() => {
-  if (!shareData.value) return 0
-  return shareData.value.e.reduce((sum, f) => sum + (f.s || 0), 0)
+  return fileEntries.value.filter(f => !f.deleted).reduce((sum, f) => sum + (f.s || 0), 0)
 })
 
 const totalSizeText = computed(() => {
@@ -389,7 +433,8 @@ const downloadSelected = async () => {
 
 const startDownload = async () => {
   if (!shareData.value || downloading.value) return
-  const entries = buildDownloadEntries(shareData.value.e.map((_, i) => i))
+  // 仅打包可下载（未删除）条目
+  const entries = buildDownloadEntries(downloadableIndexes.value)
   if (!entries.length) return
   // 记录每个文件下载计数
   recordDownload(entries.map(e => e._entryIndex))
@@ -678,6 +723,17 @@ const doZipDownload = async (entries) => {
 }
 .tree-folder .tree-name { font-weight: 600; }
 .tree-file { color: #6b7280; }
+.tree-file-deleted { opacity: 0.55; }
+.tree-deleted-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fee2e2;
+  flex-shrink: 0;
+}
 .tree-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-size { color: #9ca3af; font-size: 12px; flex-shrink: 0; }
 
@@ -800,6 +856,25 @@ const doZipDownload = async (entries) => {
 .file-table tbody tr { cursor: pointer; transition: background 0.15s; }
 .file-table tbody tr:hover { background: var(--surface-container); }
 .file-table tbody tr.row-selected { background: var(--primary-light); }
+/* 已删除条目：整行置灰 */
+.file-table tbody tr.row-deleted {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.file-table tbody tr.row-deleted:hover { background: transparent; }
+.deleted-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fee2e2;
+}
+.dark .deleted-tag { color: #fca5a5; background: rgba(239,68,68,0.18); }
+.deleted-cell { color: var(--text-muted); font-size: 13px; }
+.file-count-deleted { color: #b91c1c; margin-left: 4px; }
+.empty-share { padding: 32px; text-align: center; color: var(--text-muted); font-size: 14px; }
 
 /* 多选浮动操作栏（与管理端一致） */
 .share-selection-bar {

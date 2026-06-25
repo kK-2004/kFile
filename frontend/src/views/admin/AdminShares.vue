@@ -16,20 +16,23 @@
       </div>
     </template>
 
-    <el-table :data="nodes" v-loading="loading" height="100%" style="flex:1;min-height:0;">
-      <el-table-column label="分享链接" min-width="200">
-        <template #default="{row}">
-          <el-link :underline="false" @click="copyLink(row)">{{ shareUrl(row) }}</el-link>
-        </template>
-      </el-table-column>
-      <el-table-column label="所属" min-width="160">
+    <el-table :data="nodes" v-loading="loading" height="100%" style="flex:1;min-height:0;width:100%;">
+      <el-table-column label="所属" min-width="120" align="center" show-overflow-tooltip>
         <template #default="{row}">
           <span>{{ row.projectName }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="文件名" min-width="160" prop="filename" />
-      <el-table-column label="文件数" width="80" prop="fileCount" />
-      <el-table-column label="下载量" width="90">
+      <el-table-column label="类型" min-width="90" align="center">
+        <template #default="{row}">
+          <el-tag v-if="row.shareType === 'FOLDER_SYNC'" size="small" type="success">文件夹</el-tag>
+          <el-tag v-else-if="row.shareType === 'FILE_SET'" size="small">文件集</el-tag>
+          <el-tag v-else-if="row.shareType === 'SUBMISSION_SYNC'" size="small" type="warning">提交</el-tag>
+          <el-tag v-else size="small" type="info">历史</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="文件名" min-width="160" align="center" prop="filename" show-overflow-tooltip />
+      <el-table-column label="文件数" min-width="80" align="center" prop="fileCount" />
+      <el-table-column label="下载量" min-width="90" align="center">
         <template #default="{row}">
           <el-tooltip
             v-if="row.fileDownloads && row.fileDownloads.length"
@@ -50,23 +53,26 @@
           <span v-else class="dl-total">{{ row.downloadCount || 0 }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" min-width="80" align="center">
         <template #default="{row}">
           <el-tag v-if="row.permanent" size="small" type="warning">永久</el-tag>
           <el-tag v-else-if="row.expired" size="small" type="info">已过期</el-tag>
           <el-tag v-else size="small" type="success">有效</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" width="180">
+      <el-table-column label="创建时间" min-width="160" align="center">
         <template #default="{row}">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="过期时间" width="180">
+      <el-table-column label="过期时间" min-width="160" align="center">
         <template #default="{row}">{{ row.permanent ? '永久有效' : formatTime(row.expireAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column label="操作" min-width="150" align="center" fixed="right">
         <template #default="{row}">
-          <el-button size="small" type="danger" @click="confirmDelete(row)">删除</el-button>
-        </template>
+          <div class="opt-group">
+            <el-button size="small" @click="copyLink(row)">复制</el-button>
+            <el-button size="small" type="danger" @click="confirmDelete(row)">删除</el-button>
+          </div>
+          </template>
       </el-table-column>
       <template #empty><span>暂无分享链接</span></template>
     </el-table>
@@ -172,5 +178,18 @@ onMounted(load)
 .dl-tip-count {
   font-size: 12px; font-weight: 600; color: var(--kf-primary);
   font-variant-numeric: tabular-nums;
+}
+.opt-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+}
+/* 操作列按钮收紧 */
+.opt-group .el-button {
+  margin-left: 0;
+  padding: 0 10px;
+  height: 28px;
 }
 </style>

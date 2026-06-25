@@ -6,6 +6,8 @@ import com.kk.security.entity.AdminUser;
 import com.kk.security.repo.AdminUserRepository;
 import com.kk.security.repo.ProjectPermissionRepository;
 import com.kk.share.entity.ShareLink;
+import com.kk.share.entity.ShareLinkItem;
+import com.kk.share.repo.ShareLinkItemRepository;
 import com.kk.share.repo.ShareLinkRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,8 @@ import java.util.*;
 public class ShareLinkAdminController {
 
     private final ShareLinkRepository shareLinkRepository;
+    private final ShareLinkItemRepository shareLinkItemRepository;
+    private final com.kk.share.service.ShareLinkService shareLinkService;
     private final ProjectRepository projectRepository;
     private final AdminUserRepository userRepo;
     private final ProjectPermissionRepository permRepo;
@@ -94,32 +98,48 @@ public class ShareLinkAdminController {
             node.put("code", link.getCode());
             node.put("projectId", link.getProjectId());
             node.put("projectName", projName != null ? projName : "文件管理");
+            node.put("shareType", link.getShareType());
             node.put("createdAt", link.getCreatedAt());
             node.put("expireAt", link.getExpireAt());
             node.put("expired", link.getExpireAt() != null && Instant.now().isAfter(link.getExpireAt()));
             node.put("permanent", link.getExpireAt() == null);
             node.put("downloadCount", link.getDownloadCount() == null ? 0 : link.getDownloadCount());
-            // 解析 filename + 文件维度下载量
+
             List<Map<String, Object>> fileDownloads = new ArrayList<>();
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                Map<String, Object> data = mapper.readValue(link.getData(), Map.class);
-                node.put("filename", data.get("filename"));
-                Object entries = data.get("entries");
-                if (entries instanceof List<?> list) {
-                    node.put("fileCount", list.size());
-                    for (Object o : list) {
-                        if (!(o instanceof Map<?, ?> em)) continue;
-                        String fname = em.get("f") == null ? "" : String.valueOf(em.get("f"));
-                        int cnt = em.get("downloadCount") instanceof Number num ? num.intValue() : 0;
-                        fileDownloads.add(Map.of("name", fname, "count", cnt));
+            if (link.getShareType() != null) {
+                // 新链接：从 share_link_item 取 filename / 条目级下载计数
+                List<ShareLinkItem> items = shareLinkItemRepository.findByShareLinkIdOrderByRelativePath(link.getId());
+                node.put("filename", link.getFilename() != null ? link.getFilename() : "download.zip");
+                node.put("fileCount", items.size());
+                for (ShareLinkItem it : items) {
+                    String name = it.getRelativePath() == null || it.getRelativePath().isEmpty()
+                            ? it.getFilename()
+                            : it.getRelativePath() + "/" + it.getFilename();
+                    if (it.isDeleted()) name = name + "（已删除）";
+                    fileDownloads.add(Map.of("name", name, "count", it.getDownloadCount()));
+                }
+            } else {
+                // 历史 JSON-only 链接：从 data 解析
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    Map<String, Object> data = mapper.readValue(link.getData(), Map.class);
+                    node.put("filename", data.get("filename"));
+                    Object entries = data.get("entries");
+                    if (entries instanceof List<?> list) {
+                        node.put("fileCount", list.size());
+                        for (Object o : list) {
+                            if (!(o instanceof Map<?, ?> em)) continue;
+                            String fname = em.get("f") == null ? "" : String.valueOf(em.get("f"));
+                            int cnt = em.get("downloadCount") instanceof Number num ? num.intValue() : 0;
+                            fileDownloads.add(Map.of("name", fname, "count", cnt));
+                        }
+                    } else {
+                        node.put("fileCount", 0);
                     }
-                } else {
+                } catch (Exception e) {
+                    node.put("filename", "未知");
                     node.put("fileCount", 0);
                 }
-            } catch (Exception e) {
-                node.put("filename", "未知");
-                node.put("fileCount", 0);
             }
             node.put("fileDownloads", fileDownloads);
             nodes.add(node);
@@ -157,7 +177,8 @@ public class ShareLinkAdminController {
             }
             // projectId=null（文件管理分享）ADMIN 可删（自己的）
         }
-        shareLinkRepository.delete(link);
+        // 先清理子表 share_link_item，再删除链接本身（同一事务内，避免外键约束失败）
+        shareLinkService.deleteLink(link);
         return Map.of("ok", true);
     }
 
