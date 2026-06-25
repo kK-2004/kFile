@@ -43,6 +43,9 @@ public class ProjectDeadlineReminderService {
     /** XxlJob handler 名 */
     public static final String HANDLER = "projectDeadlineRemindJob";
 
+    /** 任务描述（admin 后台展示用），由业务层决定前缀，避免污染通用 client */
+    private static final String JOB_DESC = "deadline-remind-" + HANDLER;
+
     /** 提前小时数允许范围：≥1，≤720（30 天） */
     public static final int NOTIFY_HOURS_MIN = 1;
     public static final int NOTIFY_HOURS_MAX = 720;
@@ -123,17 +126,17 @@ public class ProjectDeadlineReminderService {
                 }
                 if (ref.getJobId() != null) {
                     try {
-                        xxlJobAdminClient.updateJob(ref.getJobId(), HANDLER, param, cron);
+                        xxlJobAdminClient.updateJob(ref.getJobId(), HANDLER, param, cron, JOB_DESC);
                     } catch (Exception e) {
                         // update 失败则尝试删旧重建
                         log.warn("deadline remind update failed, fallback to remove+add projectId={} reason={}",
                                 project.getId(), e.getMessage());
                         safeRemove(ref.getJobId());
-                        Long newId = xxlJobAdminClient.addJob(HANDLER, param, cron);
+                        Long newId = xxlJobAdminClient.addJob(HANDLER, param, cron, JOB_DESC);
                         ref.setJobId(newId);
                     }
                 } else {
-                    Long newId = xxlJobAdminClient.addJob(HANDLER, param, cron);
+                    Long newId = xxlJobAdminClient.addJob(HANDLER, param, cron, JOB_DESC);
                     ref.setJobId(newId);
                 }
                 ref.setCron(cron);
@@ -142,7 +145,7 @@ public class ProjectDeadlineReminderService {
                 log.info("deadline remind updated projectId={} jobId={} hours={} cron={}",
                         project.getId(), ref.getJobId(), hours, cron);
             } else {
-                long jobId = xxlJobAdminClient.addJob(HANDLER, param, cron);
+                long jobId = xxlJobAdminClient.addJob(HANDLER, param, cron, JOB_DESC);
                 XxlJobRef ref = new XxlJobRef();
                 ref.setProjectId(project.getId());
                 ref.setJobId(jobId);
