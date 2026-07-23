@@ -7,7 +7,7 @@
       </div>
     </template>
 
-    <el-form :model="form" label-width="180px" style="max-width:640px;">
+    <el-form :model="form" label-width="180px" class="settings-form">
       <el-form-item label="USER 每月创建项目上限">
         <el-input-number v-model="form.monthlyLimitUser" :min="0" :step="1" />
         <div class="hint">0 表示不限制</div>
@@ -22,16 +22,19 @@
         </el-select>
         <div class="hint">留空表示不限制类型；匹配时忽略大小写，可不带点</div>
       </el-form-item>
-      <el-form-item label="MCP 授权回调白名单">
-        <el-select v-model="mcpPrefixes" multiple filterable allow-create default-first-option placeholder="输入允许的前缀，如: http://localhost:、" style="width:100%">
-        </el-select>
-        <div class="hint">MCP 网页授权的 redirect_uri 必须命中以下前缀之一；留空表示拒绝全部回调（最安全）。例如 http://localhost:、https://file.example.com/</div>
-      </el-form-item>
 
       <el-divider content-position="left">kMessage 截止提醒</el-divider>
       <el-form-item label="接收群 ID">
         <el-input v-model="kmsg.groupId" placeholder="飞书群 groupId（接收提醒卡片的群）" clearable style="width:100%"/>
         <div class="hint">由 kMessage 端托管的飞书群 groupId；k-File 仅向该群发送，渠道实例由 kMessage 内部根据 groupId 自动解析。</div>
+      </el-form-item>
+
+      <el-divider content-position="left">MCP OAuth</el-divider>
+      <el-form-item label="允许的 redirect 协议">
+        <el-select v-model="mcpSchemes" multiple filterable allow-create default-first-option placeholder="如 workbuddy" style="width:100%">
+          <el-option v-for="s in mcpSchemes" :key="s" :value="s" :label="s" />
+        </el-select>
+        <div class="hint">http/https 始终允许。本地 Agent 的自定义回调协议（如 <code>workbuddy</code>）需在此添加，否则 DCR 注册会被拒绝。留空表示仅允许 http/https。</div>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
@@ -112,8 +115,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const form = ref({ monthlyLimitUser: null, userTotalQuotaBytes: null, allowedFileTypes: [] })
 const quotaGB = ref(null)
 const types = ref([])
-const mcpPrefixes = ref([])
 const kmsg = ref({ groupId: '' })
+const mcpSchemes = ref([])
 const typeSelectable = computed(()=> Array.from(new Set([...(types.value||[])])))
 const saving = ref(false)
 
@@ -123,8 +126,8 @@ const load = async () => {
     form.value.monthlyLimitUser = data.monthlyLimitUser ?? null
     form.value.userTotalQuotaBytes = data.userTotalQuotaBytes ?? null
     types.value = Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : []
-    mcpPrefixes.value = Array.isArray(data.mcpRedirectPrefixes) ? data.mcpRedirectPrefixes : []
     kmsg.value.groupId = data.kmessageGroupId || ''
+    mcpSchemes.value = Array.isArray(data.mcpRedirectSchemes) ? data.mcpRedirectSchemes : []
     quotaGB.value = (data.userTotalQuotaBytes === null || data.userTotalQuotaBytes === undefined)
       ? null
       : Math.round(Number(data.userTotalQuotaBytes)/1024/1024/1024)
@@ -142,7 +145,7 @@ const save = async () => {
       monthlyLimitUser: form.value.monthlyLimitUser ?? null,
       userTotalQuotaBytes: (quotaGB.value && quotaGB.value > 0) ? Math.round(Number(quotaGB.value) * 1024 * 1024 * 1024) : 0,
       allowedFileTypes: (types.value || []).map(s => String(s||'').replace(/^\./,'')),
-      mcpRedirectPrefixes: (mcpPrefixes.value || []).map(s => String(s||'').trim()).filter(Boolean),
+      mcpRedirectSchemes: (mcpSchemes.value || []).map(s => String(s||'').trim()).filter(Boolean),
       kmessageGroupId: (kmsg.value.groupId || '').trim()
     }
     if (payload.userTotalQuotaBytes === 0) payload.userTotalQuotaBytes = null
@@ -233,6 +236,25 @@ const saveRoadmap = async () => {
 
 <style scoped>
 .settings-wrap { display: flex; flex-direction: column; gap: 20px; }
+
+/* 设置表单：输入框撑满，不受全局 .el-card 420px 限制 */
+.settings-form { max-width: 680px; }
+.settings-form :deep(.el-input),
+.settings-form :deep(.el-select) {
+  max-width: none;
+  width: 100%;
+}
+/* 分组分隔线：左侧留出 label 宽度，与表单项对齐 */
+.settings-form :deep(.el-divider__text) {
+  font-weight: 600;
+  font-size: 14px;
+}
+.hint code {
+  background: var(--kf-hover-bg, rgba(0,0,0,0.05));
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
 .card-header {
   display: flex;
   align-items: center;

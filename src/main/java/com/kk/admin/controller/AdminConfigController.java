@@ -28,16 +28,16 @@ public class AdminConfigController {
         Long totalQuota = appConfigService.getLong(AppConfigService.KEY_USER_TOTAL_QUOTA_BYTES);
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
         java.util.List<String> types = appConfigService.getStringList(AppConfigService.KEY_USER_ALLOWED_FILE_TYPES);
-        java.util.List<String> mcpRedirectPrefixes = appConfigService.getStringList(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_PREFIXES);
         String kmessageGroupId = appConfigService.getRaw(AppConfigService.KEY_KMESSAGE_GROUP_ID);
         java.util.List<java.util.Map<String, Object>> roadmap = appConfigService.getObjectList(AppConfigService.KEY_HERO_ROADMAP);
+        java.util.List<String> mcpRedirectSchemes = appConfigService.getStringList(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_SCHEMES);
         java.util.Map<String, Object> resp = new java.util.HashMap<>();
         resp.put("monthlyLimitUser", monthly);
         resp.put("userTotalQuotaBytes", totalQuota);
         resp.put("allowedFileTypes", types);
-        resp.put("mcpRedirectPrefixes", mcpRedirectPrefixes);
         resp.put("kmessageGroupId", kmessageGroupId);
         resp.put("roadmapItems", roadmap);
+        resp.put("mcpRedirectSchemes", mcpRedirectSchemes);
         return resp;
     }
 
@@ -64,14 +64,6 @@ public class AdminConfigController {
                 return ResponseEntity.badRequest().body(Map.of("message", "allowedFileTypes 非法"));
             }
         }
-        if (req.getMcpRedirectPrefixes() != null) {
-            try {
-                String json = objectMapper.writeValueAsString(req.getMcpRedirectPrefixes());
-                appConfigService.setRaw(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_PREFIXES, json);
-            } catch (Exception e) {
-                return ResponseEntity.badRequest().body(Map.of("message", "mcpRedirectPrefixes 非法"));
-            }
-        }
         if (req.getRoadmapItems() != null) {
             // 校验：每项必须有 status/statusText/title/desc；status 限定枚举
             for (java.util.Map<String, Object> item : req.getRoadmapItems()) {
@@ -87,6 +79,15 @@ public class AdminConfigController {
                 return ResponseEntity.badRequest().body(Map.of("message", "roadmapItems 非法"));
             }
         }
+        if (req.getMcpRedirectSchemes() != null) {
+            // MCP OAuth 自定义 redirect scheme 白名单（本地 agent 回调，如 workbuddy）。http/https 始终允许。
+            try {
+                String json = objectMapper.writeValueAsString(req.getMcpRedirectSchemes());
+                appConfigService.setRaw(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_SCHEMES, json);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("message", "mcpRedirectSchemes 非法"));
+            }
+        }
         if (req.getKmessageGroupId() != null) {
             String v = req.getKmessageGroupId().trim();
             appConfigService.setRaw(AppConfigService.KEY_KMESSAGE_GROUP_ID, v.isEmpty() ? null : v);
@@ -99,7 +100,7 @@ public class AdminConfigController {
         private Integer monthlyLimitUser; // 每月新建项目上限（USER）
         private Long userTotalQuotaBytes;    // USER总存储配额（字节）
         private List<String> allowedFileTypes; // USER可用文件扩展名白名单
-        private List<String> mcpRedirectPrefixes; // MCP 授权回调 redirect_uri 白名单前缀
+        private List<String> mcpRedirectSchemes; // MCP OAuth 自定义 redirect scheme 白名单（如 workbuddy）
         private String kmessageGroupId; // kMessage 默认接收飞书群 groupId
         private List<java.util.Map<String, Object>> roadmapItems; // 首页 Hero 产品路线图（status/statusText/title/desc）
     }

@@ -107,39 +107,32 @@
       </div>
     </el-drawer>
 
-    <!-- MCP 访问令牌管理 -->
+    <!-- MCP OAuth 授权列表 -->
     <el-card style="margin-top: 20px;">
       <template #header>
         <div class="card-header">
-          <span>MCP 访问令牌</span>
+          <span>MCP OAuth 授权</span>
+          <el-button size="small" @click="loadGrants" :loading="grantsLoading">刷新</el-button>
         </div>
       </template>
 
       <div style="margin-bottom: 12px; font-size:13px; color:var(--kf-text-sub,#888);">
-        令牌由 Agent 引导用户在浏览器授权后签发（回调地址 redirect_uri 由 Agent 提供，须命中系统设置里的回调白名单）。此处仅查看与吊销已签发的令牌。
+        用户通过 OAuth 授权的 Agent 列表。下线后该 Agent 的 access/refresh token 立即失效，下次请求收到 401 须重新授权。列表不含任何令牌明文。
       </div>
 
-      <el-table :data="tokens" v-loading="tokensLoading" empty-text="暂无令牌">
-        <el-table-column prop="username" label="用户"/>
-        <el-table-column label="创建时间" width="180">
+      <el-table :data="grants" v-loading="grantsLoading" empty-text="暂无授权记录">
+        <el-table-column prop="username" label="用户" width="120" v-if="isSuper"/>
+        <el-table-column label="Agent 应用" min-width="240">
+          <template #default="{row}">{{ row.clientName || row.clientId }}</template>
+        </el-table-column>
+        <el-table-column label="授权时间" width="180">
           <template #default="{row}">{{ formatTs(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="过期时间" width="180">
-          <template #default="{row}">{{ formatTs(row.expiresAt) }}</template>
-        </el-table-column>
-        <el-table-column label="最近使用" width="180">
-          <template #default="{row}">{{ formatTs(row.lastUsedAt) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="操作" width="100" align="center">
           <template #default="{row}">
-            <el-tag :type="row.revoked ? 'info' : 'success'">{{ row.revoked ? '已吊销' : '有效' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{row}">
-            <el-popconfirm title="确定吊销该令牌？" @confirm="revokeToken(row)">
+            <el-popconfirm title="确定下线该授权？Agent 下次请求将收到 401。" @confirm="revokeGrant(row)">
               <template #reference>
-                <el-button size="small" type="danger" :disabled="row.revoked">吊销</el-button>
+                <el-button size="small" type="danger">下线</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -175,9 +168,9 @@ const currentUser = ref(null)
 let original = new Set()
 let originalTemplates = new Set()
 
-// MCP 令牌
-const tokens = ref([])
-const tokensLoading = ref(false)
+// MCP OAuth 授权
+const grants = ref([])
+const grantsLoading = ref(false)
 
 const loadUsers = async () => {
   loading.value = true
@@ -201,13 +194,13 @@ const loadTemplates = async () => {
   } catch {}
 }
 
-const loadTokens = async () => {
-  tokensLoading.value = true
+const loadGrants = async () => {
+  grantsLoading.value = true
   try {
-    const { data } = await api.mcpListTokens()
-    tokens.value = data || []
-  } catch { tokens.value = [] }
-  finally { tokensLoading.value = false }
+    const { data } = await api.oauthListGrants()
+    grants.value = data || []
+  } catch { grants.value = [] }
+  finally { grantsLoading.value = false }
 }
 
 const formatTs = (ts) => ts ? new Date(ts).toLocaleString() : '-'
@@ -244,13 +237,13 @@ const saveQuota = async () => {
   } finally { quotaSaving.value = false }
 }
 
-const revokeToken = async (row) => {
+const revokeGrant = async (row) => {
   try {
-    await api.mcpRevokeToken(row.id)
-    ElMessage.success('已吊销')
-    await loadTokens()
+    await api.oauthRevokeGrant(row.id)
+    ElMessage.success('已下线，该 Agent 的令牌立即失效')
+    await loadGrants()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '吊销失败')
+    ElMessage.error(e?.response?.data?.message || '下线失败')
   }
 }
 
@@ -258,7 +251,7 @@ onMounted(async () => {
   if (!auth.loaded) await auth.loadMe()
   loadUsers()
   loadProjects()
-  loadTokens()
+  loadGrants()
   await loadTemplates()
 })
 

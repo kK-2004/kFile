@@ -18,9 +18,10 @@ public class AppConfigService {
     public static final String KEY_USER_MAX_FILE_SIZE_BYTES = "USER_MAX_FILE_SIZE_BYTES"; // legacy, not used
     public static final String KEY_USER_TOTAL_QUOTA_BYTES = "USER_TOTAL_QUOTA_BYTES";
     public static final String KEY_USER_ALLOWED_FILE_TYPES = "USER_ALLOWED_FILE_TYPES";
-    // MCP 授权回调 redirect_uri 允许的前缀白名单（JSON 数组或逗号分隔）。空列表=拒绝全部。
-    // 例：["http://localhost:","https://file.example.com/"]
-    public static final String KEY_MCP_REDIRECT_ALLOWED_PREFIXES = "MCP_REDIRECT_ALLOWED_PREFIXES";
+    // MCP OAuth 动态注册允许的自定义 redirect scheme 白名单（JSON 数组或逗号分隔）。
+    // http/https 始终允许；自定义协议（本地 agent 回调，如 workbuddy）必须在此白名单内。
+    // 管理后台维护。空列表=仅允许 http/https。
+    public static final String KEY_MCP_REDIRECT_ALLOWED_SCHEMES = "MCP_REDIRECT_ALLOWED_SCHEMES";
     /** 首页 Hero 产品路线图（JSON 数组，每项 status/statusText/title/desc） */
     public static final String KEY_HERO_ROADMAP = "HERO_ROADMAP";
     // kMessage 飞书渠道默认接收群 groupId（SUPER 在后台维护）

@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.6</version>
+        <version>3.5.15</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.kk</groupId>
@@ -28,7 +28,7 @@
     </scm>
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.6</spring-ai.version>
+        <spring-ai.version>1.1.8</spring-ai.version>
         <aws.sdk.version>2.31.4</aws.sdk.version>
     </properties>
 
@@ -125,10 +125,22 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- MCP 服务端（SSE 传输，WebMVC）。Spring AI 1.0.x 支持 Spring Boot 3.5.x -->
+        <!-- MCP 服务端（Streamable HTTP 传输，WebMVC）。Spring AI 1.1.x 支持 Spring Boot 3.5.x -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+
+        <!-- Spring Authorization Server：后端作为 OAuth Authorization Server 发布
+             authorization/token/registration/revocation endpoints -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-authorization-server</artifactId>
+        </dependency>
+        <!-- OAuth2 Resource Server：/mcp 作为受保护资源，校验 Bearer access token 与 resource audience -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
         <!-- XXL-JOB 执行器核心（2.5.0 支持 Spring Boot 3 / JDK 21） -->

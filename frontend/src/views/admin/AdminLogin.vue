@@ -61,14 +61,23 @@ const onSubmit = async () => {
   loading.value = true
   try {
     await store.login(form.value.username, form.value.password)
-    const raw = route.query.redirect || '/admin/projects'
-    let target = String(raw)
-    // 完整外链（如 MCP 授权页 redirect）：直接整页跳转，避免 router 仅处理同源路径
-    if (target.startsWith('http://') || target.startsWith('https://')) {
-      window.location.href = target
+    const raw = String(route.query.redirect || '/admin/projects')
+    // 完整外链：直接整页跳转，避免 router 仅处理同源路径
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      window.location.href = raw
       return
     }
-    router.replace(target)
+    // 相对路径：拆分 path + query（如 /admin/mcp/authorize?client_id=x&state=y），
+    // 避免 router.replace 把带 query 的整串当 path 导致参数丢失
+    const qIdx = raw.indexOf('?')
+    if (qIdx >= 0) {
+      const path = raw.substring(0, qIdx)
+      const query = {}
+      new URLSearchParams(raw.substring(qIdx + 1)).forEach((v, k) => { query[k] = v })
+      router.replace({ path, query })
+    } else {
+      router.replace(raw)
+    }
   } catch (e) {
     const msg = e?.response?.data?.message || '登录失败'
     ElMessage.error(msg)

@@ -17,6 +17,13 @@ minio:
   bucket: ${MINIO_BUCKET:k-file}
   prefix: ${MINIO_PREFIX:}
   presignedDirect: ${MINIO_PRESIGNED_DIRECT:true}
+# 压制 MCP Streamable HTTP SSE 长连接的正常断连噪音日志（客户端断开 / broken pipe / keep-alive ping 失败）
+logging:
+  level:
+    io.modelcontextprotocol.util.KeepAliveScheduler: ERROR
+    io.modelcontextprotocol.spec.McpStreamableServerSession: ERROR
+    io.modelcontextprotocol.server.transport: ERROR
+    org.springframework.web.context.request.async: ERROR
 
 spring:
   profiles:
@@ -27,22 +34,43 @@ spring:
     mcp:
       server:
         name: kfile-mcp-server
-        version: 1.0.0
-        # SSE 传输：由 spring-ai-starter-mcp-server-webmvc 自动启用（1.0.x 无 protocol 属性）。
-        # 端点：SSE 连接 /mcp/sse，消息收发 /mcp/messages（均由 McpTokenAuthFilter 鉴权）。
-        sse-endpoint: /mcp/sse
-        sse-message-endpoint: /mcp/messages
-        # 同步服务器，仅注册同步 @Tool 方法
+        version: 1.1.0
+        # Streamable HTTP 传输（Spring AI 1.1.x）：单一 /mcp 远程入口。
+        # 移除旧 SSE 双端点（/mcp/sse、/mcp/messages），由 OAuth bearer 在 HTTP 边界鉴权。
+        protocol: STREAMABLE
         type: SYNC
+        streamable-http:
+          mcp-endpoint: /mcp
+          # GET SSE 长连接保活：agent（如 WorkBuddy stream-first）会先建立 GET 流监听服务端推送，
+          # 配 keep-alive 定期发 ping 保持连接，避免流被立即关闭（sse-body-terminated）。
+          keep-alive-interval: 30s
 
 geoip:
   enabled: ${GEOIP_ENABLED:false}
   mmdbPath: ${GEOIP_MMDB_PATH:}
 
-# MCP 长期令牌有效期（默认 6 个月），可通过环境变量覆盖
+# MCP OAuth / 远程 MCP 入口配置
 app:
+  # 可信公共基址：用于生成 OAuth issuer、protected-resource/authorization-server metadata 与 MCP resource
+  # audience。服务端不信任任意 Host/转发头。生产必须 HTTPS（localhost 开发例外）。
+  # 由各 profile（application-dev.yml / application-prod.yml）按环境提供，不回退到 env.cors
+  # （env.cors 是前端 CORS 允许源，与对外可达的后端公共基址语义不同）。
+  # 可用 APP_PUBLIC_BASE_URL 环境变量覆盖。
+  public-base-url: ${APP_PUBLIC_BASE_URL:}
   mcp:
-    token-validity: P182D
+    oauth:
+      public-base-url: ${app.public-base-url}
+      # 规范化 MCP Streamable HTTP 单端点（相对基址）
+      mcp-endpoint: /mcp
+      scope: mcp:tools
+      # 短期令牌生命周期（Authorization Code + PKCE）
+      authorization-code-validity: 5m
+      access-token-validity: 15m
+      refresh-token-validity: 30d
+      # Dynamic Client Registration 限流（按 IP）
+      dcr-rate-limit: 10
+      dcr-rate-window: 1h
+      unused-client-validity: 30d
   kmessage:
     enabled: ${KMESSAGE_ENABLED:true}
     endpoint: ${KMESSAGE_ENDPOINT:https://message.ksite.xin}

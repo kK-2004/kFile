@@ -30,12 +30,13 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * k-File MCP 工具集：供 AI agent 通过 SSE 调用。
+ * k-File MCP 工具集：供 AI agent 通过 Streamable HTTP 调用。
  *
- * 鉴权：McpTokenAuthFilter 已在过滤器链中完成 token 鉴权，并把绑定 AdminUser 身份
- * 注入 SecurityContextHolder。因此工具内 SecurityContextHolder.getContext().getAuthentication()
- * 即真实用户，直接复用 ProjectService / ProjectQueryService / AdminPermissionService 的既有权限逻辑，
- * 零额外权限代码。
+ * 鉴权：{@link com.kk.security.oauth.McpBearerAuthFilter} 在 HTTP 边界完成 OAuth bearer token 鉴权，
+ * 把绑定 AdminUser 身份注入 SecurityContextHolder。因此工具内
+ * SecurityContextHolder.getContext().getAuthentication() 即 OAuth token 所属真实用户，
+ * 直接复用 ProjectService / ProjectQueryService / AdminPermissionService 的既有权限逻辑，零额外权限代码。
+ * 身份只来自 HTTP bearer 认证结果，不接受任何模型可控隐藏参数（见 McpToolRegistration）。
  *
  * Agent 提示词规范（见各工具 description）：
  * 凡需用户在确定选项中选择的场景（选模板/选项目/开关字段），优先调用 ask_user_choice 让用户选择，

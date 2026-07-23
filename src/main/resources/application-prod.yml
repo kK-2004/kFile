@@ -31,6 +31,8 @@ server:
   port: 8081
 
 app:
+  # MCP OAuth 公共基址：生产对外可达的公共域（反向代理后）。必须 HTTPS。
+  public-base-url: ${ENV_PUBLIC_BASE_URL:${env.cors}}
   project:
     monthly-limit:
       user: 3
