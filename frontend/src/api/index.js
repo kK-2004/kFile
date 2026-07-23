@@ -62,6 +62,8 @@ instance.interceptors.response.use(
 )
 
 export default {
+  // 原始 axios 实例（OAuth consent 等需要直接调 /oauth2/* 且带 query 的场景）
+  instance,
   listProjects() { return instance.get('/api/projects') },
   getProject(id) { return instance.get(`/api/projects/${id}`) },
   adminGetProject(id) { return instance.get(`/api/admin/projects/${id}`) },
@@ -194,11 +196,9 @@ export default {
   ,adminGrantTemplate(userId, templateId) { return instance.post(`/api/admin/users/${userId}/templates/${templateId}`) }
   ,adminRevokeTemplate(userId, templateId) { return instance.delete(`/api/admin/users/${userId}/templates/${templateId}`) }
 
-  // ===== MCP 长期令牌 =====
-  ,mcpLogin(username, password) { return instance.post('/api/mcp/login', { username, password }) }
-  ,mcpAuthorize(redirectUri) { return instance.post('/api/mcp/authorize', { redirect_uri: redirectUri }) }
-  ,mcpListTokens() { return instance.get('/api/mcp/tokens') }
-  ,mcpRevokeToken(id) { return instance.delete(`/api/mcp/tokens/${id}`) }
+  // ===== MCP OAuth 授权管理 =====
+  ,oauthListGrants() { return instance.get('/api/oauth/grants') }
+  ,oauthRevokeGrant(id) { return instance.delete(`/api/oauth/grants/${id}`) }
 
   ,adminManualUpload(projectId, submitter, files, config = {}) {
     const fd = new FormData()

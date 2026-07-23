@@ -41,6 +41,8 @@ minio:
   enabled: ${MINIO_ENABLED:false}
 
 app:
+  # MCP OAuth 公共基址：本地 agent 直连后端（不经过前端 5174）。localhost 自动豁免 HTTPS 校验。
+  public-base-url: http://localhost:9000
   project:
     monthly-limit:
       user: 3

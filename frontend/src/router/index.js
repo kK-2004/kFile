@@ -51,10 +51,16 @@ router.beforeEach(async (to) => {
   }
 
   if (to.path === '/admin/login' && store.user) {
-    const params = new URLSearchParams(window.location.search)
-    const raw = params.get('redirect') || ''
-    const t = raw || '/admin/projects'
-    return { path: t }
+    // 已登录访问登录页：跳到 redirect 或默认页
+    const raw = to.query.redirect || ''
+    if (raw) return buildRedirectTarget(raw)
+    return { path: '/admin/projects' }
+  }
+
+  // MCP 授权页：由页面自行处理登录检测与跳转，路由守卫不拦截
+  // （页面会在未登录时主动跳到 /admin/login?redirect=<完整授权参数>）
+  if (to.path === '/admin/mcp/authorize') {
+    return true
   }
 
   if (to.path.startsWith('/admin') && to.path !== '/admin/login') {
@@ -63,3 +69,24 @@ router.beforeEach(async (to) => {
   }
   return true
 })
+
+/**
+ * 把 redirect 字符串（可能是相对路径含 query，如 /admin/mcp/authorize?client_id=x&state=y）
+ * 解析为 vue-router 的导航目标，避免 router.replace 把整串当 path 导致 query 丢失。
+ */
+function buildRedirectTarget(raw) {
+  try {
+    // 相对路径含 query：手工拆分 path + query
+    const qIdx = raw.indexOf('?')
+    if (qIdx >= 0) {
+      const path = raw.substring(0, qIdx)
+      const search = raw.substring(qIdx + 1)
+      const query = {}
+      new URLSearchParams(search).forEach((v, k) => { query[k] = v })
+      return { path, query }
+    }
+    return { path: raw }
+  } catch {
+    return { path: raw }
+  }
+}
