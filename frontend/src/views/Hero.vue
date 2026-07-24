@@ -106,6 +106,20 @@
         </article>
       </div>
 
+      <!-- MCP 配置提示词：复制后可直接发给 AI agent -->
+      <div class="mcp-prompt-section animate-fade-up" style="animation-delay: 0.65s">
+        <div class="mcp-prompt-header">
+          <span class="mcp-eyebrow">MCP 接入</span>
+          <h2>让 AI 助手连接 k-File</h2>
+        </div>
+        <div class="mcp-prompt-card">
+          <pre class="mcp-prompt-text">{{ mcpPrompt() }}</pre>
+          <button class="mcp-copy-btn" :class="{ 'is-copied': mcpPromptCopied }" @click="copyMcpPrompt">
+            {{ mcpPromptCopied ? '已复制' : '复制提示词' }}
+          </button>
+        </div>
+      </div>
+
       <div class="roadmap-section animate-fade-up" style="animation-delay: 0.7s">
         <div class="roadmap-header">
           <span class="roadmap-eyebrow">Product Pipeline</span>
@@ -197,6 +211,23 @@ const showBetaModal = ref(false)
 const contactQQ = '2604159440'
 const copied = ref(false)
 
+// MCP 配置提示词：mcpUrl 从后端取（含正确环境地址），fallback 用当前页面 origin
+const mcpUrl = ref('')
+const mcpPromptCopied = ref(false)
+const mcpPrompt = () => {
+  const url = mcpUrl.value || (window.location.origin + '/mcp')
+  return `添加一个远程 MCP server，URL 配置为：\n\n${url}`
+}
+const copyMcpPrompt = async () => {
+  try {
+    await copyText(mcpPrompt())
+    mcpPromptCopied.value = true
+    setTimeout(() => { mcpPromptCopied.value = false }, 2000)
+  } catch (err) {
+    console.error('Failed to copy MCP prompt!', err)
+  }
+}
+
 const copyToClipboard = async () => {
   try {
     await copyText(contactQQ)
@@ -236,6 +267,9 @@ onMounted(async () => {
     const items = data?.roadmapItems
     if (Array.isArray(items) && items.length > 0) {
       roadmapItems.value = items
+    }
+    if (data?.mcpUrl) {
+      mcpUrl.value = data.mcpUrl
     }
   } catch (e) {
     // 接口不可用时保留默认值，不影响首页渲染
@@ -651,6 +685,70 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1.5rem;
+}
+
+/* ================== MCP 接入提示词 ================== */
+.mcp-prompt-section {
+  margin-top: 2.5rem;
+}
+.mcp-prompt-header {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+.mcp-eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--primary);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.mcp-prompt-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+}
+.mcp-prompt-card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px 24px;
+  max-width: 760px;
+  margin: 0 auto;
+  box-shadow: var(--shadow-sm);
+}
+.mcp-prompt-text {
+  margin: 0 0 16px;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mcp-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.mcp-copy-btn:hover {
+  background: var(--primary-hover, var(--primary));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.mcp-copy-btn.is-copied {
+  background: #22c55e;
 }
 
 .bento-card {
