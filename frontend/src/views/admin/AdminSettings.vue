@@ -42,6 +42,29 @@
     </el-form>
   </el-card>
 
+  <!-- MCP 接入提示词（只读 + 复制，方便发给用户） -->
+  <el-card class="mcp-prompt-card">
+    <template #header>
+      <div class="card-header">
+        <span>MCP 接入提示词</span>
+        <el-button size="small" :type="mcpPromptCopied ? 'success' : 'primary'" @click="copyMcpPrompt">
+          {{ mcpPromptCopied ? '已复制' : '复制提示词' }}
+        </el-button>
+      </div>
+    </template>
+    <div class="hint" style="margin-bottom: 12px;">
+      复制后发给用户，用户粘贴给 AI 助手即可配置 k-File MCP 连接。URL 含当前环境的正确地址。
+    </div>
+    <el-input
+      type="textarea"
+      :model-value="mcpPrompt()"
+      :rows="7"
+      readonly
+      resize="none"
+      style="font-family: ui-monospace, monospace; font-size: 13px;"
+    />
+  </el-card>
+
   <!-- 首页产品路线图管理 -->
   <el-card class="roadmap-card">
     <template #header>
@@ -111,6 +134,7 @@
 import { ref, onMounted, computed } from 'vue'
 import api from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { copyText } from '../../utils/clipboard'
 
 const form = ref({ monthlyLimitUser: null, userTotalQuotaBytes: null, allowedFileTypes: [] })
 const quotaGB = ref(null)
@@ -119,6 +143,24 @@ const kmsg = ref({ groupId: '' })
 const mcpSchemes = ref([])
 const typeSelectable = computed(()=> Array.from(new Set([...(types.value||[])])))
 const saving = ref(false)
+
+// MCP 接入提示词：mcpUrl 从 /api/hero 取（含正确环境的公共基址）
+const mcpUrl = ref('')
+const mcpPromptCopied = ref(false)
+const mcpPrompt = () => {
+  const url = mcpUrl.value || (window.location.origin + '/mcp')
+  return `添加一个远程 MCP server，URL 配置为：\n\n${url}`
+}
+const copyMcpPrompt = async () => {
+  try {
+    await copyText(mcpPrompt())
+    mcpPromptCopied.value = true
+    ElMessage.success('提示词已复制')
+    setTimeout(() => { mcpPromptCopied.value = false }, 2000)
+  } catch {
+    ElMessage.error('复制失败')
+  }
+}
 
 const load = async () => {
   try {
@@ -136,7 +178,14 @@ const load = async () => {
     roadmapItems.value = items.map(normalizeRoadmap)
   } catch (e) {}
 }
-onMounted(load)
+onMounted(async () => {
+  load()
+  // 拉取 MCP 连接 URL（含正确环境的公共基址）
+  try {
+    const { data } = await api.getHeroData()
+    if (data?.mcpUrl) mcpUrl.value = data.mcpUrl
+  } catch {}
+})
 
 const save = async () => {
   try {
