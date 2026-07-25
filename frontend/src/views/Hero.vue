@@ -107,17 +107,14 @@
       </div>
 
       <!-- MCP 配置提示词：复制后可直接发给 AI agent -->
-      <div class="mcp-prompt-section animate-fade-up" style="animation-delay: 0.65s">
-        <div class="mcp-prompt-header">
-          <span class="mcp-eyebrow">MCP 接入</span>
-          <h2>让 AI 助手连接 k-File</h2>
+      <div class="mcp-banner animate-fade-up" style="animation-delay: 0.65s">
+        <div class="mcp-banner-info">
+          <span class="mcp-banner-label">MCP 接入</span>
+          <code class="mcp-banner-url">{{ mcpDisplayUrl }}</code>
         </div>
-        <div class="mcp-prompt-card">
-          <pre class="mcp-prompt-text">{{ mcpPrompt() }}</pre>
-          <button class="mcp-copy-btn" :class="{ 'is-copied': mcpPromptCopied }" @click="copyMcpPrompt">
-            {{ mcpPromptCopied ? '已复制' : '复制提示词' }}
-          </button>
-        </div>
+        <button class="mcp-copy-btn" :class="{ 'is-copied': mcpPromptCopied }" @click="copyMcpPrompt">
+          {{ mcpPromptCopied ? '已复制' : '复制提示词' }}
+        </button>
       </div>
 
       <div class="roadmap-section animate-fade-up" style="animation-delay: 0.7s">
@@ -180,9 +177,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { copyText } from '../utils/clipboard'
 import api from '../api'
+
+const mcpDisplayUrl = computed(() => mcpUrl.value || (window.location.origin + '/mcp'))
 
 const stats = [
   { value: '7+', label: '核心能力' },
@@ -687,52 +686,49 @@ onMounted(async () => {
   gap: 1.5rem;
 }
 
-/* ================== MCP 接入提示词 ================== */
-.mcp-prompt-section {
-  margin-top: 2.5rem;
-}
-.mcp-prompt-header {
-  text-align: center;
-  margin-bottom: 1.25rem;
-}
-.mcp-eyebrow {
-  display: inline-block;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--primary);
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.mcp-prompt-header h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  color: var(--text-primary);
-}
-.mcp-prompt-card {
-  position: relative;
+/* ================== MCP 接入横幅 ================== */
+.mcp-banner {
+  margin-top: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 20px 24px;
-  max-width: 760px;
-  margin: 0 auto;
+  padding: 18px 24px;
   box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
 }
-.mcp-prompt-text {
-  margin: 0 0 16px;
+.mcp-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.mcp-banner-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  background: var(--primary-light, rgba(99,102,241,0.1));
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+.mcp-banner-url {
   font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
   color: var(--text-secondary);
-  white-space: pre-wrap;
   word-break: break-all;
 }
 .mcp-copy-btn {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 20px;
+  padding: 9px 22px;
   border: none;
   border-radius: 10px;
   background: var(--primary);
@@ -743,9 +739,9 @@ onMounted(async () => {
   transition: all 0.2s ease;
 }
 .mcp-copy-btn:hover {
-  background: var(--primary-hover, var(--primary));
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+  filter: brightness(1.08);
 }
 .mcp-copy-btn.is-copied {
   background: #22c55e;

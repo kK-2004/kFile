@@ -25,7 +25,7 @@
       />
 
       <!-- consent 页面 -->
-      <template v-else-if="consent">
+      <template v-else-if="consent && !result">
         <div class="info-block">
           <div class="info-row">
             <span class="info-label">当前用户</span>
@@ -63,6 +63,26 @@
           <el-button type="primary" :loading="busy" @click="decide('approve')">批准</el-button>
         </div>
       </template>
+
+      <!-- 授权结果页面 -->
+      <template v-else-if="result">
+        <div class="result-block">
+          <el-icon class="result-icon" :class="result === 'approved' ? 'success' : 'denied'">
+            <CircleCheck v-if="result === 'approved'" />
+            <CircleClose v-else />
+          </el-icon>
+          <h3 class="result-title">{{ result === 'approved' ? '授权成功' : '已拒绝授权' }}</h3>
+          <p class="result-desc">
+            <template v-if="result === 'approved'">
+              已授权 {{ consent?.clientName || consent?.clientId }} 访问 k-File。<br/>
+              请返回 Agent 应用继续操作，本页面可安全关闭。
+            </template>
+            <template v-else>
+              已拒绝 {{ consent?.clientName || consent?.clientId }} 的授权请求。<br/>
+            </template>
+          </p>
+        </div>
+      </template>
     </el-card>
   </div>
 </template>
@@ -72,6 +92,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import api from '../../api'
 import { useAuthStore } from '../../stores/auth'
 
@@ -82,6 +103,7 @@ const auth = useAuthStore()
 const consent = ref(null)
 const errorMsg = ref('')
 const busy = ref(false)
+const result = ref('')  // '' | 'approved' | 'denied'
 
 onMounted(async () => {
   await loadConsent()
@@ -129,13 +151,33 @@ async function decide(decision) {
       decision
     }
     const { data } = await api.instance.post('/oauth2/consent', payload)
-    // 后端返回 redirect（仅含 code+state 或 error+access_denied，不含 token），跳转给 Agent
-    window.location.href = data.redirect
+    // 先切换到结果页（不阻塞），再触发回调 URL 让 Agent 接收 code/error。
+    // 自定义 scheme（如 workbuddy://）或 loopback 回调不会导航走当前页面，
+    // 所以必须先切换 UI 到结果页，否则页面停在 consent。
+    result.value = decision === 'approve' ? 'approved' : 'denied'
+    // 用隐藏 iframe 触发回调（避免 location.href 导致页面跳走/报错），
+    // http(s) loopback 和自定义 scheme 都能通过 iframe 触发系统处理。
+    triggerRedirect(data.redirect)
   } catch (e) {
     const msg = e?.response?.data?.error_description || e?.message || '操作失败'
     ElMessage.error(msg)
   } finally {
     busy.value = false
+  }
+}
+
+/** 触发回调 URL：优先用隐藏 iframe（不离开当前页面），兜底 location.href。 */
+function triggerRedirect(url) {
+  try {
+    const iframe = document.createElement('iframe')
+    iframe.style.display = 'none'
+    iframe.src = url
+    document.body.appendChild(iframe)
+    // 3 秒后移除 iframe（回调 scheme 通常被系统立即拦截处理）
+    setTimeout(() => iframe.remove(), 3000)
+  } catch {
+    // iframe 失败（如 X-Frame-Options），兜底直接跳转
+    window.location.href = url
   }
 }
 
@@ -173,4 +215,10 @@ async function decide(decision) {
 .info-value { color: var(--kf-text-primary, #333); word-break: break-all; }
 .info-value.break { word-break: break-all; }
 .actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+.result-block { text-align: center; padding: 20px 0; }
+.result-icon { font-size: 56px; margin-bottom: 12px; }
+.result-icon.success { color: #22c55e; }
+.result-icon.denied { color: #ef4444; }
+.result-title { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+.result-desc { margin: 0 0 20px; font-size: 14px; line-height: 1.7; color: var(--kf-text-sub, #888); }
 </style>
