@@ -149,7 +149,7 @@ const mcpUrl = ref('')
 const mcpPromptCopied = ref(false)
 const mcpPrompt = () => {
   const url = mcpUrl.value || (window.location.origin + '/mcp')
-  return `添加一个远程 MCP server，URL 配置为：\n\n${url}`
+  return `添加一个远程 MCP server\n名称：k-File-MCP\nURL 配置：${url}`
 }
 const copyMcpPrompt = async () => {
   try {
