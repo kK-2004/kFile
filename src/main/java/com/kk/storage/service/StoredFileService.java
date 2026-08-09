@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -101,6 +102,14 @@ public class StoredFileService {
      * 前端拿到 putUrl + storageKey 后直接 PUT 到对象存储，不经过后端。
      */
     public DirectUploadInit initUpload(Long parentId, String source, String originalName, String contentType, Long uploaderId) {
+        return initUpload(parentId, source, originalName, contentType, uploaderId, null);
+    }
+
+    public DirectUploadInit initUpload(Long parentId, String source, String originalName, String contentType,
+                                       Long uploaderId, Long resumeFileId) {
+        if (resumeFileId != null) {
+            return initResumeUpload(source, originalName, contentType, uploaderId, resumeFileId);
+        }
         validateParentExists(parentId, uploaderId);
         // 上传前校验配额（ADMIN）
         checkQuota(uploaderId, 0);
@@ -121,8 +130,42 @@ public class StoredFileService {
         pre.setContentType(contentType);
         pre.setSize(0);
         pre.setStatus(StoredFile.STATUS_UPLOADING);
-        storedFileRepository.save(pre);
-        return new DirectUploadInit(storageKey, svc.sourceId(), putUrl, DEFAULT_DIRECT_EXPIRE_SECONDS);
+        pre = storedFileRepository.save(pre);
+        return new DirectUploadInit(storageKey, svc.sourceId(), putUrl, DEFAULT_DIRECT_EXPIRE_SECONDS, pre.getId());
+    }
+
+    private DirectUploadInit initResumeUpload(String source, String originalName, String contentType,
+                                              Long uploaderId, Long resumeFileId) {
+        StoredFile existing = storedFileRepository.findById(resumeFileId)
+                .orElseThrow(() -> new IllegalArgumentException("续传记录不存在: " + resumeFileId));
+        if (!StoredFile.TYPE_FILE.equals(existing.getType())) {
+            throw new IllegalArgumentException("续传记录不是文件: " + resumeFileId);
+        }
+        if (!StoredFile.STATUS_UPLOADING.equals(existing.getStatus())) {
+            throw new IllegalArgumentException("文件当前不支持续传: " + existing.getName());
+        }
+        if (uploaderId != null && existing.getUploaderId() != null
+                && !Objects.equals(uploaderId, existing.getUploaderId())) {
+            throw new IllegalArgumentException("无权续传该文件");
+        }
+        if (!Objects.equals(source, existing.getStorageSource())) {
+            throw new IllegalArgumentException("续传存储源与原记录不一致");
+        }
+        if (existing.getOriginalName() != null && !Objects.equals(originalName, existing.getOriginalName())) {
+            throw new IllegalArgumentException("续传文件名与原记录不一致");
+        }
+
+        validateParentExists(existing.getParentId(), uploaderId);
+        checkQuota(uploaderId, 0);
+        StorageBrowserService svc = resolveUploadService(existing.getStorageSource());
+        String putUrl = svc.presignedPutUrl(existing.getStorageKey(), DEFAULT_DIRECT_EXPIRE_SECONDS, contentType);
+
+        existing.setName(StorageKeys.baseName(originalName));
+        existing.setOriginalName(originalName);
+        existing.setContentType(contentType);
+        storedFileRepository.save(existing);
+        return new DirectUploadInit(existing.getStorageKey(), existing.getStorageSource(), putUrl,
+                DEFAULT_DIRECT_EXPIRE_SECONDS, existing.getId());
     }
 
     @Transactional
@@ -354,7 +397,8 @@ public class StoredFileService {
     public record DeleteResult(int deletedDb, int failedObjects) {}
 
     /** 浏览器直传初始化结果：预生成的 storageKey + 直传 PUT 直链 */
-    public record DirectUploadInit(String storageKey, String storageSource, String putUrl, long expireSeconds) {}
+    public record DirectUploadInit(String storageKey, String storageSource, String putUrl,
+                                   long expireSeconds, Long storedFileId) {}
 
     /** 同名冲突（Controller 转 409） */
     public static class ConflictException extends RuntimeException {

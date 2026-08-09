@@ -236,9 +236,9 @@ export default {
     return instance.post('/api/admin/files/mkdir', { parentId: parentId ?? null, name })
   }
   // 第一步：申请直传预签名 PUT 直链（不经过后端上传）
-  ,adminFileUploadInit({ parentId, source, originalName, contentType }) {
+  ,adminFileUploadInit({ parentId, source, originalName, contentType, resumeFileId }) {
     return instance.post('/api/admin/files/upload-init', {
-      parentId: parentId ?? null, source, originalName, contentType
+      parentId: parentId ?? null, source, originalName, contentType, resumeFileId
     })
   }
   // 第二步：浏览器 PUT 完成后回调落库（文件不经后端）
@@ -256,9 +256,9 @@ export default {
     })
   }
   // ===== 大文件断点续传（仅 MinIO，>50MB）=====
-  ,adminFileMultipartInit({ parentId, originalName, contentType, fileSize, totalChunks, contentMd5 }) {
+  ,adminFileMultipartInit({ parentId, originalName, contentType, fileSize, totalChunks, contentMd5, resumeFileId }) {
     return instance.post('/api/admin/files/upload-multipart-init', {
-      parentId: parentId ?? null, originalName, contentType, fileSize, totalChunks, contentMd5
+      parentId: parentId ?? null, originalName, contentType, fileSize, totalChunks, contentMd5, resumeFileId
     })
   }
   ,adminFileMultipartSign({ contentMd5, chunkId }) {
