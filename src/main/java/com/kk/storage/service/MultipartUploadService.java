@@ -27,6 +27,7 @@ import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignReque
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -61,15 +62,36 @@ public class MultipartUploadService {
     @Transactional
     public InitResult init(Long parentId, String originalName, String contentType,
                            long fileSize, int totalChunks, String contentMd5, Long uploaderId) {
-        storedFileService.validateParentExists(parentId, uploaderId);
+        return init(parentId, originalName, contentType, fileSize, totalChunks, contentMd5, uploaderId, null);
+    }
+
+    @Transactional
+    public InitResult init(Long parentId, String originalName, String contentType,
+                           long fileSize, int totalChunks, String contentMd5, Long uploaderId,
+                           Long resumeFileId) {
+        Optional<StoredFileUpload> existing;
+        if (resumeFileId != null) {
+            StoredFile existingFile = storedFileRepository.findById(resumeFileId)
+                    .orElseThrow(() -> new IllegalArgumentException("续传记录不存在: " + resumeFileId));
+            validateResumeFile(existingFile, originalName, fileSize, uploaderId);
+            storedFileService.validateParentExists(existingFile.getParentId(), uploaderId);
+            existing = uploadRepository.findByStoredFileId(resumeFileId);
+            if (existing.isEmpty()) {
+                throw new IllegalArgumentException("未找到分片续传记录: " + resumeFileId);
+            }
+        } else {
+            storedFileService.validateParentExists(parentId, uploaderId);
+            existing = uploadRepository.findByContentMd5(contentMd5);
+        }
         storedFileService.checkQuota(uploaderId, 0);
-        // 幂等：相同 contentMd5 续传
-        Optional<StoredFileUpload> existing = uploadRepository.findByContentMd5(contentMd5);
         if (existing.isPresent()) {
             StoredFileUpload u = existing.get();
             if (StoredFileUpload.STATUS_UPLOADED.equals(u.getStatus())) {
                 // 已上传完成，直接成功
-                return InitResult.alreadyDone(u.getStorageKey());
+                return InitResult.alreadyDone(u.getStorageKey(), u.getStoredFileId());
+            }
+            if (!StoredFileUpload.STATUS_UPLOADING.equals(u.getStatus())) {
+                throw new IllegalArgumentException("文件当前不支持续传: " + originalName);
             }
             // 续传：查 MinIO 已传 part（含 partNumber + etag，complete 时复用 etag 无需重传）
             List<UploadedPart> uploadedParts = listUploadedParts(u);
@@ -252,30 +274,57 @@ public class MultipartUploadService {
         public final String chunkKeyPrefix;
         public final String storageKey;
         public final int totalChunks;
+        public final Long storedFileId;
         /** 已上传的 part（含 partNumber+etag）；空表示全新上传 */
         public final List<UploadedPart> uploadedParts;
         public final boolean alreadyDone;
 
         private InitResult(String uploadId, String chunkKeyPrefix, String storageKey, int totalChunks,
-                           List<UploadedPart> uploadedParts, boolean alreadyDone) {
+                           Long storedFileId, List<UploadedPart> uploadedParts, boolean alreadyDone) {
             this.uploadId = uploadId;
             this.chunkKeyPrefix = chunkKeyPrefix;
             this.storageKey = storageKey;
             this.totalChunks = totalChunks;
+            this.storedFileId = storedFileId;
             this.uploadedParts = uploadedParts;
             this.alreadyDone = alreadyDone;
         }
 
         static InitResult fresh(StoredFileUpload u) {
-            return new InitResult(u.getUploadId(), u.getChunkKeyPrefix(), u.getStorageKey(), u.getTotalChunks(), List.of(), false);
+            return new InitResult(u.getUploadId(), u.getChunkKeyPrefix(), u.getStorageKey(), u.getTotalChunks(),
+                    u.getStoredFileId(), List.of(), false);
         }
 
         static InitResult resume(StoredFileUpload u, List<UploadedPart> uploadedParts) {
-            return new InitResult(u.getUploadId(), u.getChunkKeyPrefix(), u.getStorageKey(), u.getTotalChunks(), uploadedParts, false);
+            return new InitResult(u.getUploadId(), u.getChunkKeyPrefix(), u.getStorageKey(), u.getTotalChunks(),
+                    u.getStoredFileId(), uploadedParts, false);
         }
 
-        static InitResult alreadyDone(String storageKey) {
-            return new InitResult(null, null, storageKey, 0, List.of(), true);
+        static InitResult alreadyDone(String storageKey, Long storedFileId) {
+            return new InitResult(null, null, storageKey, 0, storedFileId, List.of(), true);
+        }
+    }
+
+    private void validateResumeFile(StoredFile file, String originalName, long fileSize, Long uploaderId) {
+        if (!StoredFile.TYPE_FILE.equals(file.getType())) {
+            throw new IllegalArgumentException("续传记录不是文件: " + file.getId());
+        }
+        if (!StoredFile.STATUS_UPLOADING.equals(file.getStatus())
+                && !StoredFile.STATUS_UPLOADED.equals(file.getStatus())) {
+            throw new IllegalArgumentException("文件当前不支持续传: " + file.getName());
+        }
+        if (uploaderId != null && file.getUploaderId() != null
+                && !Objects.equals(uploaderId, file.getUploaderId())) {
+            throw new IllegalArgumentException("无权续传该文件");
+        }
+        if (!SOURCE_MINIO.equals(file.getStorageSource())) {
+            throw new IllegalArgumentException("分片续传仅支持 MinIO");
+        }
+        if (file.getOriginalName() != null && !Objects.equals(originalName, file.getOriginalName())) {
+            throw new IllegalArgumentException("续传文件名与原记录不一致");
+        }
+        if (file.getSize() > 0 && file.getSize() != fileSize) {
+            throw new IllegalArgumentException("续传文件大小与原记录不一致");
         }
     }
 }

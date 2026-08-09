@@ -125,12 +125,14 @@ public class AdminFilesController {
     public Map<String, Object> uploadInit(@RequestBody UploadInitReq req, org.springframework.security.core.Authentication auth) {
         long[] actor = currentActor(auth);
         StoredFileService.DirectUploadInit init = storedFileService.initUpload(
-                req.getParentId(), req.getSource(), req.getOriginalName(), req.getContentType(), actor[0]);
+                req.getParentId(), req.getSource(), req.getOriginalName(), req.getContentType(), actor[0],
+                req.getResumeFileId());
         return Map.of(
                 "storageKey", init.storageKey(),
                 "storageSource", init.storageSource(),
                 "putUrl", init.putUrl(),
-                "expireSeconds", init.expireSeconds()
+                "expireSeconds", init.expireSeconds(),
+                "storedFileId", init.storedFileId()
         );
     }
 
@@ -185,7 +187,7 @@ public class AdminFilesController {
         long[] actor = currentActor(auth);
         MultipartUploadService.InitResult r = svc.init(
                 req.getParentId(), req.getOriginalName(), req.getContentType(),
-                req.getFileSize(), req.getTotalChunks(), req.getContentMd5(), actor[0]);
+                req.getFileSize(), req.getTotalChunks(), req.getContentMd5(), actor[0], req.getResumeFileId());
         List<Map<String, Object>> uploaded = r.uploadedParts.stream()
                 .map(p -> Map.<String, Object>of("partNumber", p.partNumber(), "etag", p.etag()))
                 .toList();
@@ -195,6 +197,7 @@ public class AdminFilesController {
                 "chunkKeyPrefix", r.chunkKeyPrefix == null ? "" : r.chunkKeyPrefix,
                 "storageKey", r.storageKey == null ? "" : r.storageKey,
                 "totalChunks", r.totalChunks,
+                "storedFileId", r.storedFileId == null ? 0L : r.storedFileId,
                 "uploadedParts", uploaded
         );
     }
@@ -285,6 +288,8 @@ public class AdminFilesController {
         private String originalName;
         /** Content-Type（OSS 预签名必须纳入，否则 PUT 签名校验失败 403） */
         private String contentType;
+        /** 续传时复用的原 StoredFile.id；新上传为空 */
+        private Long resumeFileId;
     }
 
     @Data
@@ -313,6 +318,8 @@ public class AdminFilesController {
         private int totalChunks;
         /** 整文件 MD5（前端 SparkMD5），幂等 key */
         private String contentMd5;
+        /** 续传时复用的原 StoredFile.id；新上传为空 */
+        private Long resumeFileId;
     }
 
     @Data

@@ -85,7 +85,7 @@
         </template>
       </el-table-column>
       <el-table-column label="修改时间" width="200">
-        <template #default="{row}">{{ formatTime(row.createdAt) }}</template>
+        <template #default="{row}">{{ formatTime(row.updatedAt || row.createdAt) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="320">
         <template #default="{row}">
@@ -234,6 +234,13 @@ import { useAuthStore } from '../../stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Folder, Document, UploadFilled, Share, Delete, Search } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
+import {
+  CHUNK_SIZE,
+  createResumeUploadItem,
+  matchesUploadRow,
+  shouldUseChunkedUpload,
+  uploadStatusText
+} from '../../utils/adminFileUpload'
 
 const auth = useAuthStore()
 const isSuper = computed(() => auth.user && (auth.user.role||'').toUpperCase() === 'SUPER')
@@ -267,18 +274,14 @@ const onResumeFileSelected = async (e) => {
     ElMessage.error(`文件大小不一致（期望 ${row.size} 字节，实际 ${file.size} 字节），请选择原文件`)
     return
   }
-  // 直接走分片续传
-  const uid = `resume-${Date.now()}`
-  const item = ref({ uid, name: file.name, percent: 0, status: 'uploading', mode: 'chunk', error: '', _file: file })
-  uploads.value.push(item.value)
+  const item = createResumeUploadItem(row, file)
+  uploads.value.push(item)
   uploadModalVisible.value = true
   activeCount++
-  processUpload(item.value)
+  processUpload(item)
 }
 
 const SOURCE_KEY = 'kfile.fileManager.uploadSource'
-const MULTIPART_THRESHOLD = 50 * 1024 * 1024 // >50MB 走分片
-const CHUNK_SIZE = 5 * 1024 * 1024            // 5MB 分片
 
 const sources = ref([])
 // 上传源：记忆到 localStorage，默认 minio
@@ -479,8 +482,21 @@ const onUploadFilesAdded = (file) => {
   const raw = file.raw || file
   if (!raw) return
   const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const useChunk = uploadSource.value === 'minio' && raw.size > MULTIPART_THRESHOLD
-  uploads.value.push({ uid, name: raw.name, percent: 0, status: 'queued', mode: useChunk ? 'chunk' : 'single', error: '', _file: raw })
+  const source = uploadSource.value
+  const useChunk = shouldUseChunkedUpload({ source, size: raw.size })
+  uploads.value.push({
+    uid,
+    name: raw.name,
+    percent: 0,
+    status: 'queued',
+    mode: useChunk ? 'chunk' : 'single',
+    error: '',
+    _file: raw,
+    parentId: currentParentId.value,
+    source,
+    fileId: null,
+    resumeFileId: null
+  })
   pumpQueue()
 }
 
@@ -526,37 +542,35 @@ const processUpload = async (item) => {
   }
 }
 
-// 从上传队列里找正在传的 item（按文件名匹配）；返回 null 表示不在队列（=中断）
+// 从上传队列里找正在传的 item（优先按记录 ID，初始化前的新任务才按文件名）；返回 null 表示中断
 const getUploadItem = (row) => {
-  const item = uploads.value.find(u => u.name === (row.originalName || row.name) && (u.status === 'uploading' || u.status === 'queued'))
+  const item = uploads.value.find(u =>
+    (u.status === 'uploading' || u.status === 'queued') && matchesUploadRow(row, u)
+  )
   return item && item.status === 'uploading' ? item : null
 }
 
 const queueTagType = (u) => u.status === 'done' ? 'success' : (u.status === 'error' ? 'danger' : (u.status === 'queued' ? 'info' : 'warning'))
-const queueStatusText = (u) => {
-  if (u.status === 'done') return '完成'
-  if (u.status === 'error') return '失败'
-  if (u.status === 'queued') return '排队中'
-  if (u.mode === 'hash') return '指纹 ' + u.percent + '%'
-  return (u.mode === 'chunk' ? '分片上传中 ' : '') + u.percent + '%'
-}
+const queueStatusText = uploadStatusText
 
 // 单次直传（≤50MB 或 oss）：init→PUT→complete
 const uploadSingle = async (file, item) => {
   const contentType = file.type || 'application/octet-stream'
   const { data: init } = await api.adminFileUploadInit({
-    parentId: currentParentId.value,
-    source: uploadSource.value,
+    parentId: item.parentId ?? null,
+    source: item.source,
     originalName: file.name,
-    contentType
+    contentType,
+    resumeFileId: item.resumeFileId
   })
+  item.fileId = init.storedFileId
   // init 已写入 StoredFile(UPLOADING)，立即刷新列表让文件显示
   load()
   await api.directPutObject(init.putUrl, file, contentType, (e) => {
     if (e.total) item.percent = Math.min(99, Math.round((e.loaded / e.total) * 100))
   })
   await api.adminFileUploadComplete({
-    parentId: currentParentId.value,
+    parentId: item.parentId ?? null,
     storageSource: init.storageSource,
     storageKey: init.storageKey,
     originalName: file.name,
@@ -577,13 +591,15 @@ const uploadChunked = async (file, item) => {
   item.mode = 'init'
   item.percent = 9
   const { data: init } = await api.adminFileMultipartInit({
-    parentId: currentParentId.value,
+    parentId: item.parentId ?? null,
     originalName: file.name,
     contentType,
     fileSize: file.size,
     totalChunks,
-    contentMd5
+    contentMd5,
+    resumeFileId: item.resumeFileId
   })
+  item.fileId = init.storedFileId
   if (init.alreadyDone) {
     item.percent = 100
     return
