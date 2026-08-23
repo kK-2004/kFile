@@ -188,10 +188,6 @@ onMounted(async () => {
 })
 
 const save = async () => {
-  if (!openApi.value.source) {
-    ElMessage.warning('请选择开放 API 默认数据源（必配项）')
-    return
-  }
   try {
     saving.value = true
     const payload = {
