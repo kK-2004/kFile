@@ -41,20 +41,24 @@ public class OpenAppController {
     @PreAuthorize("hasRole('SUPER')")
     public Map<String, Object> create(@RequestBody CreateReq req) {
         OpenAppService.CreatedApp created =
-                openAppService.create(req.appName(), req.description(), req.rootPath());
+                openAppService.create(req.appName(), req.description(), req.rootPath(), req.defaultSource());
         Map<String, Object> resp = toMap(created.app());
         resp.put("token", created.token());
         return resp;
     }
 
     /**
-     * 修改 description / rootPath。rootPath 变更会同步迁移该应用全部已登记文件至新路径，
+     * 修改 description / rootPath / defaultSource。rootPath 变更会同步迁移该应用全部已登记文件至新路径，
      * 请求阻塞至迁移完成后返回 moved/skipped 统计；rootPath 为空串=恢复默认目录。
+     * defaultSource 为 null 不修改，空串=恢复兜底（oss），非空校验已启用。
      */
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('SUPER')")
     public Map<String, Object> update(@PathVariable Long id, @RequestBody UpdateReq req) {
         OpenApp app = openAppService.requireApp(id);
+        if (req.defaultSource() != null) {
+            openAppService.updateDefaultSource(id, req.defaultSource());
+        }
         Map<String, Object> resp;
         if (req.rootPath() != null) {
             MigrationResult result = migrationService.changeRootPath(app, req.rootPath());
@@ -109,6 +113,7 @@ public class OpenAppController {
         m.put("description", app.getDescription());
         m.put("rootPath", app.getRootPath());
         m.put("rootPathEffective", OpenAppService.effectiveRoot(app));
+        m.put("defaultSource", app.getDefaultSource());
         m.put("enabled", app.isEnabled());
         m.put("lastUsedAt", app.getLastUsedAt());
         m.put("createdAt", app.getCreatedAt());
@@ -117,9 +122,9 @@ public class OpenAppController {
 
     // ===== 请求 DTO =====
 
-    public record CreateReq(String appName, String description, String rootPath) {}
+    public record CreateReq(String appName, String description, String rootPath, String defaultSource) {}
 
-    public record UpdateReq(String description, String rootPath) {}
+    public record UpdateReq(String description, String rootPath, String defaultSource) {}
 
     public record EnabledReq(boolean enabled) {}
 }

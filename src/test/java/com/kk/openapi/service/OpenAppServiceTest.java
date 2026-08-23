@@ -55,6 +55,7 @@ class OpenAppServiceTest {
     @Mock private ObjectProvider<MultipartUploadService> multipartProvider;
     @Mock private MultipartUploadService multipartUploadService;
     @Mock private StorageBrowserService ossSvc;
+    @Mock private StorageBrowserService minioSvc;
     @Spy private final OAuthCrypto crypto = new OAuthCrypto();
 
     @InjectMocks
@@ -64,19 +65,54 @@ class OpenAppServiceTest {
     void createGeneratesOneTimeTokenWithHashStored() {
         when(openAppRepository.existsByAppName("crm")).thenReturn(false);
         when(openAppRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(registry.get("minio")).thenReturn(minioSvc);
+        when(minioSvc.sourceId()).thenReturn("minio");
 
-        OpenAppService.CreatedApp created = service.create("crm", "客户系统", "crm/2026");
+        OpenAppService.CreatedApp created = service.create("crm", "客户系统", "crm/2026", "minio");
 
         assertThat(created.token()).startsWith("kfile_").hasSizeGreaterThan(20);
         assertThat(created.app().getTokenHash()).isEqualTo(crypto.sha256Hex(created.token()));
         assertThat(created.app().getRootPath()).isEqualTo("crm/2026");
+        assertThat(created.app().getDefaultSource()).isEqualTo("minio");
         assertThat(created.app().isEnabled()).isTrue();
+    }
+
+    @Test
+    void createRejectsDisabledDefaultSource() {
+        when(openAppRepository.existsByAppName("crm")).thenReturn(false);
+        when(registry.get("bad")).thenThrow(new IllegalArgumentException("未知或未启用的数据源: bad"));
+
+        assertThatThrownBy(() -> service.create("crm", null, null, "bad"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未知或未启用");
+        verify(openAppRepository, never()).save(any());
+    }
+
+    @Test
+    void normalizeDefaultSourceBlankMeansFallback() {
+        assertThat(service.normalizeDefaultSource(null)).isNull();
+        assertThat(service.normalizeDefaultSource("  ")).isNull();
+    }
+
+    @Test
+    void updateDefaultSourceValidatesAndClears() {
+        OpenApp app = crmApp();
+        when(openAppRepository.findById(7L)).thenReturn(Optional.of(app));
+        when(openAppRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(registry.get("minio")).thenReturn(minioSvc);
+        when(minioSvc.sourceId()).thenReturn("minio");
+
+        service.updateDefaultSource(7L, "minio");
+        assertThat(app.getDefaultSource()).isEqualTo("minio");
+
+        service.updateDefaultSource(7L, "");  // 空串恢复兜底
+        assertThat(app.getDefaultSource()).isNull();
     }
 
     @Test
     void createDuplicateNameRejectedWith409() {
         when(openAppRepository.existsByAppName("crm")).thenReturn(true);
-        assertThatThrownBy(() -> service.create("crm", null, null))
+        assertThatThrownBy(() -> service.create("crm", null, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.CONFLICT);
@@ -85,7 +121,7 @@ class OpenAppServiceTest {
 
     @Test
     void createRejectsAppNameWithPathSeparator() {
-        assertThatThrownBy(() -> service.create("a/b", null, null))
+        assertThatThrownBy(() -> service.create("a/b", null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

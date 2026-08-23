@@ -61,7 +61,7 @@ public class OpenAppService {
     }
 
     @Transactional
-    public CreatedApp create(String appName, String description, String rootPath) {
+    public CreatedApp create(String appName, String description, String rootPath, String defaultSource) {
         if (appName == null || appName.contains("/") || appName.contains("\\")) {
             throw new IllegalArgumentException("应用名不能包含路径分隔符: " + appName);
         }
@@ -74,9 +74,17 @@ public class OpenAppService {
         app.setAppName(name);
         app.setDescription(description);
         app.setRootPath(normalizeRootPath(rootPath));
+        app.setDefaultSource(normalizeDefaultSource(defaultSource));
         app.setEnabled(true);
         app.setTokenHash(crypto.sha256Hex(token));
         return new CreatedApp(openAppRepository.save(app), token);
+    }
+
+    /** 校验并归一化应用默认数据源：blank → null（= 兜底 oss）；非空必须为已启用 sourceId（未知抛 IllegalArgumentException → 400） */
+    public String normalizeDefaultSource(String defaultSource) {
+        if (defaultSource == null || defaultSource.isBlank()) return null;
+        String s = defaultSource.trim();
+        return registry.get(s).sourceId();
     }
 
     /** 轮换：覆盖 tokenHash，旧 token 立即失效；新明文仅本次返回 */
@@ -100,6 +108,14 @@ public class OpenAppService {
     public void updateDescription(Long id, String description) {
         OpenApp app = requireApp(id);
         app.setDescription(description);
+        openAppRepository.save(app);
+    }
+
+    /** 更新应用默认数据源；defaultSource 为 null 不修改，空串恢复兜底（oss），非空校验已启用 */
+    @Transactional
+    public void updateDefaultSource(Long id, String defaultSource) {
+        OpenApp app = requireApp(id);
+        app.setDefaultSource(normalizeDefaultSource(defaultSource));
         openAppRepository.save(app);
     }
 

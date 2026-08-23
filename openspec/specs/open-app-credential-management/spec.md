@@ -1,7 +1,7 @@
 # open-app-credential-management Specification
 
 ## Purpose
-SUPER 管理后台的开放应用凭证管理：appName/appToken 创建（一次性明文、哈希落库）、轮换、启停、级联删除（连带清理应用文件）、SDK 上传根路径（rootPath）配置与迁移、lastUsedAt 审计，以及开放 API 默认数据源设置。
+SUPER 管理后台的开放应用凭证管理：appName/appToken 创建（一次性明文、哈希落库）、轮换、启停、级联删除（连带清理应用文件）、SDK 上传根路径（rootPath）配置与迁移、应用级默认数据源配置、lastUsedAt 审计。
 ## Requirements
 ### Requirement: 创建开放应用（SUPER）
 系统 SHALL 允许 `SUPER` 角色管理员创建开放应用：提交 `appName`（全局唯一）、可选 `description` 与可选 `rootPath`（见「SDK 上传根路径配置」）；`appToken` 由系统生成（`kapp_` 前缀 + ≥32 字节随机串），仅在创建响应中明文返回一次，落库只存 SHA-256 哈希。
@@ -72,16 +72,20 @@ SUPER 管理后台的开放应用凭证管理：appName/appToken 创建（一次
 - **WHEN** 应用成功调用开放 API 后，SUPER 用户查看应用列表
 - **THEN** 该应用的 `lastUsedAt` 反映最近一次成功调用时间
 
-### Requirement: 开放 API 默认数据源设置
-系统设置 SHALL 提供「开放 API 默认数据源」配置项（configs key `OPEN_API_DEFAULT_SOURCE`）：候选为当前已启用数据源，保存时校验；未配置时默认 `oss`。
+### Requirement: 应用默认数据源配置
+系统 SHALL 支持为每个开放应用单独配置默认数据源（`defaultSource`，管理端「开放应用」页创建时可选填、创建后可修改，清空恢复兜底）：候选为当前已启用数据源，保存时校验；未配置时开放 API 兜底 `oss`。该配置仅影响本应用未显式传 `source` 的请求，与其他应用无关。
 
-#### Scenario: 保存合法数据源
-- **WHEN** SUPER 用户在系统设置中将默认数据源设为已启用的 `minio`
-- **THEN** 保存成功，后续未传 `source` 的开放 API 请求使用 minio
+#### Scenario: 为应用配置合法默认数据源
+- **WHEN** SUPER 用户在「开放应用」中将应用 crm 的默认数据源设为已启用的 `minio`
+- **THEN** 保存成功，后续该应用未传 `source` 的开放 API 请求使用 minio，其他应用不受影响
 
-#### Scenario: 保存未启用的数据源被拒绝
-- **WHEN** SUPER 用户将默认数据源设为当前未启用的 sourceId
+#### Scenario: 配置未启用的数据源被拒绝
+- **WHEN** SUPER 用户将某应用的默认数据源设为当前未启用的 sourceId
 - **THEN** 系统返回 `400 Bad Request`
+
+#### Scenario: 清空恢复兜底
+- **WHEN** SUPER 用户将应用的默认数据源清空保存
+- **THEN** 该应用未传 `source` 的请求回落到兜底 `oss`
 
 ### Requirement: 删除应用（连带文件清理）
 系统 SHALL 支持删除开放应用：`DELETE /api/admin/open-apps/{id}`（SUPER）级联清理该应用名下全部文件——删除对象存储对象、`stored_file` FILE 节点与分片上传残留记录，随后删除应用记录（其 token 立即失效）。搬空后的应用根路径目录链 SHALL 被清理；仍含其他文件（如多应用共享目录）的目录 MUST 保留。删除 MUST 经二次确认，确认前展示该应用文件数与总大小（`GET /{id}/stats`）；删除结果返回 `{deletedFiles, failedObjects}`，对象删除失败不阻断（计入 failedObjects 仅告警）。
