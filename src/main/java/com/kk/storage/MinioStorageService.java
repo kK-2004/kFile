@@ -99,6 +99,22 @@ public class MinioStorageService implements StorageBrowserService {
     }
 
     @Override
+    public void copy(String fromKey, String toKey) {
+        try {
+            minioClient.copyObject(io.minio.CopyObjectArgs.builder()
+                    .bucket(properties.getBucket())
+                    .object(toKey)
+                    .source(io.minio.CopySource.builder()
+                            .bucket(properties.getBucket())
+                            .object(fromKey)
+                            .build())
+                    .build());
+        } catch (Exception e) {
+            throw new IllegalStateException("MinIO 复制对象失败: " + fromKey + " -> " + toKey, e);
+        }
+    }
+
+    @Override
     public Entry stat(String storageKey) {
         try {
             StatObjectResponse resp = minioClient.statObject(StatObjectArgs.builder()

@@ -42,6 +42,10 @@ import java.util.List;
  *   <li>{@code /mcp} Bearer 资源服务器链（{@link #mcpFilterChain}）：无 session（STATELESS），
  *       仅接受 {@code mcp:tools} scope 且 resource 匹配的 OAuth bearer token，
  *       失败返回带 {@code resource_metadata} 的可发现 401。MCP token 不能访问 {@code /api/admin/**}。</li>
+ *   <li>{@code /api/open} 开放 API 链（{@link #openApiFilterChain}）：无 session（STATELESS），
+ *       仅接受开放应用 appToken（{@code OpenAppAuthFilter}，ROLE_OPEN_APP）。
+ *       应用身份与管理员会话互不可达：appToken 无 session 访问不了 {@code /api/admin/**}，
+ *       管理员 cookie 无 Bearer 访问不了 {@code /api/open/**}。</li>
  *   <li>OAuth endpoints 链（{@link #oauthFilterChain}）：{@code /oauth2/consent} 写操作需要 session
  *       并启用 CSRF/一次性确认防护；{@code /oauth2/authorize} 等在 permitAll 中已放行。</li>
  *   <li>Web / API session 链（{@link #webFilterChain}）：现有登录、登出、session 与管理 API 权限行为不变。</li>
@@ -104,10 +108,35 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ============ 链 2：OAuth endpoints（consent 写操作需 session + CSRF）============
+    // ============ 链 2：/api/open 开放 API（appToken，STATELESS）============
 
     @Bean
     @Order(2)
+    public SecurityFilterChain openApiFilterChain(
+            HttpSecurity http, com.kk.openapi.OpenAppAuthFilter openAppAuthFilter) throws Exception {
+        http
+                .securityMatcher("/api/open/**")
+                .cors(Customizer.withDefaults())
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(
+                        ex ->
+                                ex.authenticationEntryPoint(new RestAuthenticationEntryPoint())
+                                        .accessDeniedHandler(new RestAccessDeniedHandler()))
+                .authorizeHttpRequests(authz -> authz.anyRequest().hasRole("OPEN_APP"))
+                .addFilterBefore(
+                        openAppAuthFilter,
+                        org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+                                .class)
+                .formLogin(form -> form.disable())
+                .httpBasic(basic -> basic.disable());
+        return http.build();
+    }
+
+    // ============ 链 3：OAuth endpoints（consent 写操作需 session + CSRF）============
+
+    @Bean
+    @Order(3)
     public SecurityFilterChain oauthFilterChain(
             HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
         http
@@ -150,10 +179,10 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ============ 链 3：Web / API session（现有行为不变）============
+    // ============ 链 4：Web / API session（现有行为不变）============
 
     @Bean
-    @Order(3)
+    @Order(4)
     public SecurityFilterChain webFilterChain(
             HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
         http

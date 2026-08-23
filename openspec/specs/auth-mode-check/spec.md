@@ -1,3 +1,11 @@
+# auth-mode-check Specification
+
+## Purpose
+
+用户端与管理端在不同登录状态下的可见性与行为约束。
+
+## Requirements
+
 ### Requirement: 用户端项目列表可见性判断
 系统 SHALL 仅依据管理员是否已登录（`!!auth.user`）来决定用户端项目列表的可见性。已登录管理员 SHALL 能看到项目列表并操作提交按钮。未登录用户 SHALL 看到提示信息。
 

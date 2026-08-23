@@ -279,8 +279,8 @@ public class MultipartUploadService {
         public final List<UploadedPart> uploadedParts;
         public final boolean alreadyDone;
 
-        private InitResult(String uploadId, String chunkKeyPrefix, String storageKey, int totalChunks,
-                           Long storedFileId, List<UploadedPart> uploadedParts, boolean alreadyDone) {
+        public InitResult(String uploadId, String chunkKeyPrefix, String storageKey, int totalChunks,
+                          Long storedFileId, List<UploadedPart> uploadedParts, boolean alreadyDone) {
             this.uploadId = uploadId;
             this.chunkKeyPrefix = chunkKeyPrefix;
             this.storageKey = storageKey;

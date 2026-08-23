@@ -18,7 +18,8 @@ import java.time.Instant;
 @Entity
 @Table(name = "stored_file", indexes = {
         @Index(name = "idx_stored_file_parent", columnList = "parent_id"),
-        @Index(name = "idx_stored_file_uploader", columnList = "uploader_id")
+        @Index(name = "idx_stored_file_uploader", columnList = "uploader_id"),
+        @Index(name = "idx_stored_file_open_app", columnList = "open_app_id")
 })
 public class StoredFile {
 
@@ -33,6 +34,10 @@ public class StoredFile {
     /** 上传者 AdminUser.id；文件夹为创建者 */
     @Column(name = "uploader_id")
     private Long uploaderId;
+
+    /** 归属开放应用 OpenApp.id（开放 API 上传的文件）；后台人工上传为 null */
+    @Column(name = "open_app_id")
+    private Long openAppId;
 
     /** 显示名（文件夹名/文件名） */
     @Column(nullable = false, length = 255)

@@ -40,4 +40,17 @@ public interface StoredFileRepository extends JpaRepository<StoredFile, Long> {
 
     /** 按 storageKey + UPLOADING 查预创建的记录 */
     Optional<StoredFile> findByStorageKeyAndStatus(String storageKey, String status);
+
+    /** 按 storageKey 查最新记录（任意状态，开放 API 下载回传 key 时使用） */
+    Optional<StoredFile> findFirstByStorageKeyOrderByIdDesc(String storageKey);
+
+    /** 某开放应用名下全部节点（迁移用） */
+    List<StoredFile> findByOpenAppId(Long openAppId);
+
+    /** 某开放应用名下文件数（删除前统计） */
+    long countByOpenAppIdAndType(Long openAppId, String type);
+
+    /** 统计某开放应用名下 FILE 总字节数（删除前统计） */
+    @org.springframework.data.jpa.repository.Query("select coalesce(sum(f.size),0) from StoredFile f where f.openAppId = :openAppId and f.type = 'FILE'")
+    long sumSizeByOpenAppId(@org.springframework.data.repository.query.Param("openAppId") Long openAppId);
 }

@@ -1,3 +1,11 @@
+# project-file-type-validation Specification
+
+## Purpose
+
+项目文件类型全局白名单的约束范围与管理员豁免。
+
+## Requirements
+
 ### Requirement: 项目文件类型全局白名单约束范围
 系统 SHALL 仅对非管理员用户（无 SUPER 或 ADMIN 角色）应用全局文件类型白名单约束。SUPER 和 ADMIN 用户在创建和更新项目时 SHALL 不受全局 `USER_ALLOWED_FILE_TYPES` 配置的限制。
 

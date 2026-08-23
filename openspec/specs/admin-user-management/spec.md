@@ -1,3 +1,11 @@
+# admin-user-management Specification
+
+## Purpose
+
+SUPER 管理后台的管理员账户管理：创建/删除/重置密码、配额与项目权限。
+
+## Requirements
+
 ### Requirement: SUPER 删除 ADMIN 用户
 系统 SHALL 在删除 ADMIN 用户时正确执行事务操作，先删除该用户的所有项目权限记录，再删除用户本身。
 
