@@ -9,26 +9,34 @@ FROM crpi-g3stl1c9yrlh5x39.cn-beijing.personal.cr.aliyuncs.com/kk09/maven:latest
 ARG GITHUB_PACKAGES_USER=kK-2004
 ARG GITHUB_PACKAGES_TOKEN
 
-RUN mkdir -p /root/.m2 && \
-    echo '<?xml version="1.0" encoding="UTF-8"?>' > /root/.m2/settings.xml && \
-    echo '<settings>' >> /root/.m2/settings.xml && \
-    echo '  <mirrors>' >> /root/.m2/settings.xml && \
-    echo '    <mirror>' >> /root/.m2/settings.xml && \
-    echo '      <id>aliyun</id>' >> /root/.m2/settings.xml && \
-    echo '      <mirrorOf>central</mirrorOf>' >> /root/.m2/settings.xml && \
-    echo '      <url>https://maven.aliyun.com/repository/public</url>' >> /root/.m2/settings.xml && \
-    echo '    </mirror>' >> /root/.m2/settings.xml && \
-    echo '  </mirrors>' >> /root/.m2/settings.xml && \
-    if [ -n "${GITHUB_PACKAGES_TOKEN}" ]; then \
-      echo '  <servers>' >> /root/.m2/settings.xml && \
-      echo '    <server>' >> /root/.m2/settings.xml && \
-      echo "      <id>github</id>" >> /root/.m2/settings.xml && \
-      echo "      <username>${GITHUB_PACKAGES_USER}</username>" >> /root/.m2/settings.xml && \
-      echo "      <password>${GITHUB_PACKAGES_TOKEN}</password>" >> /root/.m2/settings.xml && \
-      echo '    </server>' >> /root/.m2/settings.xml && \
-      echo '  </servers>' >> /root/.m2/settings.xml; \
-    fi && \
-    echo '</settings>' >> /root/.m2/settings.xml
+# central 镜像源：默认 aliyun（国内构建拉包快）；GitHub Actions 等海外环境由构建方传
+# MAVEN_CENTRAL_MIRROR=https://repo.maven.apache.org/maven2 直连 Central（aliyun 网关偶发 502），
+# 传空字符串则完全不配置镜像（直连各仓库自身地址）。
+ARG MAVEN_CENTRAL_MIRROR=https://maven.aliyun.com/repository/public
+
+RUN mkdir -p /root/.m2 && { \
+      echo '<?xml version="1.0" encoding="UTF-8"?>'; \
+      echo '<settings>'; \
+      if [ -n "${MAVEN_CENTRAL_MIRROR}" ]; then \
+        echo '  <mirrors>'; \
+        echo '    <mirror>'; \
+        echo '      <id>central-mirror</id>'; \
+        echo '      <mirrorOf>central</mirrorOf>'; \
+        echo "      <url>${MAVEN_CENTRAL_MIRROR}</url>"; \
+        echo '    </mirror>'; \
+        echo '  </mirrors>'; \
+      fi; \
+      if [ -n "${GITHUB_PACKAGES_TOKEN}" ]; then \
+        echo '  <servers>'; \
+        echo '    <server>'; \
+        echo '      <id>github</id>'; \
+        echo "      <username>${GITHUB_PACKAGES_USER}</username>"; \
+        echo "      <password>${GITHUB_PACKAGES_TOKEN}</password>"; \
+        echo '    </server>'; \
+        echo '  </servers>'; \
+      fi; \
+      echo '</settings>'; \
+    } > /root/.m2/settings.xml
 
 WORKDIR /build
 
@@ -49,12 +57,22 @@ COPY pom.xml ./
 RUN mvn dependency:go-offline -B || true
 
 COPY src ./src
-RUN mvn -B -q -T 1C clean package \
-    -DskipTests=${SKIP_TESTS} \
-    -P${MAVEN_PROFILE} \
-    -Dmaven.compiler.forceJavacCompilerUse=true \
-    -Dmaven.compiler.source=21 -Dmaven.compiler.target=21 \
-    -Dmaven.compiler.parameters=true
+# 依赖下载的瞬时网络/网关错误（如镜像源 502）自动重试：重试可复用本地仓库已下载产物，代价很小
+RUN tries=3; \
+    until mvn -B -q -T 1C clean package \
+      -DskipTests=${SKIP_TESTS} \
+      -P${MAVEN_PROFILE} \
+      -Dmaven.compiler.forceJavacCompilerUse=true \
+      -Dmaven.compiler.source=21 -Dmaven.compiler.target=21 \
+      -Dmaven.compiler.parameters=true; do \
+      tries=$((tries-1)); \
+      if [ "$tries" -le 0 ]; then \
+        echo "ERROR: Maven package failed after 3 attempts"; \
+        exit 1; \
+      fi; \
+      echo "WARN: Maven package failed (possibly transient repo error), retrying... ($tries attempts left)"; \
+      sleep 10; \
+    done
 
 RUN find target -name "*-original.jar" -type f -delete && \
     cp $(ls -1 target/*.jar | head -n 1) /app.jar

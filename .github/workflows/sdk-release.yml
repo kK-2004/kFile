@@ -1,0 +1,156 @@
+name: SDK Release
+
+# SDK（sdk/）有实际代码变化时自动打包发布到 GitHub Packages（maven.pkg.github.com/kK-2004/kFile），
+# 也支持在 Actions 页面手动触发（任意分支，显式发版意图），并可被 deploy.yml 复用调用
+# （手动选择「发布 sdk」模块时）。注意：发版动作刻意与 deploy.yml 的自动部署分离——
+# 部署流由 push 到 test 触发，若内嵌发版会导致 test 分支每次动到 sdk 就尝试发版，且版本重复会连累部署失败。
+on:
+  workflow_dispatch:
+  # 被 deploy.yml（或其它工作流）复用调用
+  workflow_call:
+    inputs:
+      force:
+        description: '跳过变更检测（调用方已确认发布意图；版本存在性校验仍生效）'
+        type: boolean
+        default: false
+
+# 串行执行：避免两个并发流程同时通过「版本不存在」校验后重复发布同一版本
+concurrency:
+  group: sdk-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # 用运行自带的 GITHUB_TOKEN 发布到本仓库 Packages，免新增 secret
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 需要 HEAD^ 做变更检测
+          fetch-depth: 2
+
+      # 检测 sdk 是否有实质变化（源码或 pom；README 等文档变化不触发发布）。
+      # push 事件由 paths 过滤器兜底；这里精确到 sdk/pom.xml 与 sdk/src/**。
+      # workflow_dispatch / force=true 视为显式发版意图，始终执行。
+      - name: Detect sdk changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ inputs.force }}" == "true" ]]; then
+            echo "Explicit publish intent (${{ github.event_name }}, force=${{ inputs.force }}) → publish regardless"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            DIFF=$(git diff --name-only HEAD^ HEAD -- sdk/ | grep -E '^sdk/(pom\.xml|src/)' || true)
+          else
+            # 首次提交/强推拿不到父提交：保守视为有变化（后续版本存在性校验会兜底）
+            DIFF="sdk/pom.xml"
+          fi
+          if [[ -n "$DIFF" ]]; then
+            echo "Changed sdk files:"
+            echo "$DIFF"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No effective sdk changes (docs only), skip publish"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: sdk/pom.xml
+
+      - name: Read sdk version
+        if: steps.changes.outputs.changed == 'true'
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION=$(mvn -f sdk/pom.xml -q help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "SDK version: ${VERSION}"
+          if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
+            echo "::error::GitHub Packages 不支持 SNAPSHOT 版本（当前 ${VERSION}）。请先把 sdk/pom.xml 中的版本号改为正式版本（如 0.1.0 或 0.2.0）再发布。"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      # 版本控制：同一版本只允许发布一次。发布前查询 GitHub Packages 上该版本的 .pom 是否已存在，
+      # 已存在则终止（GitHub Packages 本身允许覆盖上传，必须显式拦截）。
+      - name: Check version not already published
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          URL="https://maven.pkg.github.com/kK-2004/kFile/com/kk/content-center-sdk/${SDK_VERSION}/content-center-sdk-${SDK_VERSION}.pom"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            "$URL")
+          echo "Check $URL → HTTP ${CODE}"
+          if [[ "$CODE" == "200" ]]; then
+            echo "::error::版本 ${SDK_VERSION} 已发布过，不允许重复发布（历史版本必须不可变）。请升级 sdk/pom.xml 中的版本号后重试。"
+            exit 1
+          elif [[ "$CODE" != "404" ]]; then
+            echo "::error::版本查询异常（HTTP ${CODE}），请检查 GITHUB_TOKEN 的 packages 权限后重试。"
+            exit 1
+          fi
+          echo "版本 ${SDK_VERSION} 未发布过，继续。"
+
+      # 认证配置：server id 必须与 sdk/pom.xml distributionManagement 的 repository id（github）一致
+      - name: Write Maven settings
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          PACKAGES_USER: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<'EOF'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${env.PACKAGES_USER}</username>
+                <password>${env.GH_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+          echo "Maven settings written (server id: github)"
+
+      # 先跑测试（含 stub 集成测试），通过才允许发布
+      - name: Build and test sdk
+        if: steps.changes.outputs.changed == 'true'
+        run: mvn -f sdk/pom.xml -B clean verify
+
+      - name: Publish to GitHub Packages
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mvn -f sdk/pom.xml -B deploy
+          {
+            echo "## SDK 发布成功"
+            echo ""
+            echo "- 坐标：\`com.kk:content-center-sdk:${SDK_VERSION}\`"
+            echo "- 仓库：https://maven.pkg.github.com/kK-2004/kFile"
+            echo "- 接入方式见仓库根目录 \`sdk/README.md\`（消费方需配置 GitHub Packages 仓库与 PAT）"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skipped (no sdk changes)
+        if: steps.changes.outputs.changed != 'true'
+        run: echo "sdk 无代码变化，跳过发布。"
