@@ -109,27 +109,36 @@ jobs:
           fi
           echo "版本 ${SDK_VERSION} 未发布过，继续。"
 
-      # 认证配置：server id 必须与 sdk/pom.xml distributionManagement 的 repository id（github）一致
+      # 认证配置：server id 必须与 sdk/pom.xml distributionManagement 的 repository id（github）一致。
+      # 注意：必须在写入时由 shell 展开实际值（无引号 heredoc），不能写成 ${env.XXX} 留给 Maven 插值——
+      # step 级 env 不会延续到后续 step，publish 时插值得到空值会导致 401。
+      # GH_TOKEN 是本次运行自动生成的临时 GITHUB_TOKEN（免配置），与 deploy.yml 里手动配置的
+      # PAT secret「PACKAGES_TOKEN」（跨仓库拉 kmessage-sdk 用）不是同一个东西。
       - name: Write Maven settings
         if: steps.changes.outputs.changed == 'true'
         env:
-          PACKAGES_USER: ${{ github.actor }}
+          GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p ~/.m2
-          cat > ~/.m2/settings.xml <<'EOF'
+          cat > ~/.m2/settings.xml <<EOF
           <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
             <servers>
               <server>
                 <id>github</id>
-                <username>${env.PACKAGES_USER}</username>
-                <password>${env.GH_TOKEN}</password>
+                <username>${GH_USER}</username>
+                <password>${GH_TOKEN}</password>
               </server>
             </servers>
           </settings>
           EOF
-          echo "Maven settings written (server id: github)"
+          # 自检：不允许残留待插值变量占位符（防同类 401 再次漏过）
+          if grep -q '\${' ~/.m2/settings.xml; then
+            echo "::error::settings.xml 存在未解析的变量占位符"
+            exit 1
+          fi
+          echo "Maven settings written (server id: github, credentials baked)"
 
       # 先跑测试（含 stub 集成测试），通过才允许发布
       - name: Build and test sdk
