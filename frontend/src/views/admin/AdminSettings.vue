@@ -38,11 +38,11 @@
       </el-form-item>
 
       <el-divider content-position="left">开放 API</el-divider>
-      <el-form-item label="默认数据源">
-        <el-select v-model="openApi.source" placeholder="选择默认数据源" clearable style="width:100%">
+      <el-form-item label="默认数据源" required>
+        <el-select v-model="openApi.source" placeholder="选择默认数据源（必配）" style="width:100%">
           <el-option v-for="s in openApiSources" :key="s.id" :value="s.id" :label="`${s.label}（${s.id}）`" />
         </el-select>
-        <div class="hint">其他应用通过 SDK 调用开放 API 未显式传 source 时使用的默认数据源；清空表示恢复默认 <code>oss</code>。</div>
+        <div class="hint">其他应用通过 SDK 调用开放 API 未显式传 source 时使用的默认数据源（必配项，初始默认 <code>oss</code>，随部署初始化写入）。</div>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
@@ -204,6 +204,10 @@ onMounted(async () => {
 })
 
 const save = async () => {
+  if (!openApi.value.source) {
+    ElMessage.warning('请选择开放 API 默认数据源（必配项）')
+    return
+  }
   try {
     saving.value = true
     const payload = {
