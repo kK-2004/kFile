@@ -60,7 +60,7 @@ SDK 发布在 GitHub Packages（私有，匿名不可访问）。在你的项目
 <dependency>
   <groupId>com.kk</groupId>
   <artifactId>content-center-sdk</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 ```
 
