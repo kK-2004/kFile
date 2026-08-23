@@ -148,7 +148,9 @@ public final class ContentCenterClient {
                 .build());
         if (put.statusCode() / 100 != 2) {
             throw new ContentCenterException(put.statusCode(),
-                    "直传对象存储失败 (HTTP " + put.statusCode() + ")，putUrl 可能已过期，请重试上传");
+                    "直传对象存储失败 (HTTP " + put.statusCode()
+                            + storageErrorCodeSuffix(put.body())
+                            + ")，putUrl 可能已过期或无权限，请重试上传");
         }
 
         Map<String, Object> complete = new HashMap<>();
@@ -214,7 +216,8 @@ public final class ContentCenterClient {
                         .build());
                 if (put.statusCode() / 100 != 2) {
                     throw new ContentCenterException(put.statusCode(),
-                            "分片 " + partNumber + "/" + totalChunks + " 直传失败 (HTTP " + put.statusCode() + ")");
+                            "分片 " + partNumber + "/" + totalChunks + " 直传失败 (HTTP " + put.statusCode()
+                                    + storageErrorCodeSuffix(put.body()) + ")");
                 }
                 String etag = put.headers().firstValue("etag").orElse(null);
                 if (etag == null || etag.isBlank()) {
@@ -317,6 +320,14 @@ public final class ContentCenterClient {
 
     private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
         if (value != null) map.put(key, value);
+    }
+
+    /** 从 S3/OSS/MinIO 的 XML 错误响应中提取错误码（如 AccessDenied/SignatureDoesNotMatch），便于定位权限/签名/时钟问题 */
+    static String storageErrorCodeSuffix(String body) {
+        if (body == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("<Code>\\s*([^<\\s]+)\\s*</Code>").matcher(body);
+        return m.find() ? ", " + m.group(1) : "";
     }
 
     private static String trimTrailingSlash(String s) {
