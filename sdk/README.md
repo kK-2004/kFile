@@ -79,7 +79,7 @@ ContentCenterClient client = ContentCenterClient.builder()
 // 简单上传：SDK 自动完成三步（init → PUT 直传 → complete 确认）
 UploadResult result = client.upload(Path.of("report.pdf"),
         UploadOptions.defaults()
-                .source("oss")                        // 可选，不传用服务端配置的默认数据源
+                .source("oss")                        // 可选，不传用该应用在后台配置的默认数据源（未配置兜底 oss）
                 .path("avatars/2026")                 // 可选，应用上传根路径下的子目录
                 .contentType("application/pdf"));     // 可选，建议填写
 
@@ -117,7 +117,7 @@ UploadResult upload(InputStream in, String filename, Long size, UploadOptions op
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `source` | null | 数据源 sourceId（如 `oss` / `minio`）；null = 服务端系统设置里配置的默认数据源 |
+| `source` | null | 数据源 sourceId（如 `oss` / `minio`）；null = 该应用在管理端「开放应用」配置的默认数据源（未配置兜底 `oss`） |
 | `path` | null | 应用上传根路径下的子目录（斜杠分隔，如 `avatars/2026`）；每段会被校验，含 `..` 直接 400 |
 | `contentType` | null | 文件 MIME 类型。**填写后 PUT 直传会携带一致的 Content-Type**（OSS 预签名要求二者一致）；不填按 `application/octet-stream` 上传 |
 
@@ -203,7 +203,7 @@ try {
 ## 行为与约束（FAQ）
 
 - **上传落点**：文件落在管理员为应用配置的「上传根路径」（`rootPath`，默认 `开放应用/<应用名>`）+ 你传入的 `path`。修改根路径、迁移文件等由服务端管理端完成，对 SDK 透明。
-- **`source` 怎么选**：不传 = 服务端默认数据源（管理员在系统设置配置，未配置默认 `oss`）。传错值（未启用的数据源）会得到 400。
+- **`source` 怎么选**：不传 = 该应用在管理端「开放应用」配置的默认数据源（管理员按应用配置；未配置兜底 `oss`）。传错值（未启用的数据源）会得到 400。
 - **为什么分片上传只能 MinIO**：分片能力取决于服务端数据源，当前仅 MinIO 提供（OSS 走简单直传）。
 - **幂等性**：简单上传每次调用都会产生新文件（storageKey 含时间戳-uuid 防覆盖）；分片上传按整文件 MD5 幂等，同文件重试不会重复占空间。
 - **并发**：多个线程可同时用同一 client 实例；分片上传内部为串行逐片上传。

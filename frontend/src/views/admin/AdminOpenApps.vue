@@ -17,6 +17,12 @@
             <el-tag v-if="!row.rootPath" size="small" type="info" class="default-tag">默认</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="默认数据源" width="110">
+          <template #default="{ row }">
+            <code class="root-path">{{ row.defaultSource || 'oss' }}</code>
+            <el-tag v-if="!row.defaultSource" size="small" type="info" class="default-tag">兜底</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-switch :model-value="row.enabled" @change="v => toggleEnabled(row, v)" />
@@ -55,6 +61,12 @@
           <el-input v-model="createForm.rootPath" placeholder="选填，如 crm/2026；留空=默认 开放应用/<appName>" />
           <div class="hint">斜杠分隔的虚拟目录；修改已有应用根路径时会同步迁移存量文件</div>
         </el-form-item>
+        <el-form-item label="默认数据源">
+          <el-select v-model="createForm.defaultSource" placeholder="留空=兜底 oss" clearable style="width:100%">
+            <el-option v-for="s in sources" :key="s.id" :value="s.id" :label="`${s.label}（${s.id}）`" />
+          </el-select>
+          <div class="hint">该应用 SDK 调用未显式传 source 时使用</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -76,6 +88,12 @@
           <div class="hint">
             保存后立即生效：<b>该应用全部已上传文件将同步迁移到新路径</b>，文件较多时耗时较长、请勿关闭页面
           </div>
+        </el-form-item>
+        <el-form-item label="默认数据源">
+          <el-select v-model="editForm.defaultSource" placeholder="清空=兜底 oss" clearable style="width:100%">
+            <el-option v-for="s in sources" :key="s.id" :value="s.id" :label="`${s.label}（${s.id}）`" />
+          </el-select>
+          <div class="hint">该应用 SDK 调用未显式传 source 时使用；只影响后续上传/下载路由，已有文件不受影响</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -109,6 +127,7 @@ import { copyText } from '../../utils/clipboard'
 
 const apps = ref([])
 const loading = ref(false)
+const sources = ref([])
 
 const formatTime = (v) => {
   if (!v) return '—'
@@ -128,14 +147,21 @@ const load = async () => {
     ElMessage.error(e?.response?.data?.message || '加载失败')
   } finally { loading.value = false }
 }
-onMounted(load)
+onMounted(async () => {
+  load()
+  // 默认数据源候选（已启用数据源）
+  try {
+    const { data } = await api.adminFileSources()
+    sources.value = Array.isArray(data) ? data : []
+  } catch {}
+})
 
 // ===== 新建 =====
 const createVisible = ref(false)
 const creating = ref(false)
-const createForm = ref({ appName: '', description: '', rootPath: '' })
+const createForm = ref({ appName: '', description: '', rootPath: '', defaultSource: '' })
 const openCreate = () => {
-  createForm.value = { appName: '', description: '', rootPath: '' }
+  createForm.value = { appName: '', description: '', rootPath: '', defaultSource: '' }
   createVisible.value = true
 }
 const submitCreate = async () => {
@@ -146,7 +172,8 @@ const submitCreate = async () => {
     const { data } = await api.adminOpenAppCreate({
       appName: name,
       description: (createForm.value.description || '').trim(),
-      rootPath: (createForm.value.rootPath || '').trim()
+      rootPath: (createForm.value.rootPath || '').trim(),
+      defaultSource: (createForm.value.defaultSource || '').trim()
     })
     createVisible.value = false
     showToken(data?.token, `应用「${name}」已创建`)
@@ -159,15 +186,19 @@ const submitCreate = async () => {
 // ===== 编辑（rootPath 变更 = 同步迁移） =====
 const editVisible = ref(false)
 const editing = ref(false)
-const editForm = ref({ id: null, appName: '', description: '', rootPath: '' })
+const editForm = ref({ id: null, appName: '', description: '', rootPath: '', defaultSource: '' })
 const openEdit = (row) => {
-  editForm.value = { id: row.id, appName: row.appName, description: row.description || '', rootPath: row.rootPath || '' }
+  editForm.value = { id: row.id, appName: row.appName, description: row.description || '',
+    rootPath: row.rootPath || '', defaultSource: row.defaultSource || '' }
   editVisible.value = true
 }
 const submitEdit = async () => {
   const f = editForm.value
+  const row = apps.value.find(a => a.id === f.id) || {}
   const newRoot = (f.rootPath || '').trim()
-  const rootChanged = newRoot !== (apps.value.find(a => a.id === f.id)?.rootPath || '')
+  const rootChanged = newRoot !== (row.rootPath || '')
+  const newSource = (f.defaultSource || '').trim()
+  const sourceChanged = newSource !== (row.defaultSource || '')
   if (rootChanged) {
     try {
       await ElMessageBox.confirm(
@@ -180,6 +211,7 @@ const submitEdit = async () => {
     editing.value = true
     const payload = { description: (f.description || '').trim() }
     if (rootChanged) payload.rootPath = newRoot
+    if (sourceChanged) payload.defaultSource = newSource
     const { data } = await api.adminOpenAppUpdate(f.id, payload)
     editVisible.value = false
     if (rootChanged && data?.migration) {

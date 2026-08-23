@@ -26,8 +26,6 @@ public class AppConfigService {
     public static final String KEY_HERO_ROADMAP = "HERO_ROADMAP";
     // kMessage 飞书渠道默认接收群 groupId（SUPER 在后台维护）
     public static final String KEY_KMESSAGE_GROUP_ID = "KMESSAGE_GROUP_ID";
-    // 开放 API 默认数据源 sourceId（SUPER 在后台维护，候选为已启用数据源；未配置默认 oss）
-    public static final String KEY_OPEN_API_DEFAULT_SOURCE = "OPEN_API_DEFAULT_SOURCE";
 
     private final ConfigRepository repo;
     private final ObjectMapper objectMapper = new ObjectMapper();

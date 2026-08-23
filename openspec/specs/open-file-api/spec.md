@@ -1,7 +1,7 @@
 # open-file-api Specification
 
 ## Purpose
-面向外部应用的开放文件 API（/api/open/**）：Bearer appToken 鉴权（独立安全链、ROLE_OPEN_APP）、按请求选择数据源（默认取系统配置）、预签名直传上传（简单 + 按源能力的分片断点续传）与预签名下载链接。
+面向外部应用的开放文件 API（/api/open/**）：Bearer appToken 鉴权（独立安全链、ROLE_OPEN_APP）、按请求选择数据源（请求 source > 应用级默认 > 兜底 oss）、预签名直传上传（简单 + 按源能力的分片断点续传）与预签名下载链接。
 ## Requirements
 ### Requirement: appToken 鉴权
 `/api/open/**` SHALL 通过独立的 STATELESS 安全链鉴权：请求携带 `Authorization: Bearer <appToken>`，系统按 token SHA-256 哈希查找应用并校验启用状态；失败返回 `401` + `ApiError{message}`。应用身份与 AdminUser 会话体系 MUST 完全隔离。
@@ -21,14 +21,18 @@
 - **THEN** 系统返回 `401`（无 Bearer token）
 
 ### Requirement: 数据源路由
-开放 API 的每个请求 SHALL 支持可选 `source` 参数：为空时使用系统设置的默认数据源（未配置默认 `oss`）；非空时 MUST 为已启用数据源，否则 `400`。
+开放 API 的每个请求 SHALL 支持可选 `source` 参数：非空时 MUST 为已启用数据源，否则 `400`；为空时使用**该应用**在管理端配置的默认数据源（`defaultSource`，见 open-app-credential-management），应用未配置则兜底 `oss`。
 
-#### Scenario: 不传 source 使用默认值
-- **WHEN** 应用调用上传初始化且未传 `source`，系统默认数据源为 `minio`
+#### Scenario: 不传 source 使用应用默认数据源
+- **WHEN** 应用调用上传初始化且未传 `source`，该应用在管理端配置的默认数据源为 `minio`
 - **THEN** 对象写入 minio，响应的 `source` 为 `minio`
 
+#### Scenario: 应用未配置默认时兜底 oss
+- **WHEN** 应用未配置 defaultSource 且未传 `source`
+- **THEN** 操作路由到 `oss`
+
 #### Scenario: 显式指定数据源
-- **WHEN** 应用传 `source: "oss"` 且 oss 已启用
+- **WHEN** 应用传 `source: "oss"` 且 oss 已启用（即使应用默认数据源为 minio）
 - **THEN** 操作路由到 oss
 
 #### Scenario: 未知或未启用数据源被拒绝

@@ -1,6 +1,5 @@
 package com.kk.openapi.service;
 
-import com.kk.common.service.AppConfigService;
 import com.kk.config.MinioProperties;
 import com.kk.config.OssProperties;
 import com.kk.openapi.entity.OpenApp;
@@ -43,22 +42,17 @@ public class OpenFileService {
     private final StorageBrowserRegistry registry;
     private final OpenAppService openAppService;
     private final StoredFileService storedFileService;
-    private final AppConfigService appConfigService;
     private final MinioProperties minioProperties;
     private final OssProperties ossProperties;
     private final ObjectProvider<MultipartUploadService> multipartUploadService;
 
     // ===== 数据源路由 =====
 
-    /** 解析请求 source：空取系统配置默认（未配置默认 oss）；未知/未启用抛 IllegalArgumentException（400） */
-    public String resolveSource(String source) {
-        String s = StringUtils.hasText(source) ? source.trim() : defaultSource();
+    /** 解析请求 source：请求显式传入 > 应用配置的 defaultSource > 兜底 oss；均校验已启用（未知抛 IllegalArgumentException → 400） */
+    public String resolveSource(String source, OpenApp app) {
+        String s = StringUtils.hasText(source) ? source.trim()
+                : (StringUtils.hasText(app.getDefaultSource()) ? app.getDefaultSource().trim() : "oss");
         return registry.get(s).sourceId();
-    }
-
-    private String defaultSource() {
-        String v = appConfigService.getRaw(AppConfigService.KEY_OPEN_API_DEFAULT_SOURCE);
-        return StringUtils.hasText(v) ? v.trim() : "oss";
     }
 
     // ===== 目录解析 =====
@@ -88,7 +82,7 @@ public class OpenFileService {
         if (!StringUtils.hasText(originalName)) {
             throw new IllegalArgumentException("originalName 不能为空");
         }
-        String src = resolveSource(source);
+        String src = resolveSource(source, app);
         StorageBrowserService svc = registry.get(src);
         Long parentId = resolveAppFolder(app, path);
         String rootPrefix = rootPrefixFor(svc.sourceId());
@@ -117,7 +111,7 @@ public class OpenFileService {
         if (!StringUtils.hasText(storageKey)) {
             throw new IllegalArgumentException("storageKey 不能为空");
         }
-        String src = resolveSource(source);
+        String src = resolveSource(source, app);
         StorageBrowserService svc = registry.get(src);
         StoredFile f = storedFileRepository.findByStorageKeyAndStatus(storageKey, StoredFile.STATUS_UPLOADING)
                 .orElseThrow(() -> new IllegalArgumentException("未找到上传初始化记录: " + storageKey));
@@ -143,7 +137,7 @@ public class OpenFileService {
                                                             long fileSize, int totalChunks, String contentMd5,
                                                             String path, String source) {
         MultipartUploadService mp = multipartUploadService.getIfAvailable();
-        String src = resolveSource(source);
+        String src = resolveSource(source, app);
         if (mp == null || !SOURCE_MINIO.equals(src)) {
             throw new IllegalArgumentException("数据源不支持分片上传: " + src);
         }
@@ -205,7 +199,7 @@ public class OpenFileService {
         if (fileId != null) {
             f = storedFileRepository.findById(fileId).orElse(null);
         } else if (StringUtils.hasText(storageKey)) {
-            String src = resolveSource(source);
+            String src = resolveSource(source, app);
             f = storedFileRepository.findFirstByStorageKeyOrderByIdDesc(storageKey)
                     .filter(x -> src.equals(x.getStorageSource()))
                     .orElse(null);

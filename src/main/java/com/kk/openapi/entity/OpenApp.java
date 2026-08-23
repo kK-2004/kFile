@@ -39,6 +39,10 @@ public class OpenApp {
     @Column(name = "root_path", length = 512)
     private String rootPath;
 
+    /** 该应用的默认数据源 sourceId（开放 API 请求未传 source 时使用）；空 = 兜底 oss */
+    @Column(name = "default_source", length = 16)
+    private String defaultSource;
+
     /** 禁用后 token 立即失效 */
     @Column(nullable = false)
     private boolean enabled = true;

@@ -11,7 +11,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-import com.kk.common.service.AppConfigService;
 import com.kk.config.MinioProperties;
 import com.kk.config.OssProperties;
 import com.kk.openapi.entity.OpenApp;
@@ -47,7 +46,6 @@ class OpenFileServiceTest {
     @Mock private StorageBrowserRegistry registry;
     @Mock private OpenAppService openAppService;
     @Mock private StoredFileService storedFileService;
-    @Mock private AppConfigService appConfigService;
     @Mock private ObjectProvider<MultipartUploadService> multipartProvider;
     @Mock private MultipartUploadService multipartUploadService;
     @Mock private StorageBrowserService ossSvc;
@@ -63,7 +61,7 @@ class OpenFileServiceTest {
         OssProperties ossProperties = new OssProperties();
         ossProperties.setPrefix("oss-prefix");
         service = new OpenFileService(storedFileRepository, registry, openAppService, storedFileService,
-                appConfigService, minioProperties, ossProperties, multipartProvider);
+                minioProperties, ossProperties, multipartProvider);
 
         app = new OpenApp();
         app.setId(7L);
@@ -74,36 +72,44 @@ class OpenFileServiceTest {
         when(registry.get("oss")).thenReturn(ossSvc);
         when(registry.get("minio")).thenReturn(minioSvc);
         when(registry.get("bad")).thenThrow(new IllegalArgumentException("未知或未启用的数据源: bad"));
-        when(appConfigService.getRaw(anyString())).thenReturn(null);
         when(openAppService.ensureFolderChain(anyList())).thenReturn(42L);
         when(storedFileService.resolveFolderPath(42L)).thenReturn("开放应用/crm/avatars");
         lenient().when(multipartProvider.getIfAvailable()).thenReturn(multipartUploadService);
     }
 
-    // ===== 数据源路由 =====
+    // ===== 数据源路由（请求 source > 应用 defaultSource > 兜底 oss） =====
 
     @Test
-    void sourceFallsBackToConfiguredDefault() {
-        when(appConfigService.getRaw(AppConfigService.KEY_OPEN_API_DEFAULT_SOURCE)).thenReturn("minio");
-        assertThat(service.resolveSource(null)).isEqualTo("minio");
-        assertThat(service.resolveSource("")).isEqualTo("minio");
-        assertThat(service.resolveSource("  ")).isEqualTo("minio");
+    void appDefaultSourceUsedWhenRequestOmitted() {
+        app.setDefaultSource("minio");
+        assertThat(service.resolveSource(null, app)).isEqualTo("minio");
+        assertThat(service.resolveSource("", app)).isEqualTo("minio");
+        assertThat(service.resolveSource("   ", app)).isEqualTo("minio");
     }
 
     @Test
-    void sourceDefaultsToOssWhenUnset() {
-        assertThat(service.resolveSource(null)).isEqualTo("oss");
+    void fallsBackToOssWhenNeitherConfigured() {
+        assertThat(app.getDefaultSource()).isNull();
+        assertThat(service.resolveSource(null, app)).isEqualTo("oss");
     }
 
     @Test
-    void explicitSourceOverridesDefault() {
-        when(appConfigService.getRaw(AppConfigService.KEY_OPEN_API_DEFAULT_SOURCE)).thenReturn("minio");
-        assertThat(service.resolveSource("oss")).isEqualTo("oss");
+    void explicitSourceOverridesAppDefault() {
+        app.setDefaultSource("minio");
+        assertThat(service.resolveSource("oss", app)).isEqualTo("oss");
     }
 
     @Test
     void unknownSourceRejected() {
-        assertThatThrownBy(() -> service.resolveSource("bad"))
+        assertThatThrownBy(() -> service.resolveSource("bad", app))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未知或未启用");
+    }
+
+    @Test
+    void appDefaultSourceMustBeEnabled() {
+        app.setDefaultSource("bad");
+        assertThatThrownBy(() -> service.resolveSource(null, app))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("未知或未启用");
     }
