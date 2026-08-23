@@ -36,6 +36,14 @@
         </el-select>
         <div class="hint">http/https 始终允许。本地 Agent 的自定义回调协议（如 <code>workbuddy</code>）需在此添加，否则 DCR 注册会被拒绝。留空表示仅允许 http/https。</div>
       </el-form-item>
+
+      <el-divider content-position="left">开放 API</el-divider>
+      <el-form-item label="默认数据源">
+        <el-select v-model="openApi.source" placeholder="选择默认数据源" clearable style="width:100%">
+          <el-option v-for="s in openApiSources" :key="s.id" :value="s.id" :label="`${s.label}（${s.id}）`" />
+        </el-select>
+        <div class="hint">其他应用通过 SDK 调用开放 API 未显式传 source 时使用的默认数据源；清空表示恢复默认 <code>oss</code>。</div>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
       </el-form-item>
@@ -141,6 +149,8 @@ const quotaGB = ref(null)
 const types = ref([])
 const kmsg = ref({ groupId: '' })
 const mcpSchemes = ref([])
+const openApi = ref({ source: '' })
+const openApiSources = ref([])
 const typeSelectable = computed(()=> Array.from(new Set([...(types.value||[])])))
 const saving = ref(false)
 
@@ -170,6 +180,7 @@ const load = async () => {
     types.value = Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : []
     kmsg.value.groupId = data.kmessageGroupId || ''
     mcpSchemes.value = Array.isArray(data.mcpRedirectSchemes) ? data.mcpRedirectSchemes : []
+    openApi.value.source = data.openApiDefaultSource || ''
     quotaGB.value = (data.userTotalQuotaBytes === null || data.userTotalQuotaBytes === undefined)
       ? null
       : Math.round(Number(data.userTotalQuotaBytes)/1024/1024/1024)
@@ -180,6 +191,11 @@ const load = async () => {
 }
 onMounted(async () => {
   load()
+  // 开放 API 默认数据源候选（已启用数据源）
+  try {
+    const { data } = await api.adminFileSources()
+    openApiSources.value = Array.isArray(data) ? data : []
+  } catch {}
   // 拉取 MCP 连接 URL（含正确环境的公共基址）
   try {
     const { data } = await api.getHeroData()
@@ -195,7 +211,8 @@ const save = async () => {
       userTotalQuotaBytes: (quotaGB.value && quotaGB.value > 0) ? Math.round(Number(quotaGB.value) * 1024 * 1024 * 1024) : 0,
       allowedFileTypes: (types.value || []).map(s => String(s||'').replace(/^\./,'')),
       mcpRedirectSchemes: (mcpSchemes.value || []).map(s => String(s||'').trim()).filter(Boolean),
-      kmessageGroupId: (kmsg.value.groupId || '').trim()
+      kmessageGroupId: (kmsg.value.groupId || '').trim(),
+      openApiDefaultSource: (openApi.value.source || '').trim()
     }
     if (payload.userTotalQuotaBytes === 0) payload.userTotalQuotaBytes = null
     await api.adminUpdateConfig(payload)

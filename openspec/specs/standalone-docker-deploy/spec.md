@@ -1,4 +1,10 @@
-## ADDED Requirements
+# standalone-docker-deploy Specification
+
+## Purpose
+
+后端独立 Docker 镜像与部署流程。
+
+## Requirements
 
 ### Requirement: Docker 镜像包含后端 JAR
 

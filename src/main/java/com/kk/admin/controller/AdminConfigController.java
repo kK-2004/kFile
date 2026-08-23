@@ -16,6 +16,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AdminConfigController {
     private final AppConfigService appConfigService;
+    private final com.kk.storage.StorageBrowserRegistry storageBrowserRegistry;
     private final ObjectMapper objectMapper = new ObjectMapper();
     @org.springframework.beans.factory.annotation.Value("${app.project.monthly-limit.user:3}")
     private int defaultMonthlyLimit;
@@ -29,6 +30,8 @@ public class AdminConfigController {
         if (totalQuota == null) totalQuota = 1024L * 1024L * 1024L; // 默认 1GB
         java.util.List<String> types = appConfigService.getStringList(AppConfigService.KEY_USER_ALLOWED_FILE_TYPES);
         String kmessageGroupId = appConfigService.getRaw(AppConfigService.KEY_KMESSAGE_GROUP_ID);
+        String openApiDefaultSource = appConfigService.getRaw(AppConfigService.KEY_OPEN_API_DEFAULT_SOURCE);
+        if (openApiDefaultSource == null || openApiDefaultSource.isBlank()) openApiDefaultSource = "oss";
         java.util.List<java.util.Map<String, Object>> roadmap = appConfigService.getObjectList(AppConfigService.KEY_HERO_ROADMAP);
         java.util.List<String> mcpRedirectSchemes = appConfigService.getStringList(AppConfigService.KEY_MCP_REDIRECT_ALLOWED_SCHEMES);
         java.util.Map<String, Object> resp = new java.util.HashMap<>();
@@ -36,6 +39,7 @@ public class AdminConfigController {
         resp.put("userTotalQuotaBytes", totalQuota);
         resp.put("allowedFileTypes", types);
         resp.put("kmessageGroupId", kmessageGroupId);
+        resp.put("openApiDefaultSource", openApiDefaultSource);
         resp.put("roadmapItems", roadmap);
         resp.put("mcpRedirectSchemes", mcpRedirectSchemes);
         return resp;
@@ -92,6 +96,20 @@ public class AdminConfigController {
             String v = req.getKmessageGroupId().trim();
             appConfigService.setRaw(AppConfigService.KEY_KMESSAGE_GROUP_ID, v.isEmpty() ? null : v);
         }
+        if (req.getOpenApiDefaultSource() != null) {
+            String v = req.getOpenApiDefaultSource().trim();
+            if (!v.isEmpty()) {
+                try {
+                    storageBrowserRegistry.get(v);
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "未知或未启用的数据源: " + v));
+                }
+                appConfigService.setRaw(AppConfigService.KEY_OPEN_API_DEFAULT_SOURCE, v);
+            } else {
+                // 清空 = 恢复默认 oss
+                appConfigService.setRaw(AppConfigService.KEY_OPEN_API_DEFAULT_SOURCE, null);
+            }
+        }
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -102,6 +120,7 @@ public class AdminConfigController {
         private List<String> allowedFileTypes; // USER可用文件扩展名白名单
         private List<String> mcpRedirectSchemes; // MCP OAuth 自定义 redirect scheme 白名单（如 workbuddy）
         private String kmessageGroupId; // kMessage 默认接收飞书群 groupId
+        private String openApiDefaultSource; // 开放 API 默认数据源 sourceId（空=恢复默认 oss）
         private List<java.util.Map<String, Object>> roadmapItems; // 首页 Hero 产品路线图（status/statusText/title/desc）
     }
 }

@@ -216,6 +216,17 @@ export default {
     return instance.get('/api/admin/submissions/presigned-url', { params })
   }
 
+  // ===== 开放应用管理（SUPER）=====
+  ,adminOpenAppList() { return instance.get('/api/admin/open-apps') }
+  ,adminOpenAppCreate(payload) { return instance.post('/api/admin/open-apps', payload) }
+  // rootPath 变更会同步迁移文件，可能耗时较长：不设超时
+  ,adminOpenAppUpdate(id, payload) { return instance.put(`/api/admin/open-apps/${id}`, payload, { timeout: 0 }) }
+  ,adminOpenAppRotate(id) { return instance.post(`/api/admin/open-apps/${id}/rotate`) }
+  ,adminOpenAppSetEnabled(id, enabled) { return instance.put(`/api/admin/open-apps/${id}/enabled`, { enabled }) }
+  ,adminOpenAppStats(id) { return instance.get(`/api/admin/open-apps/${id}/stats`) }
+  // 级联删除（对象较多时可能耗时）：不设超时
+  ,adminOpenAppDelete(id) { return instance.delete(`/api/admin/open-apps/${id}`, { timeout: 0 }) }
+
   // ===== 分享链接管理 =====
   ,adminListShares(page = 0, pageSize = 15, keyword = '') {
     const params = { page, pageSize }

@@ -39,6 +39,9 @@ public interface StorageBrowserService {
     /** 查询对象元信息（key 不存在时返回 null） */
     Entry stat(String storageKey);
 
+    /** 服务端复制对象（同数据源内 fromKey → toKey，供应用根路径迁移搬运文件） */
+    void copy(String fromKey, String toKey);
+
     /** 对象元信息条目 */
     @Data
     @NoArgsConstructor
