@@ -185,9 +185,11 @@ public class AdminFilesController {
     public Map<String, Object> uploadMultipartInit(@RequestBody MultipartInitReq req, org.springframework.security.core.Authentication auth) {
         MultipartUploadService svc = requireMultipart();
         long[] actor = currentActor(auth);
+        String scopedMd5 = MultipartUploadService.scopedContentMd5("user", actor[0], req.getContentMd5());
+        svc.migrateLegacyContentKey(req.getContentMd5(), scopedMd5, null, actor[0]);
         MultipartUploadService.InitResult r = svc.init(
                 req.getParentId(), req.getOriginalName(), req.getContentType(),
-                req.getFileSize(), req.getTotalChunks(), req.getContentMd5(), actor[0], req.getResumeFileId());
+                req.getFileSize(), req.getTotalChunks(), scopedMd5, actor[0], req.getResumeFileId());
         List<Map<String, Object>> uploaded = r.uploadedParts.stream()
                 .map(p -> Map.<String, Object>of("partNumber", p.partNumber(), "etag", p.etag()))
                 .toList();
@@ -204,20 +206,28 @@ public class AdminFilesController {
 
     /** 签发某 chunk 的 presigned PUT 直链 */
     @PostMapping("/upload-multipart-sign")
-    public Map<String, Object> uploadMultipartSign(@RequestBody MultipartSignReq req) {
+    public Map<String, Object> uploadMultipartSign(@RequestBody MultipartSignReq req,
+                                                    org.springframework.security.core.Authentication auth) {
         MultipartUploadService svc = requireMultipart();
-        String url = svc.sign(req.getContentMd5(), req.getChunkId());
+        Long uploaderId = currentActor(auth)[0];
+        String scopedMd5 = MultipartUploadService.scopedContentMd5("user", uploaderId, req.getContentMd5());
+        svc.requireUploaderOwner(scopedMd5, uploaderId);
+        String url = svc.sign(scopedMd5, req.getChunkId());
         return Map.of("url", url, "chunkId", req.getChunkId());
     }
 
     /** 合并完成（前端提交全部 part 的 chunkId+etag，MinIO 校验 part ETag） */
     @PostMapping("/upload-multipart-complete")
-    public Map<String, Object> uploadMultipartComplete(@RequestBody MultipartCompleteReq req) {
+    public Map<String, Object> uploadMultipartComplete(@RequestBody MultipartCompleteReq req,
+                                                        org.springframework.security.core.Authentication auth) {
         MultipartUploadService svc = requireMultipart();
+        Long uploaderId = currentActor(auth)[0];
+        String scopedMd5 = MultipartUploadService.scopedContentMd5("user", uploaderId, req.getContentMd5());
+        svc.requireUploaderOwner(scopedMd5, uploaderId);
         List<MultipartUploadService.PartETag> parts = req.getParts().stream()
                 .map(p -> new MultipartUploadService.PartETag(p.getChunkId(), p.getEtag()))
                 .toList();
-        MultipartUploadService.CompleteResult res = svc.complete(req.getContentMd5(), parts);
+        MultipartUploadService.CompleteResult res = svc.complete(scopedMd5, parts);
         return Map.of("ok", true, "storageKey", res.storageKey(), "storedFileId", res.storedFileId());
     }
 

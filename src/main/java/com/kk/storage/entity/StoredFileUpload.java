@@ -11,7 +11,7 @@ import java.time.Instant;
 /**
  * 分片上传进度元数据。与 {@link StoredFile}（文件树节点）分离。
  * <p>
- * contentMd5 唯一索引作幂等 key（前端 SparkMD5 算），用于断点续传识别同一文件；
+ * contentMd5 唯一索引保存“主体 + 浏览器 MD5”派生的命名空间幂等 key，用于断点续传识别同一主体的同一文件；
  * uploadId 是 S3/MinIO multipart upload 标识，续传时据此调 ListParts 查已传 part。
  * 进度状态全在 MinIO（S3 multipart 服务端状态），本表只持久化 uploadId 等元数据，不存 Redis。
  */
@@ -28,7 +28,7 @@ public class StoredFileUpload {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 整文件 MD5（前端 SparkMD5），唯一幂等 key */
+    /** 主体类型、主体 ID 与整文件 MD5 派生的 32 位唯一幂等 key */
     @Column(name = "content_md5", nullable = false, length = 32)
     private String contentMd5;
 

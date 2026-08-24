@@ -66,8 +66,8 @@ public class OpenFileController {
     @PostMapping("/uploads/multipart/sign")
     @RateLimit(ip = true, capacity = 120, refillRate = 60)
     public Map<String, String> multipartSign(@RequestBody MultipartSignReq req, Authentication auth) {
-        currentApp(auth);
-        return Map.of("url", openFileService.multipartSign(req.contentMd5(), req.chunkId()));
+        OpenApp app = currentApp(auth);
+        return Map.of("url", openFileService.multipartSign(app, req.contentMd5(), req.chunkId()));
     }
 
     /** 分片上传最后一步：提交全部 part ETag，合并完成登记 */

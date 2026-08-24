@@ -6,6 +6,7 @@ import com.kk.storage.entity.StoredFile;
 import com.kk.storage.entity.StoredFileUpload;
 import com.kk.storage.repo.StoredFileRepository;
 import com.kk.storage.repo.StoredFileUploadRepository;
+import com.kk.storage.repo.MultipartInitLockRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,6 +26,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedUploadPartReq
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -51,8 +53,22 @@ public class MultipartUploadService {
     private final S3Presigner minioS3Presigner;
     private final MinioProperties minioProperties;
     private final StoredFileUploadRepository uploadRepository;
+    private final MultipartInitLockRepository initLockRepository;
     private final StoredFileRepository storedFileRepository;
     private final StoredFileService storedFileService;
+
+    /**
+     * 将浏览器计算的 MD5 转为主体命名空间内的 32 位幂等键，避免相同文件在不同应用/用户间碰撞。
+     * UUID v3 基于 MD5 且结果稳定；这里不是密码用途，只用于数据库唯一键命名空间。
+     */
+    public static String scopedContentMd5(String ownerType, Long ownerId, String contentMd5) {
+        if (ownerType == null || ownerType.isBlank() || ownerId == null || contentMd5 == null || contentMd5.isBlank()) {
+            throw new IllegalArgumentException("上传主体与 contentMd5 不能为空");
+        }
+        String material = ownerType.trim() + ":" + ownerId + ":" + contentMd5.trim().toLowerCase();
+        return java.util.UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8))
+                .toString().replace("-", "");
+    }
 
     /**
      * 初始化分片上传（含续传判断）。
@@ -69,6 +85,14 @@ public class MultipartUploadService {
     public InitResult init(Long parentId, String originalName, String contentType,
                            long fileSize, int totalChunks, String contentMd5, Long uploaderId,
                            Long resumeFileId) {
+        acquireInitLock(contentMd5);
+        return initUnderLock(parentId, originalName, contentType, fileSize, totalChunks,
+                contentMd5, uploaderId, resumeFileId);
+    }
+
+    private InitResult initUnderLock(Long parentId, String originalName, String contentType,
+                                     long fileSize, int totalChunks, String contentMd5, Long uploaderId,
+                                     Long resumeFileId) {
         Optional<StoredFileUpload> existing;
         if (resumeFileId != null) {
             StoredFile existingFile = storedFileRepository.findById(resumeFileId)
@@ -143,6 +167,36 @@ public class MultipartUploadService {
     }
 
     /**
+     * 升级兼容：旧版本直接保存浏览器原始 MD5。首次由原所属主体访问时原地迁移为命名空间键；
+     * 已是新键时不重复哈希，其他主体的同 MD5 记录也不会被读取或改写。
+     */
+    @Transactional
+    public void migrateLegacyContentKey(String rawMd5, String scopedKey, Long openAppId, Long uploaderId) {
+        if (rawMd5 == null || rawMd5.isBlank() || rawMd5.equals(scopedKey)
+                || uploadRepository.findByContentMd5(scopedKey).isPresent()) {
+            return;
+        }
+        acquireInitLock(rawMd5);
+        StoredFileUpload legacy = uploadRepository.findByContentMd5(rawMd5).orElse(null);
+        if (legacy == null || legacy.getStoredFileId() == null) return;
+        StoredFile file = storedFileRepository.findById(legacy.getStoredFileId()).orElse(null);
+        boolean owned = file != null && (openAppId != null
+                ? Objects.equals(openAppId, file.getOpenAppId())
+                : Objects.equals(uploaderId, file.getUploaderId()));
+        if (!owned) return;
+        legacy.setContentMd5(scopedKey);
+        uploadRepository.saveAndFlush(legacy);
+        log.info("Multipart legacy idempotency key migrated: storedFileId={}, ownerType={}",
+                legacy.getStoredFileId(), openAppId != null ? "open-app" : "user");
+    }
+
+    private void acquireInitLock(String contentKey) {
+        initLockRepository.insertIgnore(contentKey);
+        initLockRepository.findForUpdate(contentKey)
+                .orElseThrow(() -> new IllegalStateException("无法获取分片初始化锁"));
+    }
+
+    /**
      * 签发某 chunk 的 presigned PUT 直链。
      * <p>
      * S3 multipart 规则：所有 part 必须上传到 createMultipartUpload 时的同一个 key（用 partNumber+uploadId 区分），
@@ -150,6 +204,12 @@ public class MultipartUploadService {
      */
     public String sign(String contentMd5, int chunkId) {
         StoredFileUpload u = requireUpload(contentMd5);
+        if (!StoredFileUpload.STATUS_UPLOADING.equals(u.getStatus())) {
+            throw new IllegalArgumentException("分片上传已结束: " + contentMd5);
+        }
+        if (chunkId < 0 || chunkId >= u.getTotalChunks()) {
+            throw new IllegalArgumentException("chunkId 超出范围: " + chunkId);
+        }
         int partNumber = chunkId + 1; // S3 partNumber 从 1 开始
         PresignedUploadPartRequest presigned = minioS3Presigner.presignUploadPart(UploadPartPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(SIGN_EXPIRE_SECONDS))
@@ -165,9 +225,22 @@ public class MultipartUploadService {
      */
     @Transactional
     public CompleteResult complete(String contentMd5, List<PartETag> parts) {
-        StoredFileUpload u = requireUpload(contentMd5);
+        StoredFileUpload u = uploadRepository.findByContentMd5ForUpdate(contentMd5)
+                .orElseThrow(() -> new IllegalArgumentException("未找到上传记录: " + contentMd5));
+        if (StoredFileUpload.STATUS_UPLOADED.equals(u.getStatus())) {
+            return new CompleteResult(u.getStorageKey(), u.getStoredFileId());
+        }
+        if (!StoredFileUpload.STATUS_UPLOADING.equals(u.getStatus())) {
+            throw new IllegalArgumentException("分片上传已结束: " + contentMd5);
+        }
         if (parts == null || parts.size() != u.getTotalChunks()) {
             throw new IllegalArgumentException("分片数量不匹配: 期望 " + u.getTotalChunks() + "，实际 " + (parts == null ? 0 : parts.size()));
+        }
+        long distinctChunks = parts.stream().map(PartETag::chunkId).distinct().count();
+        boolean invalidPart = parts.stream().anyMatch(p -> p.chunkId() < 0
+                || p.chunkId() >= u.getTotalChunks() || p.etag() == null || p.etag().isBlank());
+        if (distinctChunks != u.getTotalChunks() || invalidPart) {
+            throw new IllegalArgumentException("分片编号或 ETag 无效");
         }
         // 按 chunkId 排序，转 CompletedPart（partNumber = chunkId + 1）
         List<CompletedPart> completedParts = parts.stream()
@@ -184,8 +257,8 @@ public class MultipartUploadService {
         } catch (S3Exception e) {
             // MinIO 校验 part ETag 失败（分片损坏/篡改）会抛错
             log.warn("Multipart complete failed (etag mismatch?): contentMd5={}, msg={}", contentMd5, e.getMessage());
-            abortInternal(u);
-            throw new IllegalArgumentException("分片校验不一致，请重新上传");
+            // 客户端提交了错误/过期 ETag 时保留上传状态，允许重新 ListParts 后重试；不得删除成功分片和文件记录。
+            throw new IllegalArgumentException("分片校验不一致，请刷新分片状态后重试");
         }
 
         // 成功：更新状态
@@ -252,6 +325,26 @@ public class MultipartUploadService {
     private StoredFileUpload requireUpload(String contentMd5) {
         return uploadRepository.findByContentMd5(contentMd5)
                 .orElseThrow(() -> new IllegalArgumentException("未找到上传记录: " + contentMd5));
+    }
+
+    /** 开放 API 在签名或合并前调用，确保 hash 对应上传确属当前应用。 */
+    public void requireOpenAppOwner(String contentMd5, Long openAppId) {
+        StoredFileUpload upload = requireUpload(contentMd5);
+        StoredFile file = upload.getStoredFileId() == null ? null
+                : storedFileRepository.findById(upload.getStoredFileId()).orElse(null);
+        if (file == null || !Objects.equals(openAppId, file.getOpenAppId())) {
+            throw new IllegalArgumentException("无权操作其他应用的上传");
+        }
+    }
+
+    /** 管理端在签名或合并前调用，确保 hash 对应上传确属当前登录用户。 */
+    public void requireUploaderOwner(String contentMd5, Long uploaderId) {
+        StoredFileUpload upload = requireUpload(contentMd5);
+        StoredFile file = upload.getStoredFileId() == null ? null
+                : storedFileRepository.findById(upload.getStoredFileId()).orElse(null);
+        if (file == null || !Objects.equals(uploaderId, file.getUploaderId())) {
+            throw new IllegalArgumentException("无权操作其他用户的上传");
+        }
     }
 
     /** MinIO/S3 返回的 ETag 带双引号，complete 时需去除 */

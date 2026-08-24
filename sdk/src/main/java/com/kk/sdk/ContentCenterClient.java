@@ -91,6 +91,9 @@ public final class ContentCenterClient {
     public record UploadResult(Long fileId, String name, long size, String contentType,
                                String storageKey, String source) {}
 
+    /** 浏览器分片直传完成时提交的分片标识（chunkId 从 0 开始） */
+    public record MultipartPart(int chunkId, String etag) {}
+
     /** 下载链接 */
     public record DownloadLink(String url, long expiresIn) {}
 
@@ -121,6 +124,30 @@ public final class ContentCenterClient {
 
     // ===== 简单上传（预签名直传） =====
 
+    /**
+     * 仅初始化简单上传并返回预签名 PUT URL，不读取或上传文件字节。
+     * 适合由业务后端保管 appToken、浏览器直接 PUT 对象存储的场景。
+     */
+    public UploadInitResponse initUpload(String filename, Long size, UploadOptions options) {
+        UploadOptions opt = options == null ? UploadOptions.defaults() : options;
+        Map<String, Object> body = new HashMap<>();
+        body.put("originalName", filename);
+        putIfNotNull(body, "contentType", opt.contentType());
+        putIfNotNull(body, "size", size);
+        putIfNotNull(body, "path", opt.path());
+        putIfNotNull(body, "source", opt.source());
+        return postJson("/api/open/uploads", body, UploadInitResponse.class);
+    }
+
+    /** 仅确认简单上传完成，由内容中心 stat 对象并返回权威元数据。 */
+    public UploadResult completeUpload(String storageKey, String source) {
+        Map<String, Object> complete = new HashMap<>();
+        complete.put("storageKey", storageKey);
+        complete.put("source", source);
+        UploadCompleteResponse done = postJson("/api/open/uploads/complete", complete, UploadCompleteResponse.class);
+        return new UploadResult(done.fileId(), done.name(), done.size(), done.contentType(), storageKey, source);
+    }
+
     public UploadResult upload(Path file, UploadOptions options) {
         try (InputStream in = Files.newInputStream(file)) {
             return upload(in, file.getFileName().toString(), Files.size(file), options);
@@ -132,13 +159,7 @@ public final class ContentCenterClient {
     /** init → 直传对象存储（PUT 预签名 URL）→ complete；PUT 失败抛异常且不调 complete */
     public UploadResult upload(InputStream in, String filename, Long size, UploadOptions options) {
         UploadOptions opt = options == null ? UploadOptions.defaults() : options;
-        Map<String, Object> body = new HashMap<>();
-        body.put("originalName", filename);
-        putIfNotNull(body, "contentType", opt.contentType());
-        putIfNotNull(body, "size", size);
-        putIfNotNull(body, "path", opt.path());
-        putIfNotNull(body, "source", opt.source());
-        UploadInitResponse init = postJson("/api/open/uploads", body, UploadInitResponse.class);
+        UploadInitResponse init = initUpload(filename, size, opt);
 
         String contentType = opt.contentType() == null ? "application/octet-stream" : opt.contentType();
         HttpResponse<String> put = exchange(HttpRequest.newBuilder(URI.create(init.putUrl()))
@@ -153,15 +174,48 @@ public final class ContentCenterClient {
                             + ")，putUrl 可能已过期或无权限，请重试上传");
         }
 
-        Map<String, Object> complete = new HashMap<>();
-        complete.put("storageKey", init.storageKey());
-        complete.put("source", init.source());
-        UploadCompleteResponse done = postJson("/api/open/uploads/complete", complete, UploadCompleteResponse.class);
-        return new UploadResult(done.fileId(), done.name(), done.size(), done.contentType(),
-                init.storageKey(), init.source());
+        return completeUpload(init.storageKey(), init.source());
     }
 
     // ===== 分片上传（断点续传，仅支持分片的数据源如 MinIO） =====
+
+    /** 仅初始化浏览器分片直传，不读取或上传文件字节。 */
+    public MultipartInitResponse initMultipartUpload(String filename, long fileSize, int totalChunks,
+                                                       String contentMd5, MultipartOptions options) {
+        MultipartOptions opt = options == null ? MultipartOptions.defaults() : options;
+        Map<String, Object> initBody = new HashMap<>();
+        initBody.put("originalName", filename);
+        putIfNotNull(initBody, "contentType", opt.contentType());
+        initBody.put("size", fileSize);
+        initBody.put("totalChunks", totalChunks);
+        initBody.put("contentMd5", contentMd5);
+        putIfNotNull(initBody, "path", opt.path());
+        putIfNotNull(initBody, "source", opt.source());
+        return postJson("/api/open/uploads/multipart/init", initBody, MultipartInitResponse.class);
+    }
+
+    /** 为一个浏览器直传分片签发预签名 PUT URL。 */
+    public String signMultipartPart(String contentMd5, int chunkId) {
+        Map<String, Object> resp = postJson("/api/open/uploads/multipart/sign",
+                Map.of("contentMd5", contentMd5, "chunkId", chunkId), Map.class);
+        Object url = resp == null ? null : resp.get("url");
+        if (url == null) {
+            throw new ContentCenterException(-1, "分片签名响应缺少 url");
+        }
+        return String.valueOf(url);
+    }
+
+    /** 提交浏览器已直传的全部分片 ETag 并触发服务端合并。 */
+    public MultipartCompleteResponse completeMultipartUpload(String contentMd5, List<MultipartPart> parts) {
+        List<Map<String, Object>> bodyParts = new ArrayList<>();
+        if (parts != null) {
+            for (MultipartPart part : parts) {
+                bodyParts.add(Map.of("chunkId", part.chunkId(), "etag", part.etag()));
+            }
+        }
+        return postJson("/api/open/uploads/multipart/complete",
+                Map.of("contentMd5", contentMd5, "parts", bodyParts), MultipartCompleteResponse.class);
+    }
 
     /** 整文件 MD5 作幂等 key；init 返回的已传分片自动跳过，仅上传缺失分片后合并 */
     public UploadResult uploadMultipart(Path file, MultipartOptions options) {
@@ -178,15 +232,7 @@ public final class ContentCenterClient {
         }
         int totalChunks = (int) ((fileSize + partSize - 1) / partSize);
 
-        Map<String, Object> initBody = new HashMap<>();
-        initBody.put("originalName", filename);
-        putIfNotNull(initBody, "contentType", opt.contentType());
-        initBody.put("size", fileSize);
-        initBody.put("totalChunks", totalChunks);
-        initBody.put("contentMd5", md5);
-        putIfNotNull(initBody, "path", opt.path());
-        putIfNotNull(initBody, "source", opt.source());
-        MultipartInitResponse init = postJson("/api/open/uploads/multipart/init", initBody, MultipartInitResponse.class);
+        MultipartInitResponse init = initMultipartUpload(filename, fileSize, totalChunks, md5, opt);
 
         if (init.alreadyDone()) {
             return new UploadResult(init.fileId(), filename, fileSize, opt.contentType(),
@@ -208,7 +254,7 @@ public final class ContentCenterClient {
                     continue; // 断点续传：跳过已上传分片
                 }
                 int len = readPart(raf, buffer, chunkId * (long) partSize, partSize);
-                String url = signPart(md5, chunkId);
+                String url = signMultipartPart(md5, chunkId);
                 HttpResponse<String> put = exchange(HttpRequest.newBuilder(URI.create(url))
                         .header("Content-Type", "application/octet-stream")
                         .timeout(requestTimeout)
@@ -229,24 +275,13 @@ public final class ContentCenterClient {
             throw new ContentCenterException(-1, "读取本地文件失败: " + file, e);
         }
 
-        List<Map<String, Object>> parts = new ArrayList<>();
+        List<MultipartPart> parts = new ArrayList<>();
         for (int chunkId = 0; chunkId < totalChunks; chunkId++) {
-            parts.add(Map.of("chunkId", chunkId, "etag", etagByPart.get(chunkId + 1)));
+            parts.add(new MultipartPart(chunkId, etagByPart.get(chunkId + 1)));
         }
-        MultipartCompleteResponse done = postJson("/api/open/uploads/multipart/complete",
-                Map.of("contentMd5", md5, "parts", parts), MultipartCompleteResponse.class);
+        MultipartCompleteResponse done = completeMultipartUpload(md5, parts);
         return new UploadResult(done.fileId(), filename, done.size(), opt.contentType(),
                 done.storageKey(), opt.source());
-    }
-
-    private String signPart(String contentMd5, int chunkId) {
-        Map<String, Object> resp = postJson("/api/open/uploads/multipart/sign",
-                Map.of("contentMd5", contentMd5, "chunkId", chunkId), Map.class);
-        Object url = resp == null ? null : resp.get("url");
-        if (url == null) {
-            throw new ContentCenterException(-1, "分片签名响应缺少 url");
-        }
-        return String.valueOf(url);
     }
 
     // ===== 下载链接 =====

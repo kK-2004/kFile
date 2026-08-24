@@ -60,7 +60,7 @@ SDK 发布在 GitHub Packages（私有，匿名不可访问）。在你的项目
 <dependency>
   <groupId>com.kk</groupId>
   <artifactId>content-center-sdk</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
 </dependency>
 ```
 
@@ -106,6 +106,15 @@ System.out.println(link.url());
 
 ### 简单上传 `upload`
 
+> **先区分两种上传方式**
+>
+> | 方法 | 适用场景 | 文件数据链路 |
+> |---|---|---|
+> | `initUpload` + `completeUpload` | **浏览器预签名直传** | 浏览器先向业务后端取得 `putUrl`，然后直接 PUT 对象存储；业务后端和 KFile 内容中心都不转发文件字节 |
+> | `upload` | **后端 SDK 上传** | 文件需要先到达调用 SDK 的业务后端，再由该后端执行 PUT；因此从浏览器视角看会经过业务后端，但文件字节仍不会经过 KFile 内容中心服务 |
+>
+> 如果目标是“前端不能把文件传给业务服务器”，请使用 `initUpload`，不要在业务后端接收 `MultipartFile` 后再调用 `upload`。
+
 ```java
 // 文件（推荐，自动取文件名与大小）
 UploadResult upload(Path file, UploadOptions options)
@@ -123,7 +132,15 @@ UploadResult upload(InputStream in, String filename, Long size, UploadOptions op
 
 **UploadResult 字段**：`fileId`（后续下载用，建议持久化）、`name`、`size`（服务端 stat 校验后的真实大小）、`contentType`、`storageKey`、`source`。
 
-**行为要点**：SDK 内部依次执行「初始化拿预签名 PUT URL（有效期 600s）→ 直传对象存储 → 确认登记」；直传失败抛异常且**不会调用确认**；预签名 URL 过期（如本机网络慢超 10 分钟才 PUT）会报错，重新调用 `upload` 即可。
+**行为要点**：`upload` 由调用 SDK 的后端进程读取文件，并依次执行「向内容中心初始化拿预签名 PUT URL（有效期 600s）→ 后端进程 PUT 对象存储 → 向内容中心确认登记」。直传失败会抛异常且**不会调用确认**；预签名 URL 过期（如本机网络慢超 10 分钟才 PUT）会报错，重新调用 `upload` 即可。
+
+浏览器直传场景可由业务后端只调用拆分式方法，appToken 留在后端，文件字节由浏览器直接 PUT：
+
+```java
+UploadInitResponse init = client.initUpload("report.pdf", size, options);
+// 将 init.putUrl() 返回给浏览器；浏览器 PUT 成功后：
+UploadResult result = client.completeUpload(init.storageKey(), init.source());
+```
 
 ### 分片断点续传 `uploadMultipart`（大文件）
 
@@ -143,6 +160,8 @@ UploadResult uploadMultipart(Path file, MultipartOptions options)
 **断点续传原理**：SDK 计算整文件 MD5 作为幂等 key；init 时服务端返回**已成功上传的分片列表**，SDK 只补传缺失的分片后合并。因此同一文件中断后**用同一方法重试即可续传**（无需记录任何中间状态）；服务端识别到「文件此前已完整传完」会直接返回成功（`alreadyDone`）。
 
 适合 GB 级大文件；几十 MB 内的小文件用 `upload` 即可。
+
+浏览器分片直传对应拆分式方法为 `initMultipartUpload`、`signMultipartPart`、`completeMultipartUpload`；业务后端只签名和确认，浏览器负责 PUT 分片并收集 ETag。
 
 ### 下载链接 `getDownloadLink`
 
@@ -222,7 +241,9 @@ SDK 封装以下端点（均携带 `Authorization: Bearer <appToken>`，协议�
 | SDK 方法 | 端点 |
 |---|---|
 | `upload` | `POST /api/open/uploads` → PUT 预签名 URL → `POST /api/open/uploads/complete` |
+| `initUpload` / `completeUpload` | 拆分调用简单上传 init/complete，供浏览器直传 |
 | `uploadMultipart` | `POST /api/open/uploads/multipart/init` →（`/sign` + PUT）× N → `POST /api/open/uploads/multipart/complete` |
+| `initMultipartUpload` / `signMultipartPart` / `completeMultipartUpload` | 拆分调用分片端点，供浏览器直传 |
 | `getDownloadLink` | `POST /api/open/download-links` |
 
 修改 SDK 契约需同步更新服务端 `docs/open-api.md` 与本文件。
