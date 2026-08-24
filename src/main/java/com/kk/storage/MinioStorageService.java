@@ -80,6 +80,26 @@ public class MinioStorageService implements StorageBrowserService {
         }
     }
 
+    @Override
+    public String previewUrl(String storageKey, long expireSeconds, String displayName, String contentType) {
+        if (!properties.isPresignedDirect()) {
+            return proxyUrl(storageKey);
+        }
+        try {
+            GetPresignedObjectUrlArgs.Builder b = GetPresignedObjectUrlArgs.builder()
+                    .bucket(properties.getBucket())
+                    .object(storageKey)
+                    .method(Method.GET)
+                    .expiry((int) Math.max(60, expireSeconds), TimeUnit.SECONDS)
+                    .extraQueryParams(Map.of(
+                            "response-content-disposition", StorageBrowserService.inlineDisposition(displayName),
+                            "response-content-type", contentType));
+            return minioClient.getPresignedObjectUrl(b.build());
+        } catch (Exception e) {
+            throw new IllegalStateException("生成 MinIO 预览直链失败", e);
+        }
+    }
+
     /**
      * 生成浏览器直传 PUT 预签名直链。前端按此 URL 直接 PUT 文件到 MinIO，不经过后端。
      * 与 OSS {@code generatePresignedPutUrlByKey} 对称。

@@ -286,6 +286,9 @@ export default {
     if (expireSeconds) params.expireSeconds = expireSeconds
     return instance.get('/api/admin/files/download-url', { params })
   }
+  ,adminFileCreateCdnLink(fileId, expireSeconds = 0) {
+    return instance.post('/api/admin/files/cdn-link', { fileId, expireSeconds })
+  }
   ,adminFileShare({ fileIds, expireSeconds, filename }) {
     return instance.post('/api/admin/files/share', { fileIds, expireSeconds, filename })
   }

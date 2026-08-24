@@ -87,11 +87,12 @@
       <el-table-column label="修改时间" width="200">
         <template #default="{row}">{{ formatTime(row.updatedAt || row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="320">
+      <el-table-column label="操作" width="430">
         <template #default="{row}">
           <el-space>
             <el-button size="small" v-if="row.type === 'FILE' && row.status !== 'UPLOADING'" @click="download(row)">下载</el-button>
             <el-button size="small" v-if="row.type === 'FILE' && row.status !== 'UPLOADING'" @click="shareOne(row)">分享</el-button>
+            <el-button size="small" v-if="isCdnPreviewable(row)" @click="openCdn(row)">获取 CDN 链接</el-button>
             <el-button size="small" type="warning" v-if="row.status === 'UPLOADING' && !getUploadItem(row)" @click="resumeUpload(row)">续传</el-button>
             <el-button size="small" type="danger" @click="confirmDelete(row)">删除</el-button>
           </el-space>
@@ -225,6 +226,33 @@
       <el-button style="margin-top:8px" @click="resetShare">再生成一个</el-button>
     </div>
   </el-dialog>
+
+  <!-- CDN 预览链接 -->
+  <el-dialog v-model="cdnVisible" title="获取 CDN 预览链接" width="560px">
+    <el-form label-width="100px" v-if="!cdnResult">
+      <el-form-item label="有效期">
+        <el-select v-model="cdnExpire" style="width:100%">
+          <el-option v-for="o in expireOptions" :key="o.value" :value="o.value" :label="o.label" />
+        </el-select>
+      </el-form-item>
+      <div class="cdn-preview-hint">仅支持图片、音频、视频，打开链接后由浏览器直接预览。</div>
+      <el-form-item>
+        <el-button type="primary" :loading="cdnLoading" @click="doCdn">生成 CDN 链接</el-button>
+      </el-form-item>
+    </el-form>
+    <div v-else class="share-result">
+      <el-input :model-value="cdnResult" readonly>
+        <template #append>
+          <el-button @click="copyCdn">复制</el-button>
+        </template>
+      </el-input>
+      <div class="share-hint">
+        {{ cdnExpire === 0 ? '永久有效，文件删除后链接失效。' : `链接将在 ${cdnExpireLabel} 后失效。` }}
+      </div>
+      <el-button type="primary" style="margin-top:8px" @click="openCdnPreview">打开预览</el-button>
+      <el-button style="margin-top:8px" @click="resetCdn">再生成一个</el-button>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -343,6 +371,24 @@ const expireOptions = [
 const shareExpireLabel = computed(() =>
   expireOptions.find(o => o.value === shareExpire.value)?.label || `${shareExpire.value} 秒`
 )
+
+// CDN 预览链接
+const cdnVisible = ref(false)
+const cdnTarget = ref(null)
+const cdnExpire = ref(0)
+const cdnLoading = ref(false)
+const cdnResult = ref('')
+const cdnExpireLabel = computed(() =>
+  expireOptions.find(o => o.value === cdnExpire.value)?.label || `${cdnExpire.value} 秒`
+)
+
+const isCdnPreviewable = (row) => {
+  if (!row || row.type !== 'FILE' || row.status === 'UPLOADING') return false
+  if (/^(image|audio|video)\//i.test(row.contentType || '')) return true
+  return /\.(apng|avif|bmp|gif|jpe?g|png|svg|webp|aac|flac|m4a|mp3|ogg|wav|avi|m4v|mkv|mov|mp4|webm|3gp)$/i.test(
+    row.originalName || row.name || ''
+  )
+}
 
 const sourceLabel = (id) => sources.value.find(s => s.id === id)?.label || id
 
@@ -467,6 +513,43 @@ const download = async (row) => {
     ElMessage.error(e?.response?.data?.message || '下载失败')
   }
 }
+
+const openCdn = (row) => {
+  cdnTarget.value = row
+  cdnExpire.value = 0
+  cdnResult.value = ''
+  cdnVisible.value = true
+}
+
+const doCdn = async () => {
+  if (!cdnTarget.value) return
+  cdnLoading.value = true
+  try {
+    const { data } = await api.adminFileCreateCdnLink(cdnTarget.value.id, cdnExpire.value)
+    if (!data?.token) { ElMessage.error('生成 CDN 链接失败'); return }
+    cdnResult.value = `${window.location.origin}/file/cdn/${encodeURIComponent(data.token)}`
+    ElMessage.success('CDN 预览链接已生成')
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '生成 CDN 链接失败')
+  } finally {
+    cdnLoading.value = false
+  }
+}
+
+const copyCdn = async () => {
+  try {
+    await navigator.clipboard.writeText(cdnResult.value)
+    ElMessage.success('已复制')
+  } catch {
+    ElMessage.warning('复制失败，请手动复制')
+  }
+}
+
+const openCdnPreview = () => {
+  if (cdnResult.value) window.open(cdnResult.value, '_blank', 'noopener,noreferrer')
+}
+
+const resetCdn = () => { cdnResult.value = '' }
 
 // 上传队列调度：同时最多并发 3，多余排队
 const MAX_CONCURRENT = 3
@@ -840,6 +923,11 @@ onMounted(async () => {
   color: var(--kf-muted);
   margin-right: 4px;
   white-space: nowrap;
+}
+.cdn-preview-hint {
+  margin: -4px 0 16px 100px;
+  color: var(--kf-muted);
+  font-size: 12px;
 }
 
 /* 多选浮动操作栏（屏幕下方居中） */
