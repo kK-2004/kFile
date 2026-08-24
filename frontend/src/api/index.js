@@ -228,12 +228,16 @@ export default {
   ,adminOpenAppDelete(id) { return instance.delete(`/api/admin/open-apps/${id}`, { timeout: 0 }) }
 
   // ===== 分享链接管理 =====
-  ,adminListShares(page = 0, pageSize = 15, keyword = '') {
+  ,adminListShares(page = 0, pageSize = 15, keyword = '', shareType = 'ALL') {
     const params = { page, pageSize }
     if (keyword) params.keyword = keyword
+    if (shareType && shareType !== 'ALL') params.shareType = shareType
     return instance.get('/api/admin/shares', { params })
   }
-  ,adminDeleteShare(id) { return instance.delete(`/api/admin/shares/${id}`) }
+  ,adminDeleteShare(id, shareType = '') {
+    if (shareType === 'CDN') return instance.delete(`/api/admin/shares/cdn/${id}`)
+    return instance.delete(`/api/admin/shares/${id}`)
+  }
   ,adminFileSources() { return instance.get('/api/admin/files/sources') }
   ,adminFileList(parentId, page = 0, pageSize = 15, scope = '', keyword = '') {
     const params = { page, pageSize }

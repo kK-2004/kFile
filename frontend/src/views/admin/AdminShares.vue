@@ -6,10 +6,13 @@
           <h2 class="page-title">分享链接管理</h2>
         </div>
         <div class="header-right">
-          <el-input v-model="keyword" placeholder="按项目名搜索" size="default" style="width:200px" clearable
+          <el-input v-model="keyword" placeholder="按项目名或文件名搜索" size="default" style="width:220px" clearable
             @keyup.enter="onSearch" @clear="onSearch">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
+          <el-select v-model="shareType" placeholder="类型" style="width:120px" @change="onTypeChange">
+            <el-option v-for="option in shareTypeOptions" :key="option.value" :value="option.value" :label="option.label" />
+          </el-select>
           <el-button @click="onSearch">搜索</el-button>
           <el-button @click="load">刷新</el-button>
         </div>
@@ -27,6 +30,7 @@
           <el-tag v-if="row.shareType === 'FOLDER_SYNC'" size="small" type="success">文件夹</el-tag>
           <el-tag v-else-if="row.shareType === 'FILE_SET'" size="small">文件集</el-tag>
           <el-tag v-else-if="row.shareType === 'SUBMISSION_SYNC'" size="small" type="warning">提交</el-tag>
+          <el-tag v-else-if="row.shareType === 'CDN'" size="small" type="primary">CDN</el-tag>
           <el-tag v-else size="small" type="info">历史</el-tag>
         </template>
       </el-table-column>
@@ -97,10 +101,12 @@ import { ref, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
+import { buildShareLinkUrl, shareTypeOptions } from '../../utils/shareLinks'
 
 const nodes = ref([])
 const loading = ref(false)
 const keyword = ref('')
+const shareType = ref('ALL')
 const currentPage = ref(1)
 const pageSize = ref(15)
 const total = ref(0)
@@ -108,7 +114,7 @@ const total = ref(0)
 const load = async () => {
   loading.value = true
   try {
-    const { data } = await api.adminListShares(currentPage.value - 1, pageSize.value, keyword.value)
+    const { data } = await api.adminListShares(currentPage.value - 1, pageSize.value, keyword.value, shareType.value)
     nodes.value = data?.nodes || []
     total.value = data?.total || 0
   } catch (e) {
@@ -117,10 +123,11 @@ const load = async () => {
 }
 
 const onSearch = () => { currentPage.value = 1; load() }
+const onTypeChange = () => { currentPage.value = 1; load() }
 const onPage = (p) => { load() }
 const onSize = (s) => { currentPage.value = 1; load() }
 
-const shareUrl = (row) => `${window.location.origin}/share?s=${row.code}`
+const shareUrl = (row) => buildShareLinkUrl(row)
 const copyLink = async (row) => {
   try {
     await navigator.clipboard.writeText(shareUrl(row))
@@ -134,7 +141,7 @@ const confirmDelete = async (row) => {
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
   } catch { return }
   try {
-    await api.adminDeleteShare(row.id)
+    await api.adminDeleteShare(row.id, row.shareType)
     ElMessage.success('已删除')
     await load()
   } catch (e) {

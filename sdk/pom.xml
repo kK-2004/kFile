@@ -10,7 +10,7 @@
   <packaging>jar</packaging>
 
   <name>content-center-sdk</name>
-  <description>内容中心（k-File）开放 API 官方 Java SDK：appToken 鉴权 + 预签名直传上传（简单/分片断点续传）+ 预签名下载链接</description>
+  <description>内容中心（k-File）开放 API 官方 Java SDK：appToken 鉴权 + 预签名直传上传（简单/分片断点续传）+ 预签名下载链接 + 图片/音频/视频 CDN 预览链接（默认永久，支持指定有效期）</description>
 
   <!-- 发布到 GitHub Packages（kK-2004/kFile 仓库命名空间），与根 pom 拉取 kmessage-sdk 的模式对称。
        版本规则：只允许正式版本（GitHub Packages 不支持 SNAPSHOT）；同一版本禁止重复发布，

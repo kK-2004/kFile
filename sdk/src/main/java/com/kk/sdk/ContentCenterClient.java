@@ -3,6 +3,7 @@ package com.kk.sdk;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kk.sdk.model.DownloadLinkResponse;
+import com.kk.sdk.model.CdnLinkResponse;
 import com.kk.sdk.model.MultipartCompleteResponse;
 import com.kk.sdk.model.MultipartInitResponse;
 import com.kk.sdk.model.UploadCompleteResponse;
@@ -97,6 +98,9 @@ public final class ContentCenterClient {
     /** 下载链接 */
     public record DownloadLink(String url, long expiresIn) {}
 
+    /** 图片、音频、视频的 CDN 预览链接；url 可直接交给浏览器媒体标签使用。 */
+    public record CdnLink(String url, long expiresIn, boolean permanent, String contentType) {}
+
     /** 简单上传选项 */
     public record UploadOptions(String source, String path, String contentType) {
         public static UploadOptions defaults() { return new UploadOptions(null, null, null); }
@@ -120,6 +124,12 @@ public final class ContentCenterClient {
         public static DownloadLinkRequest ofKey(String storageKey, String source) { return new DownloadLinkRequest(null, storageKey, source, null, null); }
         public DownloadLinkRequest filename(String v) { return new DownloadLinkRequest(fileId, key, source, v, expiresIn); }
         public DownloadLinkRequest expiresIn(long v) { return new DownloadLinkRequest(fileId, key, source, filename, v); }
+    }
+
+    /** CDN 预览链接请求：仅支持按 fileId 获取，expiresIn 省略表示永久。 */
+    public record CdnLinkRequest(Long fileId, Long expiresIn) {
+        public static CdnLinkRequest ofFileId(long fileId) { return new CdnLinkRequest(fileId, null); }
+        public CdnLinkRequest expiresIn(long v) { return new CdnLinkRequest(fileId, v); }
     }
 
     // ===== 简单上传（预签名直传） =====
@@ -295,6 +305,15 @@ public final class ContentCenterClient {
         putIfNotNull(body, "expiresIn", request.expiresIn());
         DownloadLinkResponse resp = postJson("/api/open/download-links", body, DownloadLinkResponse.class);
         return new DownloadLink(resp.url(), resp.expiresIn());
+    }
+
+    /** 获取图片、音频或视频的稳定 CDN 预览地址；默认永久有效。 */
+    public CdnLink getCdnLink(CdnLinkRequest request) {
+        Map<String, Object> body = new HashMap<>();
+        putIfNotNull(body, "fileId", request.fileId());
+        putIfNotNull(body, "expiresIn", request.expiresIn());
+        CdnLinkResponse resp = postJson("/api/open/cdn-links", body, CdnLinkResponse.class);
+        return new CdnLink(resp.url(), resp.expiresIn(), resp.permanent(), resp.contentType());
     }
 
     // ===== HTTP helpers =====

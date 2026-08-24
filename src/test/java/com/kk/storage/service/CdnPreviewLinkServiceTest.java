@@ -66,6 +66,33 @@ class CdnPreviewLinkServiceTest {
     }
 
     @Test
+    void createsOpenAppLinkOnlyForOwnedMediaFile() {
+        StoredFile file = file("image/png", "cover.png");
+        file.setOpenAppId(7L);
+        when(storedFileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(cdnPreviewLinkRepository.save(any(CdnPreviewLink.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CdnPreviewLinkService.CreatedLink result = service.createForOpenApp(1L, 600L, 7L);
+
+        assertThat(result.token()).hasSize(43);
+        assertThat(result.expireAt()).isAfter(Instant.now());
+        assertThat(result.contentType()).isEqualTo("image/png");
+    }
+
+    @Test
+    void rejectsOpenAppLinkForAnotherAppsFile() {
+        StoredFile file = file("audio/mpeg", "song.mp3");
+        file.setOpenAppId(8L);
+        when(storedFileRepository.findById(1L)).thenReturn(Optional.of(file));
+
+        assertThatThrownBy(() -> service.createForOpenApp(1L, 0L, 7L))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting(e -> ((org.springframework.web.server.ResponseStatusException) e).getStatusCode())
+                .isEqualTo(org.springframework.http.HttpStatus.NOT_FOUND);
+    }
+
+    @Test
     void rejectsExpiredLinkBeforeGeneratingStorageUrl() {
         CdnPreviewLink link = new CdnPreviewLink();
         link.setToken("expired-token");

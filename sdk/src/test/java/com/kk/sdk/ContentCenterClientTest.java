@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.kk.sdk.ContentCenterClient.DownloadLink;
 import com.kk.sdk.ContentCenterClient.DownloadLinkRequest;
+import com.kk.sdk.ContentCenterClient.CdnLink;
+import com.kk.sdk.ContentCenterClient.CdnLinkRequest;
 import com.kk.sdk.ContentCenterClient.MultipartOptions;
 import com.kk.sdk.ContentCenterClient.UploadOptions;
 import com.kk.sdk.ContentCenterClient.UploadResult;
@@ -246,5 +248,20 @@ class ContentCenterClientTest {
         assertThat(link.url()).isEqualTo("https://dl/x?a=1");
         assertThat(link.expiresIn()).isEqualTo(300);
         assertThat(capturedJson.get(0)).contains("\"fileId\":9").contains("\"filename\":\"报表.pdf\"");
+    }
+
+    @Test
+    void getsPermanentCdnLinkForMediaByDefault() {
+        route("/api/open/cdn-links", ex -> json(ex, 200,
+                "{\"url\":\"https://file.example/file/cdn/token\",\"expiresIn\":0,"+
+                        "\"permanent\":true,\"contentType\":\"image/png\"}"));
+
+        CdnLink link = client().getCdnLink(CdnLinkRequest.ofFileId(9L));
+
+        assertThat(link.url()).isEqualTo("https://file.example/file/cdn/token");
+        assertThat(link.expiresIn()).isZero();
+        assertThat(link.permanent()).isTrue();
+        assertThat(link.contentType()).isEqualTo("image/png");
+        assertThat(capturedJson.get(0)).contains("\"fileId\":9").doesNotContain("expiresIn");
     }
 }

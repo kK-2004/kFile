@@ -1,6 +1,6 @@
 # content-center-sdk
 
-内容中心（k-File）开放 API 官方 Java SDK：**appToken 鉴权 + 预签名直传上传（简单 / 分片断点续传）+ 预签名下载链接**。
+内容中心（k-File）开放 API 官方 Java SDK：**appToken 鉴权 + 预签名直传上传（简单 / 分片断点续传）+ 下载链接 + 媒体 CDN 预览链接**。
 
 - 零 Spring 依赖：HTTP 使用 JDK `java.net.http.HttpClient`，JSON 使用 Jackson，字节码目标 **Java 17**
 - 文件字节经预签名 URL **直传对象存储**，不经过内容中心服务端（上传流量不占服务端带宽）
@@ -89,6 +89,12 @@ System.out.println("fileId=" + result.fileId() + " size=" + result.size());
 DownloadLink link = client.getDownloadLink(
         DownloadLinkRequest.ofFileId(result.fileId()).filename("报表.pdf").expiresIn(600));
 System.out.println(link.url());
+
+// 媒体预览：仅支持图片、音频、视频；默认永久有效，可直接交给浏览器媒体标签
+UploadResult media = client.upload(Path.of("cover.png"),
+        UploadOptions.defaults().contentType("image/png"));
+CdnLink preview = client.getCdnLink(CdnLinkRequest.ofFileId(media.fileId()));
+System.out.println(preview.url());
 ```
 
 ## 客户端构建（Builder）
@@ -181,6 +187,19 @@ DownloadLink getDownloadLink(DownloadLinkRequest.ofKey(String storageKey, String
 
 返回 `DownloadLink(url, expiresIn)`：URL 在有效期内可直接 GET 下载（可下发给浏览器/第三方，无需再带 appToken）。
 
+### 媒体 CDN 预览 `getCdnLink`
+
+```java
+// 默认永久有效；服务端只允许 image/*、audio/*、video/*
+CdnLink preview = client.getCdnLink(CdnLinkRequest.ofFileId(fileId));
+
+// 指定有效期（秒）
+CdnLink preview = client.getCdnLink(
+        CdnLinkRequest.ofFileId(fileId).expiresIn(3600));
+```
+
+返回 `CdnLink(url, expiresIn, permanent, contentType)`。`url` 是稳定的公开地址，可直接用于 `<img>`、`<audio>`、`<video>`；SDK 调用方不需要解析或修改对象存储预签名 URL。永久链接会在服务端访问时动态换取短期对象存储签名，删除文件后自动失效。文件不属于当前应用或不是图片、音频、视频时，服务端拒绝生成链接。
+
 ## 完整示例（含异常处理）
 
 ```java
@@ -245,5 +264,6 @@ SDK 封装以下端点（均携带 `Authorization: Bearer <appToken>`，协议�
 | `uploadMultipart` | `POST /api/open/uploads/multipart/init` →（`/sign` + PUT）× N → `POST /api/open/uploads/multipart/complete` |
 | `initMultipartUpload` / `signMultipartPart` / `completeMultipartUpload` | 拆分调用分片端点，供浏览器直传 |
 | `getDownloadLink` | `POST /api/open/download-links` |
+| `getCdnLink` | `POST /api/open/cdn-links` |
 
 修改 SDK 契约需同步更新服务端 `docs/open-api.md` 与本文件。

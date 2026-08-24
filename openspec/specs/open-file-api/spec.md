@@ -1,7 +1,7 @@
 # open-file-api Specification
 
 ## Purpose
-面向外部应用的开放文件 API（/api/open/**）：Bearer appToken 鉴权（独立安全链、ROLE_OPEN_APP）、按请求选择数据源（请求 source > 应用级默认 > 兜底 oss）、预签名直传上传（简单 + 按源能力的分片断点续传）与预签名下载链接。
+面向外部应用的开放文件 API（/api/open/**）：Bearer appToken 鉴权（独立安全链、ROLE_OPEN_APP）、按请求选择数据源（请求 source > 应用级默认 > 兜底 oss）、预签名直传上传（简单 + 按源能力的分片断点续传）、预签名下载链接与媒体 CDN 预览链接。
 ## Requirements
 ### Requirement: appToken 鉴权
 `/api/open/**` SHALL 通过独立的 STATELESS 安全链鉴权：请求携带 `Authorization: Bearer <appToken>`，系统按 token SHA-256 哈希查找应用并校验启用状态；失败返回 `401` + `ApiError{message}`。应用身份与 AdminUser 会话体系 MUST 完全隔离。
@@ -104,10 +104,28 @@
 - **WHEN** 请求携带 `filename: "月度报表.pdf"`
 - **THEN** 下载时 Content-Disposition 使用该文件名
 
+### Requirement: 媒体 CDN 预览链接
+系统 SHALL 提供 `POST /api/open/cdn-links`：入参为当前应用拥有的 `fileId`，可选 `expiresIn`（默认 0，表示永久；正数表示有效秒数），返回稳定的 `{url, expiresIn, permanent, contentType}`。系统 MUST 仅允许图片、音频和视频文件，且 CDN 访问时以 inline 方式返回媒体内容。
+
+#### Scenario: 默认获取永久媒体预览地址
+- **WHEN** 应用请求 `{fileId: 116}` 且文件为图片、音频或视频
+- **THEN** 系统返回 `permanent: true`、`expiresIn: 0` 的稳定 CDN 地址，地址可直接用于浏览器媒体标签
+
+#### Scenario: 指定媒体链接有效期
+- **WHEN** 应用请求 `{fileId: 116, expiresIn: 3600}` 且文件为媒体文件
+- **THEN** 系统返回 `permanent: false`、`expiresIn: 3600` 的 CDN 地址
+
+#### Scenario: 非媒体文件被拒绝
+- **WHEN** 应用请求 PDF、ZIP 或其他非图片/音频/视频文件的 CDN 地址
+- **THEN** 系统返回 `400 Bad Request`，不创建 CDN 链接
+
+#### Scenario: 其他应用文件不可访问
+- **WHEN** 应用请求不属于自己的 `fileId`
+- **THEN** 系统返回 `404 Not Found`
+
 ### Requirement: 开放端点限流
 开放 API 端点 SHALL 应用 IP 维度限流（复用既有令牌桶），超频返回 `429`。
 
 #### Scenario: 超频被限流
 - **WHEN** 同一 IP 在短时间内超出限流阈值的并发/频率调用开放端点
 - **THEN** 系统返回 `429 Too Many Requests`
-

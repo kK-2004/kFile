@@ -9,9 +9,11 @@ import com.kk.storage.repo.StoredFileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -35,6 +37,31 @@ public class CdnPreviewLinkService {
         StoredFile file = findPreviewableFile(fileId);
         checkOwner(file, actorId);
 
+        return createLink(file, expireSeconds, actorId);
+    }
+
+    /** Creates a stable preview link for a file owned by an open app. */
+    @Transactional
+    public CreatedLink createForOpenApp(Long fileId, Long expireSeconds, Long openAppId) {
+        if (fileId == null) {
+            throw new IllegalArgumentException("fileId 不能为空");
+        }
+        StoredFile file = storedFileRepository.findById(fileId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "文件不存在"));
+        // 越权和不存在统一返回 404，避免通过 fileId 探测其他应用的文件。
+        if (!StoredFile.TYPE_FILE.equals(file.getType())
+                || StoredFile.STATUS_UPLOADING.equals(file.getStatus())
+                || openAppId == null
+                || !openAppId.equals(file.getOpenAppId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文件不存在");
+        }
+
+        return createLink(file, expireSeconds, null);
+    }
+
+    private CreatedLink createLink(StoredFile file, Long expireSeconds, Long actorId) {
+        String contentType = mediaType(file);
+
         long seconds = expireSeconds == null ? 0L : expireSeconds;
         if (seconds < 0L) {
             throw new IllegalArgumentException("有效期不能为负数");
@@ -47,7 +74,7 @@ public class CdnPreviewLinkService {
         link.setCreatedAt(Instant.now());
         link.setExpireAt(seconds == 0L ? null : Instant.now().plusSeconds(seconds));
         cdnPreviewLinkRepository.save(link);
-        return new CreatedLink(link.getToken(), link.getExpireAt());
+        return new CreatedLink(link.getToken(), link.getExpireAt(), contentType);
     }
 
     @Transactional(readOnly = true)
@@ -123,5 +150,5 @@ public class CdnPreviewLinkService {
         return token;
     }
 
-    public record CreatedLink(String token, Instant expireAt) {}
+    public record CreatedLink(String token, Instant expireAt, String contentType) {}
 }
