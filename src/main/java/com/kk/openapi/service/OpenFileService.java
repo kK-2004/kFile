@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -76,7 +77,7 @@ public class OpenFileService {
 
     // ===== 简单上传（预签名直传） =====
 
-    public record UploadInitResult(String storageKey, String source, String putUrl, long expireSeconds, Long fileId) {}
+    public record UploadInitResult(String storageKey, String source, String putUrl, long expiresIn, Long fileId) {}
 
     public UploadInitResult initUpload(OpenApp app, String originalName, String contentType, String path, String source) {
         if (!StringUtils.hasText(originalName)) {
@@ -133,6 +134,7 @@ public class OpenFileService {
 
     // ===== 分片上传（仅支持分片的数据源，首期 MinIO） =====
 
+    @Transactional
     public MultipartUploadService.InitResult multipartInit(OpenApp app, String originalName, String contentType,
                                                             long fileSize, int totalChunks, String contentMd5,
                                                             String path, String source) {
@@ -145,34 +147,41 @@ public class OpenFileService {
             throw new IllegalArgumentException("contentMd5 不能为空");
         }
         Long parentId = resolveAppFolder(app, path);
+        String scopedMd5 = MultipartUploadService.scopedContentMd5("open-app", app.getId(), contentMd5);
+        mp.migrateLegacyContentKey(contentMd5, scopedMd5, app.getId(), null);
         MultipartUploadService.InitResult result =
-                mp.init(parentId, originalName, contentType, fileSize, totalChunks, contentMd5, null);
-        // init 创建的 StoredFile 归属本应用（续传幂等，重复设置无害）
+                mp.init(parentId, originalName, contentType, fileSize, totalChunks, scopedMd5, null);
+        // 新记录绑定本应用；全局 MD5 命中其他主体时必须拒绝，绝不能改写原归属。
         if (result.storedFileId != null) {
-            storedFileRepository.findById(result.storedFileId).ifPresent(f -> {
-                if (!app.getId().equals(f.getOpenAppId())) {
+            StoredFile f = storedFileRepository.findById(result.storedFileId)
+                    .orElseThrow(() -> new IllegalArgumentException("分片上传文件记录不存在"));
+            if (f.getOpenAppId() == null && f.getUploaderId() == null) {
                     f.setOpenAppId(app.getId());
                     storedFileRepository.save(f);
-                }
-            });
+            } else if (!app.getId().equals(f.getOpenAppId())) {
+                throw new IllegalArgumentException("无权续传其他应用的上传");
+            }
         }
         return result;
     }
 
-    public String multipartSign(String contentMd5, int chunkId) {
-        return requireMultipart().sign(contentMd5, chunkId);
+    public String multipartSign(OpenApp app, String contentMd5, int chunkId) {
+        MultipartUploadService mp = requireMultipart();
+        String scopedMd5 = MultipartUploadService.scopedContentMd5("open-app", app.getId(), contentMd5);
+        mp.requireOpenAppOwner(scopedMd5, app.getId());
+        return mp.sign(scopedMd5, chunkId);
     }
 
     public record MultipartCompleteResult(String storageKey, Long fileId, long size) {}
 
     public MultipartCompleteResult multipartComplete(OpenApp app, String contentMd5,
                                                      List<MultipartUploadService.PartETag> parts) {
-        MultipartUploadService.CompleteResult result = requireMultipart().complete(contentMd5, parts);
+        MultipartUploadService mp = requireMultipart();
+        String scopedMd5 = MultipartUploadService.scopedContentMd5("open-app", app.getId(), contentMd5);
+        mp.requireOpenAppOwner(scopedMd5, app.getId());
+        MultipartUploadService.CompleteResult result = mp.complete(scopedMd5, parts);
         StoredFile f = result.storedFileId() == null ? null
                 : storedFileRepository.findById(result.storedFileId()).orElse(null);
-        if (f != null && !app.getId().equals(f.getOpenAppId())) {
-            throw new IllegalArgumentException("无权完成其他应用的上传");
-        }
         return new MultipartCompleteResult(result.storageKey(), result.storedFileId(),
                 f != null ? f.getSize() : 0);
     }
@@ -187,7 +196,7 @@ public class OpenFileService {
 
     // ===== 下载链接 =====
 
-    public record DownloadLinkResult(String url, long expireSeconds) {}
+    public record DownloadLinkResult(String url, long expiresIn) {}
 
     /** fileId 优先；或回传上传响应中的 storageKey + source。expiresIn clamp 到 [60, 3600]，默认 300。 */
     public DownloadLinkResult downloadLink(OpenApp app, Long fileId, String storageKey, String source,

@@ -8,8 +8,12 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import com.kk.config.MinioProperties;
 import com.kk.config.OssProperties;
@@ -20,6 +24,7 @@ import com.kk.storage.entity.StoredFile;
 import com.kk.storage.repo.StoredFileRepository;
 import com.kk.storage.service.MultipartUploadService;
 import com.kk.storage.service.StoredFileService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -140,6 +145,19 @@ class OpenFileServiceTest {
     }
 
     @Test
+    void openApiDurationFieldsSerializeAsExpiresInForSdkContract() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        assertThat(mapper.writeValueAsString(new OpenFileService.UploadInitResult(
+                "key", "minio", "https://put", 600, 1L)))
+                .contains("\"expiresIn\":600")
+                .doesNotContain("expireSeconds");
+        assertThat(mapper.writeValueAsString(new OpenFileService.DownloadLinkResult("https://get", 300)))
+                .contains("\"expiresIn\":300")
+                .doesNotContain("expireSeconds");
+    }
+
+    @Test
     void illegalPathSegmentRejected() {
         assertThatThrownBy(() -> service.initUpload(app, "a.pdf", null, "../etc", "oss"))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -225,6 +243,49 @@ class OpenFileServiceTest {
 
         assertThat(r.storedFileId).isEqualTo(55L);
         assertThat(f.getOpenAppId()).isEqualTo(7L);
+        verify(multipartUploadService).init(any(), any(), any(), anyLong(), anyInt(),
+                eq(MultipartUploadService.scopedContentMd5("open-app", 7L, "md5")), any());
+    }
+
+    @Test
+    void multipartInitNeverReassignsAnotherAppsUpload() {
+        MultipartUploadService.InitResult init = new MultipartUploadService.InitResult(
+                "uid", "chunkPrefix", "minio-prefix/x", 10, 55L, List.of(), false);
+        when(multipartUploadService.init(any(), any(), any(), anyLong(), anyInt(), any(), any()))
+                .thenReturn(init);
+        StoredFile f = new StoredFile();
+        f.setId(55L);
+        f.setOpenAppId(8L);
+        when(storedFileRepository.findById(55L)).thenReturn(Optional.of(f));
+
+        assertThatThrownBy(() -> service.multipartInit(
+                app, "big.bin", null, 100L, 10, "same-md5", null, "minio"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("其他应用");
+        assertThat(f.getOpenAppId()).isEqualTo(8L);
+        verify(storedFileRepository, never()).save(f);
+    }
+
+    @Test
+    void multipartSignChecksAppOwnershipBeforeIssuingUrl() {
+        doThrow(new IllegalArgumentException("无权操作其他应用的上传"))
+                .when(multipartUploadService).requireOpenAppOwner(anyString(), eq(7L));
+
+        assertThatThrownBy(() -> service.multipartSign(app, "same-md5", 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("其他应用");
+        verify(multipartUploadService, never()).sign(anyString(), anyInt());
+    }
+
+    @Test
+    void multipartCompleteChecksAppOwnershipBeforeMutatingStorage() {
+        doThrow(new IllegalArgumentException("无权操作其他应用的上传"))
+                .when(multipartUploadService).requireOpenAppOwner(anyString(), eq(7L));
+
+        assertThatThrownBy(() -> service.multipartComplete(app, "same-md5", List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("其他应用");
+        verify(multipartUploadService, never()).complete(anyString(), anyList());
     }
 
     // ===== 下载链接 =====
@@ -243,7 +304,7 @@ class OpenFileServiceTest {
 
         OpenFileService.DownloadLinkResult r = service.downloadLink(app, 99L, null, null, null, null);
         assertThat(r.url()).isEqualTo("https://dl");
-        assertThat(r.expireSeconds()).isEqualTo(300);
+        assertThat(r.expiresIn()).isEqualTo(300);
     }
 
     @Test
@@ -252,8 +313,8 @@ class OpenFileServiceTest {
         when(storedFileRepository.findById(99L)).thenReturn(Optional.of(f));
         when(ossSvc.downloadUrl(anyString(), anyBoolean(), anyLong(), any())).thenReturn("https://dl");
 
-        assertThat(service.downloadLink(app, 99L, null, null, null, 99999L).expireSeconds()).isEqualTo(3600);
-        assertThat(service.downloadLink(app, 99L, null, null, null, 1L).expireSeconds()).isEqualTo(60);
+        assertThat(service.downloadLink(app, 99L, null, null, null, 99999L).expiresIn()).isEqualTo(3600);
+        assertThat(service.downloadLink(app, 99L, null, null, null, 1L).expiresIn()).isEqualTo(60);
     }
 
     @Test
