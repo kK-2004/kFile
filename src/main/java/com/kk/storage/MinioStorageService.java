@@ -99,6 +99,22 @@ public class MinioStorageService implements StorageBrowserService {
     }
 
     @Override
+    public void copy(String fromKey, String toKey) {
+        try {
+            minioClient.copyObject(io.minio.CopyObjectArgs.builder()
+                    .bucket(properties.getBucket())
+                    .object(toKey)
+                    .source(io.minio.CopySource.builder()
+                            .bucket(properties.getBucket())
+                            .object(fromKey)
+                            .build())
+                    .build());
+        } catch (Exception e) {
+            throw new IllegalStateException("MinIO 复制对象失败: " + fromKey + " -> " + toKey, e);
+        }
+    }
+
+    @Override
     public Entry stat(String storageKey) {
         try {
             StatObjectResponse resp = minioClient.statObject(StatObjectArgs.builder()
@@ -107,8 +123,12 @@ public class MinioStorageService implements StorageBrowserService {
                     .build());
             return new Entry(StorageKeys.baseName(storageKey), resp.size(), toDate(resp.lastModified()), storageKey, resp.contentType());
         } catch (ErrorResponseException e) {
-            if (isNotFoundOrDenied(e)) return null;
-            throw new IllegalStateException("获取 MinIO 对象元数据失败", e);
+            String code = e.errorResponse() == null ? "" : String.valueOf(e.errorResponse().code());
+            if ("NoSuchKey".equals(code) || "NoSuchObject".equals(code)) return null;
+            // AccessDenied 等不再静默当作"不存在"：密钥可写不可读时（仅 PutObject 权限）stat 真实存在的对象
+            // 也会返回 403，吞掉会让上层误报"对象尚未上传"。显式抛出便于定位密钥权限问题。
+            log.warn("MinIO stat 失败: code={}, key={}, msg={}", code, storageKey, e.getMessage());
+            throw new IllegalStateException("读取 MinIO 对象元数据被拒（" + code + "），请检查访问密钥是否具备读权限: " + storageKey, e);
         } catch (Exception e) {
             throw new IllegalStateException("获取 MinIO 对象元数据失败", e);
         }
@@ -131,13 +151,6 @@ public class MinioStorageService implements StorageBrowserService {
     }
 
     public boolean isPresignedDirect() { return properties.isPresignedDirect(); }
-
-    /** NoSuchKey（对象不存在）或 AccessDenied（无权访问，部分 MinIO 对不存在对象返回此码）时视为对象不可用 */
-    private boolean isNotFoundOrDenied(ErrorResponseException e) {
-        if (e.errorResponse() == null) return false;
-        String code = e.errorResponse().code();
-        return "NoSuchKey".equals(code) || "AccessDenied".equals(code) || "NoSuchObject".equals(code);
-    }
 
     private static Date toDate(ZonedDateTime z) {
         return z == null ? null : Date.from(z.toInstant());

@@ -107,6 +107,14 @@
                 <el-button
                     class="nav-btn"
                     text
+                    v-if="isSuper"
+                    @click="$router.push('/admin/open-apps')"
+                >
+                  开放应用
+                </el-button>
+                <el-button
+                    class="nav-btn"
+                    text
                     v-if="isAdmin"
                     @click="$router.push('/admin/files')"
                 >
@@ -193,6 +201,7 @@
               <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/templates')">模板管理</el-button>
               <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/users')">管理员与权限</el-button>
               <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/settings')">系统设置</el-button>
+              <el-button v-if="isSuper" text class="drawer-btn" @click="goDrawer('/admin/open-apps')">开放应用</el-button>
               <el-button text class="drawer-btn" @click="goDrawer('/admin/files')">文件管理</el-button>
               <el-button text class="drawer-btn" @click="goDrawer('/admin/shares')">分享管理</el-button>
             </div>

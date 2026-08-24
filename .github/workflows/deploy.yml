@@ -1,11 +1,20 @@
 name: Deploy to Server
 
-# 触发：push 到 test 分支，或手动触发（可在 Actions 页面选择分支）
+# 触发：push 到 test 分支，或手动触发（可在 Actions 页面选择分支与要发布的模块）
 on:
   push:
     branches:
       - test
   workflow_dispatch:
+    inputs:
+      module:
+        description: '选择要发布的模块：app=发布应用（构建镜像并部署到服务器）；sdk=发布 SDK 到 GitHub Packages'
+        type: choice
+        options:
+          - app
+          - sdk
+        default: app
+        required: true
 
 # 同一时间只允许一个部署任务，避免并发互相覆盖
 concurrency:
@@ -13,7 +22,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 发布应用：push 到 test 自动执行；手动触发且选择 app 时执行
   deploy:
+    if: ${{ github.event_name == 'push' || inputs.module == 'app' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -109,6 +120,7 @@ jobs:
             --build-arg BUILD_NUMBER="${BUILD_NUMBER}" \
             --build-arg GITHUB_PACKAGES_USER="${GITHUB_PACKAGES_USER}" \
             --build-arg GITHUB_PACKAGES_TOKEN="${GITHUB_PACKAGES_TOKEN}" \
+            --build-arg MAVEN_CENTRAL_MIRROR=https://repo.maven.apache.org/maven2 \
             .
           docker images "${IMAGE_NAME}"
           echo "Saving image to ${IMAGE_TAR}"
@@ -311,3 +323,15 @@ jobs:
         run: |
           rm -f "$IMAGE_TAR"
           echo "Cleaned up local tarball"
+
+  # 发布 SDK：仅手动触发且选择 sdk 时执行。
+  # 复用 sdk-release.yml（force=true 跳过变更检测——选择本身就是发布意图；版本存在性校验仍会拦截重复版本）。
+  # 注意：被调用工作流的实际权限取本任务声明与 sdk-release.yml 声明的交集，这里必须显式给 packages: write。
+  sdk:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/sdk-release.yml
+    with:
+      force: true

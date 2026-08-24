@@ -92,6 +92,16 @@ public class AliOssBrowserService implements StorageBrowserService {
     }
 
     @Override
+    public void copy(String fromKey, String toKey) {
+        try {
+            ossClient.copyObject(new com.aliyun.oss.model.CopyObjectRequest(
+                    properties.getBucket(), fromKey, properties.getBucket(), toKey));
+        } catch (Exception e) {
+            throw new IllegalStateException("OSS 复制对象失败: " + fromKey + " -> " + toKey, e);
+        }
+    }
+
+    @Override
     public Entry stat(String storageKey) {
         try {
             ObjectMetadata meta = ossClient.getObjectMetadata(properties.getBucket(), storageKey);

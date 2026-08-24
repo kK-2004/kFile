@@ -1,3 +1,11 @@
+# project-templates Specification
+
+## Purpose
+
+项目模板的字段范围、查询与使用行为。
+
+## Requirements
+
 ### Requirement: 模板字段范围
 
 系统 SHALL 只将以下可复用项目字段保存为模板内容：`expectedUserFields`、`pathFieldKey`、`pathSegments`、`userSubmitStatusType`、`userSubmitStatusText`、`queryFieldKey`、`allowedSubmitterKeys`、`allowedSubmitterList`、`autoFileNamingEnabled`、`autoFileNamingConfig`、`allowResubmit`、`allowMultiFiles`、`allowOverdue`。系统 SHALL NOT 将 `name`、`startAt`、`endAt`、`fileSizeLimitBytes`、`allowedFileTypes`、`offline` 保存为模板内容。
