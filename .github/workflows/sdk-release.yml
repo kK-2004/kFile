@@ -1,11 +1,26 @@
 name: SDK Release
 
-# SDK（sdk/）有实际代码变化时自动打包发布到 GitHub Packages（maven.pkg.github.com/kK-2004/kFile），
-# 也支持在 Actions 页面手动触发（任意分支，显式发版意图），并可被 deploy.yml 复用调用
-# （手动选择「发布 sdk」模块时）。注意：发版动作刻意与 deploy.yml 的自动部署分离——
-# 部署流由 push 到 test 触发，若内嵌发版会导致 test 分支每次动到 sdk 就尝试发版，且版本重复会连累部署失败。
+# SDK 发布入口按语言拆分为 sdk-java、sdk-go、sdk-py。
+# sdk-java 发布到 GitHub Packages；sdk-go 通过带目录前缀的 Git tag 发布；
+# sdk-py 构建 wheel/sdist 后发布到 PyPI。也支持被 deploy.yml 复用调用。
+# 注意：发版动作刻意与 deploy.yml 的自动部署分离——部署流由 push 到 test 触发，
+# 若内嵌发版会导致 test 分支每次动到 sdk 就尝试发版，且版本重复会连累部署失败。
 on:
   workflow_dispatch:
+    inputs:
+      module:
+        description: '选择要发布的 SDK：Java、Go 或 Python'
+        type: choice
+        options:
+          - sdk-java
+          - sdk-go
+          - sdk-py
+        default: sdk-java
+        required: true
+      version:
+        description: 'Go/Python 发布版本（Java 从 pom.xml 读取；Python 可留空使用 pyproject.toml 版本）'
+        type: string
+        required: false
   # 被 deploy.yml（或其它工作流）复用调用
   workflow_call:
     inputs:
@@ -13,6 +28,20 @@ on:
         description: '跳过变更检测（调用方已确认发布意图；版本存在性校验仍生效）'
         type: boolean
         default: false
+      module:
+        description: '要发布的 SDK：sdk-java、sdk-go 或 sdk-py'
+        type: string
+        default: sdk-java
+        required: false
+      version:
+        description: 'Go/Python 发布版本；Java 忽略此输入'
+        type: string
+        default: ''
+        required: false
+    secrets:
+      PYPI_API_TOKEN:
+        description: '发布 Python 包到 PyPI 的 API Token'
+        required: false
 
 # 串行执行：避免两个并发流程同时通过「版本不存在」校验后重复发布同一版本
 concurrency:
@@ -20,12 +49,17 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   # 用运行自带的 GITHUB_TOKEN 发布到本仓库 Packages，免新增 secret
   packages: write
 
 jobs:
-  release:
+  sdk-java:
+    if: ${{ inputs.module == 'sdk-java' }}
+    name: sdk-java
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -37,7 +71,7 @@ jobs:
           fetch-depth: 2
 
       # 检测 sdk 是否有实质变化（源码或 pom；README 等文档变化不触发发布）。
-      # push 事件由 paths 过滤器兜底；这里精确到 sdk/pom.xml 与 sdk/src/**。
+      # push 事件由 paths 过滤器兜底；这里精确到 sdk/java/pom.xml 与 sdk/java/src/**。
       # workflow_dispatch / force=true 视为显式发版意图，始终执行。
       - name: Detect sdk changes
         id: changes
@@ -49,10 +83,10 @@ jobs:
             exit 0
           fi
           if git rev-parse HEAD^ >/dev/null 2>&1; then
-            DIFF=$(git diff --name-only HEAD^ HEAD -- sdk/ | grep -E '^sdk/(pom\.xml|src/)' || true)
+            DIFF=$(git diff --name-only HEAD^ HEAD -- sdk/java/ | grep -E '^sdk/java/(pom\.xml|src/)' || true)
           else
             # 首次提交/强推拿不到父提交：保守视为有变化（后续版本存在性校验会兜底）
-            DIFF="sdk/pom.xml"
+            DIFF="sdk/java/pom.xml"
           fi
           if [[ -n "$DIFF" ]]; then
             echo "Changed sdk files:"
@@ -70,17 +104,17 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          cache-dependency-path: sdk/pom.xml
+          cache-dependency-path: sdk/java/pom.xml
 
       - name: Read sdk version
         if: steps.changes.outputs.changed == 'true'
         id: version
         run: |
           set -euo pipefail
-          VERSION=$(mvn -f sdk/pom.xml -q help:evaluate -Dexpression=project.version -DforceStdout)
+          VERSION=$(mvn -f sdk/java/pom.xml -q help:evaluate -Dexpression=project.version -DforceStdout)
           echo "SDK version: ${VERSION}"
           if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
-            echo "::error::GitHub Packages 不支持 SNAPSHOT 版本（当前 ${VERSION}）。请先把 sdk/pom.xml 中的版本号改为正式版本（如 0.1.0 或 0.2.0）再发布。"
+            echo "::error::GitHub Packages 不支持 SNAPSHOT 版本（当前 ${VERSION}）。请先把 sdk/java/pom.xml 中的版本号改为正式版本（如 0.1.0 或 0.2.0）再发布。"
             exit 1
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -101,7 +135,7 @@ jobs:
             "$URL")
           echo "Check $URL → HTTP ${CODE}"
           if [[ "$CODE" == "200" ]]; then
-            echo "::error::版本 ${SDK_VERSION} 已发布过，不允许重复发布（历史版本必须不可变）。请升级 sdk/pom.xml 中的版本号后重试。"
+            echo "::error::版本 ${SDK_VERSION} 已发布过，不允许重复发布（历史版本必须不可变）。请升级 sdk/java/pom.xml 中的版本号后重试。"
             exit 1
           elif [[ "$CODE" != "404" ]]; then
             echo "::error::版本查询异常（HTTP ${CODE}），请检查 GITHUB_TOKEN 的 packages 权限后重试。"
@@ -109,7 +143,7 @@ jobs:
           fi
           echo "版本 ${SDK_VERSION} 未发布过，继续。"
 
-      # 认证配置：server id 必须与 sdk/pom.xml distributionManagement 的 repository id（github）一致。
+      # 认证配置：server id 必须与 sdk/java/pom.xml distributionManagement 的 repository id（github）一致。
       # 注意：必须在写入时由 shell 展开实际值（无引号 heredoc），不能写成 ${env.XXX} 留给 Maven 插值——
       # step 级 env 不会延续到后续 step，publish 时插值得到空值会导致 401。
       # GH_TOKEN 是本次运行自动生成的临时 GITHUB_TOKEN（免配置），与 deploy.yml 里手动配置的
@@ -143,7 +177,7 @@ jobs:
       # 先跑测试（含 stub 集成测试），通过才允许发布
       - name: Build and test sdk
         if: steps.changes.outputs.changed == 'true'
-        run: mvn -f sdk/pom.xml -B clean verify
+        run: mvn -f sdk/java/pom.xml -B clean verify
 
       - name: Publish to GitHub Packages
         if: steps.changes.outputs.changed == 'true'
@@ -151,15 +185,172 @@ jobs:
           SDK_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          mvn -f sdk/pom.xml -B deploy
+          mvn -f sdk/java/pom.xml -B deploy
           {
             echo "## SDK 发布成功"
             echo ""
             echo "- 坐标：\`com.kk:content-center-sdk:${SDK_VERSION}\`"
             echo "- 仓库：https://maven.pkg.github.com/kK-2004/kFile"
+            echo "- 模块：sdk-java"
             echo "- 接入方式见仓库根目录 \`sdk/README.md\`（消费方需配置 GitHub Packages 仓库与 PAT）"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Skipped (no sdk changes)
         if: steps.changes.outputs.changed != 'true'
         run: echo "sdk 无代码变化，跳过发布。"
+
+  sdk-go:
+    if: ${{ inputs.module == 'sdk-go' }}
+    name: sdk-go
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.mod
+
+      - name: Test Go SDK
+        working-directory: sdk/go
+        run: |
+          set -euo pipefail
+          go mod tidy
+          if ! git diff --quiet -- go.mod go.sum; then
+            echo "::error::sdk/go/go.mod 或 go.sum 不是 tidy 状态，请先提交整理后的依赖文件。"
+            git diff -- go.mod go.sum
+            exit 1
+          fi
+          go test ./...
+
+      - name: Resolve Go release version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${REQUESTED_VERSION#v}"
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::发布 sdk-go 必须提供 version，例如 0.1.0。"
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Go 版本必须是 SemVer，例如 0.1.0 或 0.1.0-rc.1。"
+            exit 1
+          fi
+          TAG="sdk/go/v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::版本 ${TAG} 已存在，不允许重复发布。"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Go module tag
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$RELEASE_TAG" -m "sdk/go: release v${RELEASE_VERSION}"
+          git push origin "$RELEASE_TAG"
+          {
+            echo "## SDK 发布成功"
+            echo ""
+            echo "- 模块：sdk-go"
+            echo "- Go module：\`github.com/kK-2004/kFile/sdk/go\`"
+            echo "- Tag：\`${RELEASE_TAG}\`"
+            echo "- 消费方式：\`go get github.com/kK-2004/kFile/sdk/go@v${RELEASE_VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sdk-py:
+    if: ${{ inputs.module == 'sdk-py' }}
+    name: sdk-py
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: sdk/python/uv.lock
+
+      - name: Install locked dependencies
+        working-directory: sdk/python
+        run: uv sync --locked
+
+      - name: Test Python SDK
+        working-directory: sdk/python
+        run: uv run pytest
+
+      - name: Resolve Python release version
+        id: version
+        working-directory: sdk/python
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [[ -z "$PACKAGE_VERSION" ]]; then
+            echo "::error::无法从 sdk/python/pyproject.toml 读取 project.version。"
+            exit 1
+          fi
+          REQUESTED_VERSION="${REQUESTED_VERSION#v}"
+          if [[ -n "$REQUESTED_VERSION" && "$REQUESTED_VERSION" != "$PACKAGE_VERSION" ]]; then
+            echo "::error::输入版本 ${REQUESTED_VERSION} 与 pyproject.toml 版本 ${PACKAGE_VERSION} 不一致。请先修改并提交 pyproject.toml。"
+            exit 1
+          fi
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/content-center-sdk/${PACKAGE_VERSION}/json")
+          if [[ "$CODE" == "200" ]]; then
+            echo "::error::PyPI 上的 content-center-sdk ${PACKAGE_VERSION} 已存在，不允许重复发布。"
+            exit 1
+          elif [[ "$CODE" != "404" ]]; then
+            echo "::error::查询 PyPI 版本异常（HTTP ${CODE}）。"
+            exit 1
+          fi
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Python distributions
+        working-directory: sdk/python
+        run: uv build --no-sources
+
+      - name: Publish to PyPI
+        working-directory: sdk/python
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${UV_PUBLISH_TOKEN:-}" ]]; then
+            echo "::error::未配置 PYPI_API_TOKEN secret，无法发布 Python 包。"
+            exit 1
+          fi
+          uv publish
+          {
+            echo "## SDK 发布成功"
+            echo ""
+            echo "- 模块：sdk-py"
+            echo "- 包：\`content-center-sdk==${RELEASE_VERSION}\`"
+            echo "- 仓库：PyPI"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -24,6 +24,7 @@ import com.kk.storage.entity.StoredFile;
 import com.kk.storage.repo.StoredFileRepository;
 import com.kk.storage.service.MultipartUploadService;
 import com.kk.storage.service.StoredFileService;
+import com.kk.storage.service.CdnPreviewLinkService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Date;
 import java.util.List;
@@ -53,6 +54,7 @@ class OpenFileServiceTest {
     @Mock private StoredFileService storedFileService;
     @Mock private ObjectProvider<MultipartUploadService> multipartProvider;
     @Mock private MultipartUploadService multipartUploadService;
+    @Mock private CdnPreviewLinkService cdnPreviewLinkService;
     @Mock private StorageBrowserService ossSvc;
     @Mock private StorageBrowserService minioSvc;
 
@@ -66,7 +68,7 @@ class OpenFileServiceTest {
         OssProperties ossProperties = new OssProperties();
         ossProperties.setPrefix("oss-prefix");
         service = new OpenFileService(storedFileRepository, registry, openAppService, storedFileService,
-                minioProperties, ossProperties, multipartProvider);
+                minioProperties, ossProperties, multipartProvider, cdnPreviewLinkService);
 
         app = new OpenApp();
         app.setId(7L);
@@ -341,6 +343,31 @@ class OpenFileServiceTest {
                 .isEqualTo(HttpStatus.NOT_FOUND);
         assertThatThrownBy(() -> service.downloadLink(app, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void cdnLinkDefaultsToPermanentAndReturnsMediaMetadata() {
+        when(cdnPreviewLinkService.createForOpenApp(99L, 0L, 7L))
+                .thenReturn(new CdnPreviewLinkService.CreatedLink("cdn-token", null, "image/png"));
+
+        OpenFileService.CdnLinkResult result = service.cdnLink(app, 99L, null);
+
+        assertThat(result.token()).isEqualTo("cdn-token");
+        assertThat(result.expiresIn()).isZero();
+        assertThat(result.permanent()).isTrue();
+        assertThat(result.contentType()).isEqualTo("image/png");
+    }
+
+    @Test
+    void cdnLinkPassesFiniteExpiryToMediaLinkService() {
+        when(cdnPreviewLinkService.createForOpenApp(99L, 900L, 7L))
+                .thenReturn(new CdnPreviewLinkService.CreatedLink("cdn-token", java.time.Instant.now().plusSeconds(900), "video/mp4"));
+
+        OpenFileService.CdnLinkResult result = service.cdnLink(app, 99L, 900L);
+
+        assertThat(result.expiresIn()).isEqualTo(900L);
+        assertThat(result.permanent()).isFalse();
+        verify(cdnPreviewLinkService).createForOpenApp(99L, 900L, 7L);
     }
 
     private StoredFile ownedFile() {

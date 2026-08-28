@@ -4,6 +4,7 @@ import com.kk.share.service.ShareLinkService;
 import com.kk.storage.entity.StoredFile;
 import com.kk.storage.service.MultipartUploadService;
 import com.kk.storage.service.StoredFileService;
+import com.kk.storage.service.CdnPreviewLinkService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ public class AdminFilesController {
     private final com.kk.storage.repo.StoredFileUploadRepository uploadRepository;
     /** MinIO 分片上传服务（条件装配，minio 未启用时为空） */
     private final ObjectProvider<MultipartUploadService> multipartProvider;
+    private final CdnPreviewLinkService cdnPreviewLinkService;
 
     /** 解析当前登录用户：返回 {id, isSuper}；用于 scope 过滤与 owner 校验 */
     private long[] currentActor(org.springframework.security.core.Authentication auth) {
@@ -166,6 +168,20 @@ public class AdminFilesController {
         long[] actor = currentActor(auth);
         boolean isSuper = actor[1] == 1L;
         return Map.of("url", storedFileService.downloadUrl(fileId, download, expire, isSuper ? null : actor[0]), "expireSeconds", expire);
+    }
+
+    /** 创建图片/音频/视频的稳定 CDN 预览链接；expireSeconds=0 表示永久。 */
+    @PostMapping("/cdn-link")
+    public Map<String, Object> cdnLink(@RequestBody CdnLinkReq req,
+                                       org.springframework.security.core.Authentication auth) {
+        long[] actor = currentActor(auth);
+        boolean isSuper = actor[1] == 1L;
+        CdnPreviewLinkService.CreatedLink link = cdnPreviewLinkService.create(
+                req.getFileId(), req.getExpireSeconds(), isSuper ? null : actor[0]);
+        return Map.of(
+                "token", link.token(),
+                "expireAt", link.expireAt() == null ? "" : link.expireAt().toString()
+        );
     }
 
     /** 分享（复用既有 ShareLinkService）；ADMIN 只能分享自己的文件 */
@@ -317,6 +333,13 @@ public class AdminFilesController {
         private List<Long> fileIds;
         private Long expireSeconds;
         private String filename;
+    }
+
+    @Data
+    public static class CdnLinkReq {
+        private Long fileId;
+        /** 0 表示永久；正数为有效秒数。 */
+        private Long expireSeconds;
     }
 
     @Data

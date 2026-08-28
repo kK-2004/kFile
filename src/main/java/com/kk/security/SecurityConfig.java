@@ -235,6 +235,8 @@ public class SecurityConfig {
                                         .permitAll()
                                         .requestMatchers(HttpMethod.GET, "/file/minio/**")
                                         .permitAll()
+                                        .requestMatchers(HttpMethod.GET, "/file/cdn/**")
+                                        .permitAll()
                                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**")
                                         .permitAll()
                                         .anyRequest()

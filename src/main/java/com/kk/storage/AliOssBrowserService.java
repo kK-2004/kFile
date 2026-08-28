@@ -80,6 +80,16 @@ public class AliOssBrowserService implements StorageBrowserService {
     }
 
     @Override
+    public String previewUrl(String storageKey, long expireSeconds, String displayName, String contentType) {
+        Date expiration = new Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), storageKey, HttpMethod.GET);
+        req.setExpiration(expiration);
+        req.addQueryParameter("response-content-disposition", StorageBrowserService.inlineDisposition(displayName));
+        req.addQueryParameter("response-content-type", contentType);
+        return ossClient.generatePresignedUrl(req).toString();
+    }
+
+    @Override
     public String presignedPutUrl(String storageKey, long expireSeconds, String contentType) {
         Date expiration = new Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
         GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), storageKey, HttpMethod.PUT);

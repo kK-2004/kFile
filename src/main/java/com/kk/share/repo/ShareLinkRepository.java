@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
@@ -38,6 +39,10 @@ public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
 
     /** 列出所有（SUPER 用），分页 */
     Page<ShareLink> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    List<ShareLink> findAllByOrderByCreatedAtDesc();
+
+    List<ShareLink> findByProjectIdIsNullOrderByCreatedAtDesc();
 
     /** 删除指定项目下的全部分享链接（项目删除时级联清理） */
     @Modifying

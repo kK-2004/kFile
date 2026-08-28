@@ -31,6 +31,18 @@ public interface StorageBrowserService {
     /** 生成下载 URL：预签名直链或代理 URL；downloadFilename 覆盖 Content-Disposition 中的文件名 */
     String downloadUrl(String storageKey, boolean download, long expireSeconds, String downloadFilename);
 
+    /** 生成用于浏览器预览的 URL；实现应保持 inline disposition 和媒体 Content-Type。 */
+    default String previewUrl(String storageKey, long expireSeconds, String displayName, String contentType) {
+        return downloadUrl(storageKey, false, expireSeconds, displayName);
+    }
+
+    static String inlineDisposition(String filename) {
+        String name = (filename == null || filename.isBlank()) ? "media" : filename;
+        String ascii = name.replaceAll("[^\\x20-\\x7E]", "_");
+        String encoded = java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+        return "inline; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded;
+    }
+
     /**
      * 生成浏览器直传 PUT 预签名直链（前端直接 PUT 到对象存储，不经过后端）。
      */

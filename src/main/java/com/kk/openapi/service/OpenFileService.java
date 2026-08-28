@@ -10,6 +10,7 @@ import com.kk.storage.entity.StoredFile;
 import com.kk.storage.repo.StoredFileRepository;
 import com.kk.storage.service.MultipartUploadService;
 import com.kk.storage.service.StoredFileService;
+import com.kk.storage.service.CdnPreviewLinkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -46,6 +47,7 @@ public class OpenFileService {
     private final MinioProperties minioProperties;
     private final OssProperties ossProperties;
     private final ObjectProvider<MultipartUploadService> multipartUploadService;
+    private final CdnPreviewLinkService cdnPreviewLinkService;
 
     // ===== 数据源路由 =====
 
@@ -224,6 +226,18 @@ public class OpenFileService {
         String url = registry.get(f.getStorageSource())
                 .downloadUrl(f.getStorageKey(), true, expire, downloadName);
         return new DownloadLinkResult(url, expire);
+    }
+
+    // ===== CDN 媒体预览链接 =====
+
+    public record CdnLinkResult(String token, long expiresIn, boolean permanent, String contentType) {}
+
+    /** 为当前开放应用创建媒体 CDN 预览链接；expiresIn 省略或为 0 表示永久。 */
+    public CdnLinkResult cdnLink(OpenApp app, Long fileId, Long expiresIn) {
+        long seconds = expiresIn == null ? 0L : expiresIn;
+        CdnPreviewLinkService.CreatedLink link = cdnPreviewLinkService.createForOpenApp(
+                fileId, seconds, app.getId());
+        return new CdnLinkResult(link.token(), seconds, seconds == 0L, link.contentType());
     }
 
     // ===== helpers =====

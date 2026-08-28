@@ -1,0 +1,71 @@
+name: SDK CI
+
+on:
+  push:
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk-ci.yml'
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  java:
+    name: Java SDK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: sdk/java/pom.xml
+      - name: Build and test
+        run: mvn -f sdk/java/pom.xml -B clean verify
+
+  go:
+    name: Go SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/go
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.mod
+      - name: Test
+        run: go test ./...
+
+  python:
+    name: Python SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: sdk/python/uv.lock
+      - name: Install locked dependencies
+        run: uv sync --locked
+      - name: Test
+        run: uv run pytest

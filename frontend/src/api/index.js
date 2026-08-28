@@ -228,12 +228,19 @@ export default {
   ,adminOpenAppDelete(id) { return instance.delete(`/api/admin/open-apps/${id}`, { timeout: 0 }) }
 
   // ===== 分享链接管理 =====
-  ,adminListShares(page = 0, pageSize = 15, keyword = '') {
+  ,adminListShares(page = 0, pageSize = 15, keyword = '', shareType = 'ALL') {
     const params = { page, pageSize }
     if (keyword) params.keyword = keyword
+    if (shareType && shareType !== 'ALL') params.shareType = shareType
     return instance.get('/api/admin/shares', { params })
   }
-  ,adminDeleteShare(id) { return instance.delete(`/api/admin/shares/${id}`) }
+  ,adminDeleteShare(id, shareType = '') {
+    if (shareType === 'CDN') return instance.delete(`/api/admin/shares/cdn/${id}`)
+    return instance.delete(`/api/admin/shares/${id}`)
+  }
+  ,adminRenewCdnLink(id, expireSeconds) {
+    return instance.put(`/api/admin/shares/cdn/${id}/expiry`, { expireSeconds })
+  }
   ,adminFileSources() { return instance.get('/api/admin/files/sources') }
   ,adminFileList(parentId, page = 0, pageSize = 15, scope = '', keyword = '') {
     const params = { page, pageSize }
@@ -285,6 +292,9 @@ export default {
     const params = { fileId, download }
     if (expireSeconds) params.expireSeconds = expireSeconds
     return instance.get('/api/admin/files/download-url', { params })
+  }
+  ,adminFileCreateCdnLink(fileId, expireSeconds = 0) {
+    return instance.post('/api/admin/files/cdn-link', { fileId, expireSeconds })
   }
   ,adminFileShare({ fileIds, expireSeconds, filename }) {
     return instance.post('/api/admin/files/share', { fileIds, expireSeconds, filename })

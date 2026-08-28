@@ -8,13 +8,19 @@ on:
   workflow_dispatch:
     inputs:
       module:
-        description: '选择要发布的模块：app=发布应用（构建镜像并部署到服务器）；sdk=发布 SDK 到 GitHub Packages'
+        description: '选择要发布的模块：app=发布应用；sdk-java=发布 Java SDK；sdk-go=发布 Go SDK；sdk-py=发布 Python SDK'
         type: choice
         options:
           - app
-          - sdk
+          - sdk-java
+          - sdk-go
+          - sdk-py
         default: app
         required: true
+      sdk_version:
+        description: 'SDK 发布版本（Go 必填；Python 可留空使用 pyproject.toml 版本；Java 忽略）'
+        type: string
+        required: false
 
 # 同一时间只允许一个部署任务，避免并发互相覆盖
 concurrency:
@@ -324,14 +330,38 @@ jobs:
           rm -f "$IMAGE_TAR"
           echo "Cleaned up local tarball"
 
-  # 发布 SDK：仅手动触发且选择 sdk 时执行。
-  # 复用 sdk-release.yml（force=true 跳过变更检测——选择本身就是发布意图；版本存在性校验仍会拦截重复版本）。
-  # 注意：被调用工作流的实际权限取本任务声明与 sdk-release.yml 声明的交集，这里必须显式给 packages: write。
-  sdk:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk' }}
+  # 发布 SDK：仅手动触发且选择 sdk-java/sdk-go/sdk-py 时执行。
+  # 分别复用 sdk-release.yml 中对应的发布 job；force=true 跳过 Java 变更检测——
+  # 选择本身就是发布意图，版本存在性校验仍会拦截重复版本。
+  sdk-java:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk-java' }}
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/sdk-release.yml
     with:
       force: true
+      module: sdk-java
+      version: ${{ inputs.sdk_version }}
+
+  sdk-go:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk-go' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/sdk-release.yml
+    with:
+      force: true
+      module: sdk-go
+      version: ${{ inputs.sdk_version }}
+
+  sdk-py:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk-py' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sdk-release.yml
+    with:
+      force: true
+      module: sdk-py
+      version: ${{ inputs.sdk_version }}
+    secrets:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
