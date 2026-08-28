@@ -269,6 +269,7 @@ import {
   shouldUseChunkedUpload,
   uploadStatusText
 } from '../../utils/adminFileUpload'
+import { shareExpiryOptions } from '../../utils/shareLinks'
 
 const auth = useAuthStore()
 const isSuper = computed(() => auth.user && (auth.user.role||'').toUpperCase() === 'SUPER')
@@ -358,16 +359,7 @@ const shareExpire = ref(3600)
 const shareFilename = ref('')
 const shareLoading = ref(false)
 const shareResult = ref('')
-const expireOptions = [
-  { value: 300, label: '5 分钟' },
-  { value: 600, label: '10 分钟' },
-  { value: 1800, label: '30 分钟' },
-  { value: 3600, label: '1 小时' },
-  { value: 86400, label: '1 天' },
-  { value: 604800, label: '7 天' },
-  { value: 2592000, label: '30 天' },
-  { value: 0, label: '永久' }
-]
+const expireOptions = shareExpiryOptions
 const shareExpireLabel = computed(() =>
   expireOptions.find(o => o.value === shareExpire.value)?.label || `${shareExpire.value} 秒`
 )

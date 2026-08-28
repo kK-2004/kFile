@@ -238,6 +238,9 @@ export default {
     if (shareType === 'CDN') return instance.delete(`/api/admin/shares/cdn/${id}`)
     return instance.delete(`/api/admin/shares/${id}`)
   }
+  ,adminRenewCdnLink(id, expireSeconds) {
+    return instance.put(`/api/admin/shares/cdn/${id}/expiry`, { expireSeconds })
+  }
   ,adminFileSources() { return instance.get('/api/admin/files/sources') }
   ,adminFileList(parentId, page = 0, pageSize = 15, scope = '', keyword = '') {
     const params = { page, pageSize }

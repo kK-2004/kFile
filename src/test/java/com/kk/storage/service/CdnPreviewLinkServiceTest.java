@@ -106,6 +106,52 @@ class CdnPreviewLinkServiceTest {
     }
 
     @Test
+    void renewsLinkFromNowWithSelectedDuration() {
+        CdnPreviewLink link = new CdnPreviewLink();
+        link.setId(9L);
+        link.setStoredFileId(1L);
+        link.setCreatedBy(7L);
+        link.setExpireAt(Instant.now().minusSeconds(1));
+        StoredFile file = file("image/png", "cover.png");
+        when(cdnPreviewLinkRepository.findById(9L)).thenReturn(Optional.of(link));
+        when(storedFileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(cdnPreviewLinkRepository.save(link)).thenReturn(link);
+
+        Instant before = Instant.now().plusSeconds(3599);
+        CdnPreviewLink result = service.renew(9L, 3600L, 7L);
+
+        assertThat(result.getExpireAt()).isAfter(before);
+        assertThat(result.getExpireAt()).isBefore(Instant.now().plusSeconds(3601));
+    }
+
+    @Test
+    void renewsLinkAsPermanentWhenDurationIsZero() {
+        CdnPreviewLink link = new CdnPreviewLink();
+        link.setId(9L);
+        link.setStoredFileId(1L);
+        link.setCreatedBy(7L);
+        link.setExpireAt(Instant.now().plusSeconds(60));
+        when(cdnPreviewLinkRepository.findById(9L)).thenReturn(Optional.of(link));
+        when(storedFileRepository.findById(1L)).thenReturn(Optional.of(file("audio/mpeg", "song.mp3")));
+        when(cdnPreviewLinkRepository.save(link)).thenReturn(link);
+
+        assertThat(service.renew(9L, 0L, 7L).getExpireAt()).isNull();
+    }
+
+    @Test
+    void rejectsRenewalByAnotherUser() {
+        CdnPreviewLink link = new CdnPreviewLink();
+        link.setId(9L);
+        link.setStoredFileId(1L);
+        link.setCreatedBy(7L);
+        when(cdnPreviewLinkRepository.findById(9L)).thenReturn(Optional.of(link));
+
+        assertThatThrownBy(() -> service.renew(9L, 3600L, 8L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("无权");
+    }
+
+    @Test
     void generatesInlineMediaUrlFromStableLink() {
         CdnPreviewLink link = new CdnPreviewLink();
         link.setToken("media-token");

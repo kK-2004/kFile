@@ -40,6 +40,24 @@ public class CdnPreviewLinkService {
         return createLink(file, expireSeconds, actorId);
     }
 
+    /** Renews an existing stable CDN link from the current time without changing its token. */
+    @Transactional
+    public CdnPreviewLink renew(Long linkId, Long expireSeconds, Long actorId) {
+        CdnPreviewLink link = cdnPreviewLinkRepository.findById(linkId)
+                .orElseThrow(() -> new IllegalArgumentException("CDN 链接不存在"));
+        if (actorId != null && !actorId.equals(link.getCreatedBy())) {
+            throw new IllegalArgumentException("无权续期该 CDN 链接");
+        }
+
+        findPreviewableFile(link.getStoredFileId());
+        long seconds = expireSeconds == null ? 0L : expireSeconds;
+        if (seconds < 0L) {
+            throw new IllegalArgumentException("有效期不能为负数");
+        }
+        link.setExpireAt(seconds == 0L ? null : Instant.now().plusSeconds(seconds));
+        return cdnPreviewLinkRepository.save(link);
+    }
+
     /** Creates a stable preview link for a file owned by an open app. */
     @Transactional
     public CreatedLink createForOpenApp(Long fileId, Long expireSeconds, Long openAppId) {

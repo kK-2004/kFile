@@ -13,6 +13,7 @@ import com.kk.storage.entity.CdnPreviewLink;
 import com.kk.storage.entity.StoredFile;
 import com.kk.storage.repo.CdnPreviewLinkRepository;
 import com.kk.storage.repo.StoredFileRepository;
+import com.kk.storage.service.CdnPreviewLinkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
@@ -44,6 +45,7 @@ public class ShareLinkAdminController {
     private final ProjectPermissionRepository permRepo;
     private final CdnPreviewLinkRepository cdnPreviewLinkRepository;
     private final StoredFileRepository storedFileRepository;
+    private final CdnPreviewLinkService cdnPreviewLinkService;
 
     @GetMapping
     public Map<String, Object> list(
@@ -109,7 +111,10 @@ public class ShareLinkAdminController {
                 StoredFile file = storedFileRepository.findById(link.getStoredFileId()).orElse(null);
                 String filename = file == null ? "文件已删除" : displayName(file);
                 if (kw != null && !filename.toLowerCase().contains(kw)) continue;
-                nodes.add(toCdnNode(link, filename));
+                String locationText = file == null
+                        ? "文件管理"
+                        : locationTextForStoredFileIds(List.of(link.getStoredFileId()));
+                nodes.add(toCdnNode(link, filename, locationText));
             }
         }
 
@@ -143,9 +148,21 @@ public class ShareLinkAdminController {
         node.put("permanent", link.getExpireAt() == null);
         node.put("downloadCount", link.getDownloadCount() == null ? 0 : link.getDownloadCount());
 
+        String locationText = link.getProjectId() != null
+                ? (projectName == null || projectName.isBlank() ? "项目" : projectName)
+                : "文件管理";
         List<Map<String, Object>> fileDownloads = new ArrayList<>();
         if (link.getShareType() != null) {
             List<ShareLinkItem> items = shareLinkItemRepository.findByShareLinkIdOrderByRelativePath(link.getId());
+            if (link.getProjectId() == null) {
+                locationText = locationTextForStoredFileIds(items.stream()
+                        .filter(item -> ShareLinkItem.KIND_FILE.equals(item.getKind())
+                                || ShareLinkItem.KIND_FOLDER.equals(item.getKind()))
+                        .filter(item -> item.getRelativePath() == null || item.getRelativePath().isBlank())
+                        .map(ShareLinkItem::getRefId)
+                        .filter(Objects::nonNull)
+                        .toList());
+            }
             node.put("filename", link.getFilename() != null ? link.getFilename() : "download.zip");
             node.put("fileCount", items.size());
             for (ShareLinkItem it : items) {
@@ -163,6 +180,15 @@ public class ShareLinkAdminController {
                 Object entries = data.get("entries");
                 if (entries instanceof List<?> list) {
                     node.put("fileCount", list.size());
+                    if (link.getProjectId() == null) {
+                        List<String> storageKeys = new ArrayList<>();
+                        for (Object o : list) {
+                            if (o instanceof Map<?, ?> entry && entry.get("storageKey") != null) {
+                                storageKeys.add(String.valueOf(entry.get("storageKey")));
+                            }
+                        }
+                        locationText = locationTextForStorageKeys(storageKeys);
+                    }
                     for (Object o : list) {
                         if (!(o instanceof Map<?, ?> em)) continue;
                         String fname = em.get("f") == null ? "" : String.valueOf(em.get("f"));
@@ -177,16 +203,18 @@ public class ShareLinkAdminController {
                 node.put("fileCount", 0);
             }
         }
+        node.put("locationText", locationText);
         node.put("fileDownloads", fileDownloads);
         return node;
     }
 
-    private Map<String, Object> toCdnNode(CdnPreviewLink link, String filename) {
+    private Map<String, Object> toCdnNode(CdnPreviewLink link, String filename, String locationText) {
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("id", link.getId());
         node.put("code", link.getToken());
         node.put("projectId", null);
         node.put("projectName", "文件管理");
+        node.put("locationText", locationText);
         node.put("shareType", "CDN");
         node.put("filename", filename);
         node.put("fileCount", 1);
@@ -197,6 +225,59 @@ public class ShareLinkAdminController {
         node.put("expired", link.getExpireAt() != null && Instant.now().isAfter(link.getExpireAt()));
         node.put("permanent", link.getExpireAt() == null);
         return node;
+    }
+
+    /** 根据分享条目对应节点的直接 parentId，生成去重后的所属目录文本。 */
+    private String locationTextForStoredFileIds(Collection<Long> storedFileIds) {
+        List<Long> ids = storedFileIds == null ? List.of() : storedFileIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) return "文件管理";
+
+        Map<Long, StoredFile> filesById = new HashMap<>();
+        for (StoredFile file : storedFileRepository.findAllById(ids)) {
+            if (file.getId() != null) filesById.put(file.getId(), file);
+        }
+
+        LinkedHashSet<Long> parentIds = new LinkedHashSet<>();
+        LinkedHashSet<String> locations = new LinkedHashSet<>();
+        for (Long id : ids) {
+            StoredFile file = filesById.get(id);
+            if (file == null || file.getParentId() == null) {
+                if (file != null) locations.add("文件管理");
+                continue;
+            }
+            parentIds.add(file.getParentId());
+        }
+
+        Map<Long, StoredFile> parentsById = new HashMap<>();
+        if (!parentIds.isEmpty()) {
+            for (StoredFile parent : storedFileRepository.findAllById(new ArrayList<>(parentIds))) {
+                if (parent.getId() != null) parentsById.put(parent.getId(), parent);
+            }
+        }
+        for (Long parentId : parentIds) {
+            StoredFile parent = parentsById.get(parentId);
+            if (parent != null && parent.getName() != null && !parent.getName().isBlank()) {
+                locations.add(parent.getName());
+            }
+        }
+        return locations.isEmpty() ? "文件管理" : String.join("、", locations);
+    }
+
+    /** 历史 JSON 分享没有 share_link_item，尽量通过对象 key 找回所属目录。 */
+    private String locationTextForStorageKeys(Collection<String> storageKeys) {
+        List<Long> ids = new ArrayList<>();
+        if (storageKeys != null) {
+            for (String storageKey : storageKeys) {
+                if (storageKey == null || storageKey.isBlank()) continue;
+                storedFileRepository.findFirstByStorageKeyOrderByIdDesc(storageKey)
+                        .map(StoredFile::getId)
+                        .ifPresent(ids::add);
+            }
+        }
+        return locationTextForStoredFileIds(ids);
     }
 
     private boolean matchesType(String filter, String actual) {
@@ -251,6 +332,31 @@ public class ShareLinkAdminController {
         cdnPreviewLinkRepository.delete(link);
         return Map.of("ok", true);
     }
+
+    /** 重新设置 CDN 链接有效期；不更换 token，expireSeconds=0 表示永久。 */
+    @PutMapping("/cdn/{id}/expiry")
+    public Map<String, Object> renewCdn(
+            @PathVariable Long id,
+            @RequestBody CdnExpiryRequest request,
+            Authentication auth) {
+        AdminUser user = userRepo.findByUsername(auth.getName()).orElse(null);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        boolean isSuper = "SUPER".equalsIgnoreCase(user.getRole());
+        Long actorId = isSuper ? null : user.getId();
+        CdnPreviewLink link = cdnPreviewLinkService.renew(
+                id, request == null ? null : request.expireSeconds(), actorId);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", true);
+        result.put("id", link.getId());
+        result.put("expireAt", link.getExpireAt());
+        result.put("permanent", link.getExpireAt() == null);
+        return result;
+    }
+
+    public record CdnExpiryRequest(Long expireSeconds) {}
 
     @org.springframework.web.bind.annotation.ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> badRequest(IllegalArgumentException e) {

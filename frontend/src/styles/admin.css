@@ -20,6 +20,8 @@
   --kf-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   --kf-surface-dim: #f9fafb;
   --kf-user-info-bg: #f9fafb;
+  --color-popover: var(--kf-bg);
+  --color-popover-foreground: var(--kf-text);
 }
 
 /* 暗色主题覆盖 */
@@ -45,6 +47,22 @@ html.dark{
   --kf-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   --kf-surface-dim: #1d1e1f;
   --kf-user-info-bg: #262728;
+  --color-popover: var(--kf-surface-dim);
+  --color-popover-foreground: var(--kf-text);
+}
+
+/* @kk-2004/ui-components Popover 的主题兜底，跟随 html.dark 切换。 */
+.k-popover {
+  background: var(--color-popover) !important;
+  color: var(--color-popover-foreground) !important;
+  border: 1px solid var(--kf-border);
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+}
+.k-popover-arrow {
+  background: var(--color-popover) !important;
+  border-right: 1px solid var(--kf-border);
+  border-bottom: 1px solid var(--kf-border);
 }
 
 /* App layout */

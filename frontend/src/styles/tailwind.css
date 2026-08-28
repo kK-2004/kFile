@@ -2,5 +2,16 @@
 @import "tailwindcss/theme";
 @import "tailwindcss/utilities";
 
+/* 扫描组件库发布产物，生成 KPopover 使用的 Tailwind 工具类。 */
+@source "../../node_modules/@kk-2004/ui-components/dist";
+
+/* @kk-2004/ui-components 的 Popover 使用 Tailwind 语义色。 */
+@theme {
+  --color-popover: var(--kf-bg);
+  --color-popover-foreground: var(--kf-text);
+  --color-foreground: var(--kf-text);
+  --color-ring-foreground: var(--kf-border);
+}
+
 /* 暗色模式：基于 html.dark class（非 prefers-color-scheme），让 dark: 前缀生效 */
 @custom-variant dark (&:where(.dark, .dark *));
