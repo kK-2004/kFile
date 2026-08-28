@@ -1,26 +1,13 @@
 name: Deploy to Server
 
-# 触发：push 到 test 分支，或手动触发（可在 Actions 页面选择分支与要发布的模块）
+# 触发：push 到 test 分支，或手动触发（仅发布应用；SDK 发布见 sdk-release.yml）
 on:
   push:
     branches:
       - test
+  # 手动触发：与 push 行为一致，只做应用部署。
+  # SDK 发布已独立到 sdk-release.yml（手动勾选语言），不再经由本工作流分发。
   workflow_dispatch:
-    inputs:
-      module:
-        description: '选择要发布的模块：app=发布应用；sdk-java=发布 Java SDK；sdk-go=发布 Go SDK；sdk-py=发布 Python SDK'
-        type: choice
-        options:
-          - app
-          - sdk-java
-          - sdk-go
-          - sdk-py
-        default: app
-        required: true
-      sdk_version:
-        description: 'SDK 发布版本（Go 必填；Python 可留空使用 pyproject.toml 版本；Java 忽略）'
-        type: string
-        required: false
 
 # 同一时间只允许一个部署任务，避免并发互相覆盖
 concurrency:
@@ -28,9 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 发布应用：push 到 test 自动执行；手动触发且选择 app 时执行
   deploy:
-    if: ${{ github.event_name == 'push' || inputs.module == 'app' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -329,39 +314,3 @@ jobs:
         run: |
           rm -f "$IMAGE_TAR"
           echo "Cleaned up local tarball"
-
-  # 发布 SDK：仅手动触发且选择 sdk-java/sdk-go/sdk-py 时执行。
-  # 分别复用 sdk-release.yml 中对应的发布 job；force=true 跳过 Java 变更检测——
-  # 选择本身就是发布意图，版本存在性校验仍会拦截重复版本。
-  sdk-java:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk-java' }}
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/sdk-release.yml
-    with:
-      force: true
-      module: sdk-java
-      version: ${{ inputs.sdk_version }}
-
-  sdk-go:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk-go' }}
-    permissions:
-      contents: write
-    uses: ./.github/workflows/sdk-release.yml
-    with:
-      force: true
-      module: sdk-go
-      version: ${{ inputs.sdk_version }}
-
-  sdk-py:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.module == 'sdk-py' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/sdk-release.yml
-    with:
-      force: true
-      module: sdk-py
-      version: ${{ inputs.sdk_version }}
-    secrets:
-      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
