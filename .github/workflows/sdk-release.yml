@@ -1,64 +1,64 @@
 name: SDK Release
 
-# SDK 发布入口按语言拆分为 sdk-java、sdk-go、sdk-py。
+# SDK 发布的唯一入口：仅支持手动触发（Actions → SDK Release → Run workflow）。
+# GitHub 的 workflow_dispatch 没有原生多选控件（choice 只能单选），
+# 因此用三个布尔输入当勾选框实现「多选要发布的语言」，勾几个跑几个，互不影响。
 # sdk-java 发布到 GitHub Packages；sdk-go 通过带目录前缀的 Git tag 发布；
-# sdk-py 构建 wheel/sdist 后发布到 PyPI。也支持被 deploy.yml 复用调用。
-# 注意：发版动作刻意与 deploy.yml 的自动部署分离——部署流由 push 到 test 触发，
+# sdk-py 构建 wheel/sdist 后发布到 PyPI。
+# 注意：发版刻意与 deploy.yml 的自动部署分离——部署流由 push 到 test 触发，
 # 若内嵌发版会导致 test 分支每次动到 sdk 就尝试发版，且版本重复会连累部署失败。
 on:
   workflow_dispatch:
     inputs:
-      module:
-        description: '选择要发布的 SDK：Java、Go 或 Python'
-        type: choice
-        options:
-          - sdk-java
-          - sdk-go
-          - sdk-py
-        default: sdk-java
-        required: true
-      version:
-        description: 'Go/Python 发布版本（Java 从 pom.xml 读取；Python 可留空使用 pyproject.toml 版本）'
-        type: string
-        required: false
-  # 被 deploy.yml（或其它工作流）复用调用
-  workflow_call:
-    inputs:
-      force:
-        description: '跳过变更检测（调用方已确认发布意图；版本存在性校验仍生效）'
+      publish_java:
+        description: '发布 sdk-java（版本号取 sdk/java/pom.xml，不允许 SNAPSHOT）'
         type: boolean
         default: false
-      module:
-        description: '要发布的 SDK：sdk-java、sdk-go 或 sdk-py'
-        type: string
-        default: sdk-java
-        required: false
+      publish_go:
+        description: '发布 sdk-go（Git tag 发布，必须同时填写 version）'
+        type: boolean
+        default: false
+      publish_py:
+        description: '发布 sdk-py（版本号取 sdk/python/pyproject.toml，version 仅用于一致性校验）'
+        type: boolean
+        default: false
       version:
-        description: 'Go/Python 发布版本；Java 忽略此输入'
+        description: 'Go 必填（如 0.1.0）；Python 可选（填了则须与 pyproject.toml 一致）；Java 忽略'
         type: string
+        required: false
         default: ''
-        required: false
-    secrets:
-      PYPI_API_TOKEN:
-        description: '发布 Python 包到 PyPI 的 API Token'
-        required: false
 
 # 串行执行：避免两个并发流程同时通过「版本不存在」校验后重复发布同一版本
 concurrency:
   group: sdk-release
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  # 用运行自带的 GITHUB_TOKEN 发布到本仓库 Packages，免新增 secret
-  packages: write
+# 不设 workflow 级 permissions：三个发布 job 各自按需最小化声明
+# （sdk-java 只需 packages: write；sdk-go 推 tag 需 contents: write；sdk-py 只读）
 
 jobs:
+  # 兜底校验：一个语言都没勾选时快速报错，避免出现全 skipped 的绿色「成功」运行
+  guard:
+    name: validate-selection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check at least one SDK selected
+        run: |
+          if [[ "${{ inputs.publish_java }}" != "true" \
+            && "${{ inputs.publish_go }}" != "true" \
+            && "${{ inputs.publish_py }}" != "true" ]]; then
+            echo "::error::未勾选任何要发布的 SDK（publish_java / publish_go / publish_py 至少选一项）"
+            exit 1
+          fi
+
   sdk-java:
-    if: ${{ inputs.module == 'sdk-java' }}
+    if: ${{ inputs.publish_java == true }}
+    needs: guard
     name: sdk-java
     permissions:
       contents: read
+      # 用运行自带的 GITHUB_TOKEN 发布到本仓库 Packages，免新增 secret
       packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -66,39 +66,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          # 需要 HEAD^ 做变更检测
-          fetch-depth: 2
-
-      # 检测 sdk 是否有实质变化（源码或 pom；README 等文档变化不触发发布）。
-      # push 事件由 paths 过滤器兜底；这里精确到 sdk/java/pom.xml 与 sdk/java/src/**。
-      # workflow_dispatch / force=true 视为显式发版意图，始终执行。
-      - name: Detect sdk changes
-        id: changes
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ inputs.force }}" == "true" ]]; then
-            echo "Explicit publish intent (${{ github.event_name }}, force=${{ inputs.force }}) → publish regardless"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            DIFF=$(git diff --name-only HEAD^ HEAD -- sdk/java/ | grep -E '^sdk/java/(pom\.xml|src/)' || true)
-          else
-            # 首次提交/强推拿不到父提交：保守视为有变化（后续版本存在性校验会兜底）
-            DIFF="sdk/java/pom.xml"
-          fi
-          if [[ -n "$DIFF" ]]; then
-            echo "Changed sdk files:"
-            echo "$DIFF"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No effective sdk changes (docs only), skip publish"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Set up JDK
-        if: steps.changes.outputs.changed == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -107,7 +76,6 @@ jobs:
           cache-dependency-path: sdk/java/pom.xml
 
       - name: Read sdk version
-        if: steps.changes.outputs.changed == 'true'
         id: version
         run: |
           set -euo pipefail
@@ -122,7 +90,6 @@ jobs:
       # 版本控制：同一版本只允许发布一次。发布前查询 GitHub Packages 上该版本的 .pom 是否已存在，
       # 已存在则终止（GitHub Packages 本身允许覆盖上传，必须显式拦截）。
       - name: Check version not already published
-        if: steps.changes.outputs.changed == 'true'
         env:
           SDK_VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,7 +116,6 @@ jobs:
       # GH_TOKEN 是本次运行自动生成的临时 GITHUB_TOKEN（免配置），与 deploy.yml 里手动配置的
       # PAT secret「PACKAGES_TOKEN」（跨仓库拉 kmessage-sdk 用）不是同一个东西。
       - name: Write Maven settings
-        if: steps.changes.outputs.changed == 'true'
         env:
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -176,11 +142,9 @@ jobs:
 
       # 先跑测试（含 stub 集成测试），通过才允许发布
       - name: Build and test sdk
-        if: steps.changes.outputs.changed == 'true'
         run: mvn -f sdk/java/pom.xml -B clean verify
 
       - name: Publish to GitHub Packages
-        if: steps.changes.outputs.changed == 'true'
         env:
           SDK_VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -195,12 +159,9 @@ jobs:
             echo "- 接入方式见仓库根目录 \`sdk/README.md\`（消费方需配置 GitHub Packages 仓库与 PAT）"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Skipped (no sdk changes)
-        if: steps.changes.outputs.changed != 'true'
-        run: echo "sdk 无代码变化，跳过发布。"
-
   sdk-go:
-    if: ${{ inputs.module == 'sdk-go' }}
+    if: ${{ inputs.publish_go == true }}
+    needs: guard
     name: sdk-go
     permissions:
       contents: write
@@ -274,7 +235,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   sdk-py:
-    if: ${{ inputs.module == 'sdk-py' }}
+    if: ${{ inputs.publish_py == true }}
+    needs: guard
     name: sdk-py
     permissions:
       contents: read
