@@ -344,3 +344,37 @@ func TestGetDownloadAndCDNLinksPreserveServerURLs(t *testing.T) {
 		t.Fatalf("unexpected CDN request: %s", cdnBody)
 	}
 }
+
+func TestDeleteFilesPostsBatchAndParsesCounts(t *testing.T) {
+	var authorization string
+	var requestBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/open/files/batch-delete" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		authorization = r.Header.Get("Authorization")
+		body, _ := io.ReadAll(r.Body)
+		requestBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"deletedFiles":2,"failedObjects":0}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, AppToken: "kapp_test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.DeleteFiles(context.Background(), []int64{9, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.DeletedFiles != 2 || result.FailedObjects != 0 {
+		t.Fatalf("unexpected delete result: %+v", result)
+	}
+	if authorization != "Bearer kapp_test" {
+		t.Fatalf("unexpected Authorization header: %q", authorization)
+	}
+	if !strings.Contains(requestBody, `"fileIds":[9,3]`) {
+		t.Fatalf("unexpected delete request: %s", requestBody)
+	}
+}

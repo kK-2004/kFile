@@ -90,6 +90,15 @@ print(download.url, preview.url)
 
 也可以用 `DownloadLinkRequest.by_key(storage_key, source)` 按 storage key 获取下载链接。服务端返回的 URL 会原样返回。
 
+## 批量删除
+
+```python
+deleted = client.delete_files([result.file_id])
+print(deleted.deleted_files, deleted.failed_objects)
+```
+
+一次最多删除 100 个当前应用已完成上传的文件；服务端会整批预校验，并返回已删除记录数和对象存储清理失败数。
+
 ## 错误与凭证安全
 
 非 2xx 响应会抛出 `ContentCenterError`，通过 `status` 和 `message` 获取 HTTP 状态与服务端 `ApiError.message`。网络、序列化和响应解析失败的 `status` 为 `-1`；401 通常表示 appToken 无效、已轮换或应用已禁用。
