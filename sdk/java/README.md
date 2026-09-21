@@ -60,7 +60,7 @@ SDK 发布在 GitHub Packages（私有，匿名不可访问）。在你的项目
 <dependency>
   <groupId>com.kk</groupId>
   <artifactId>content-center-sdk</artifactId>
-  <version>0.1.2</version>
+  <version>0.1.4</version>
 </dependency>
 ```
 
@@ -199,6 +199,15 @@ CdnLink preview = client.getCdnLink(
 ```
 
 返回 `CdnLink(url, expiresIn, permanent, contentType)`。`url` 是稳定的公开地址，可直接用于 `<img>`、`<audio>`、`<video>`；SDK 调用方不需要解析或修改对象存储预签名 URL。永久链接会在服务端访问时动态换取短期对象存储签名，删除文件后自动失效。文件不属于当前应用或不是图片、音频、视频时，服务端拒绝生成链接。
+
+### 批量删除 `deleteFiles`
+
+```java
+DeleteFilesResult result = client.deleteFiles(List.of(fileId1, fileId2));
+System.out.println(result.deletedFiles());
+```
+
+一次最多删除 100 个当前应用已完成上传的文件；服务端会整批预校验，返回 `deletedFiles` 和对象存储清理失败数 `failedObjects`。
 
 ## 完整示例（含异常处理）
 

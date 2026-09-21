@@ -46,7 +46,7 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -f sdk/java/pom.xml clean verify
 在 GitHub Actions 的 `SDK Release` 中选择对应模块：
 
 - `sdk-java`：沿用现有 Maven 发布流程，发布到 GitHub Packages。
-- `sdk-go`：输入版本号（如 `0.1.0`），通过 `sdk/go/v0.1.0` tag 发布 Go module。
+- `sdk-go`：输入版本号（如 `0.1.1`），通过 `sdk/go/v0.1.1` tag 发布 Go module。
 - `sdk-py`：输入版本号（可留空），构建并发布 `content-center-sdk` 到 PyPI；需要配置 `PYPI_API_TOKEN` Secret。
 
 `Deploy to Server` 的手动触发也提供相同的三个 SDK 选项。Java 版本读取 `sdk/java/pom.xml`，Python 版本读取 `sdk/python/pyproject.toml`。

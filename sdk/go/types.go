@@ -102,3 +102,8 @@ type CDNLink struct {
 	Permanent   bool   `json:"permanent"`
 	ContentType string `json:"contentType"`
 }
+
+type DeleteFilesResult struct {
+	DeletedFiles  int `json:"deletedFiles"`
+	FailedObjects int `json:"failedObjects"`
+}

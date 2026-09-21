@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -131,6 +132,12 @@ func (c *Client) putPresigned(ctx context.Context, targetURL string, body io.Rea
 		return "", &ContentCenterError{Status: -1, Message: "failed to read presigned PUT response: " + readErr.Error(), Err: readErr}
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		if suffix := storageErrorCodeSuffix(responseBody); suffix != "" {
+			return "", &ContentCenterError{
+				Status:  response.StatusCode,
+				Message: fmt.Sprintf("presigned PUT failed (HTTP %d%s)", response.StatusCode, suffix),
+			}
+		}
 		return "", apiResponseError(response.StatusCode, responseBody)
 	}
 	return strings.Trim(response.Header.Get("ETag"), `"`), nil
@@ -347,4 +354,25 @@ func (c *Client) GetCDNLink(ctx context.Context, request CDNLinkRequest) (CDNLin
 		return CDNLink{}, err
 	}
 	return result, nil
+}
+
+func (c *Client) DeleteFiles(ctx context.Context, fileIDs []int64) (DeleteFilesResult, error) {
+	if fileIDs == nil {
+		fileIDs = []int64{}
+	}
+	var result DeleteFilesResult
+	if err := c.postJSON(ctx, "/api/open/files/batch-delete", map[string]any{"fileIds": fileIDs}, &result); err != nil {
+		return DeleteFilesResult{}, err
+	}
+	return result, nil
+}
+
+var storageErrorCodePattern = regexp.MustCompile(`<Code>\s*([^<\s]+)\s*</Code>`)
+
+func storageErrorCodeSuffix(body []byte) string {
+	match := storageErrorCodePattern.FindSubmatch(body)
+	if len(match) == 2 {
+		return ", " + string(match[1])
+	}
+	return ""
 }

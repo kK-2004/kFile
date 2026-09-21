@@ -23,6 +23,7 @@ import com.kk.storage.entity.StoredFile;
 import com.kk.storage.entity.StoredFileUpload;
 import com.kk.storage.repo.StoredFileRepository;
 import com.kk.storage.repo.StoredFileUploadRepository;
+import com.kk.storage.service.CdnPreviewLinkService;
 import com.kk.storage.service.MultipartUploadService;
 import com.kk.storage.service.StoredFileService;
 import java.util.List;
@@ -57,6 +58,7 @@ class OpenFileBatchDeleteServiceTest {
     @Mock private AppConfigService appConfigService;
     @Mock private OpenAppService openAppService;
     @Mock private ObjectProvider<MultipartUploadService> multipartProvider;
+    @Mock private CdnPreviewLinkService cdnPreviewLinkService;
     @Mock private StorageBrowserService ossSvc;
 
     private OpenFileService service;
@@ -70,7 +72,7 @@ class OpenFileBatchDeleteServiceTest {
                 registry, shareLinkService, minioProperties, ossProperties, adminUserRepository,
                 submissionRepository, appConfigService);
         service = new OpenFileService(storedFileRepository, registry, openAppService, storedFileService,
-                minioProperties, ossProperties, multipartProvider);
+                minioProperties, ossProperties, multipartProvider, cdnPreviewLinkService);
 
         app = new OpenApp();
         app.setId(7L);

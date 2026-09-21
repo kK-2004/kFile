@@ -105,3 +105,9 @@ class CdnLink:
     expires_in: int
     permanent: bool
     content_type: str | None
+
+
+@dataclass(slots=True)
+class DeleteFilesResult:
+    deleted_files: int
+    failed_objects: int

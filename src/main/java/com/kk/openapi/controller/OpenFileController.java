@@ -121,6 +121,8 @@ public class OpenFileController {
         String requestUri = request.getRequestURI();
         int pathStart = requestUrl.indexOf(requestUri);
         return pathStart >= 0 ? requestUrl.substring(0, pathStart) : requestUrl;
+    }
+
     /** 批量删除本应用已完成上传的文件：整批预校验（400/404/409），通过后清理对象/上传记录/DB 节点 */
     @PostMapping("/files/batch-delete")
     @RateLimit(ip = true, capacity = 30, refillRate = 10)

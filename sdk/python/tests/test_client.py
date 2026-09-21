@@ -291,3 +291,28 @@ def test_get_download_and_cdn_links_preserve_server_urls() -> None:
         "expiresIn": 300,
     }
     assert captured["cdn"] == {"fileId": 9}
+
+
+def test_delete_files_posts_batch_and_parses_counts() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["authorization"] = request.headers["Authorization"]
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"deletedFiles": 2, "failedObjects": 0},
+            request=request,
+        )
+
+    with ContentCenterClient(
+        "https://file.example", "kapp_test", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = client.delete_files([9, 3])
+
+    assert result.deleted_files == 2
+    assert result.failed_objects == 0
+    assert captured == {
+        "authorization": "Bearer kapp_test",
+        "body": {"fileIds": [9, 3]},
+    }
