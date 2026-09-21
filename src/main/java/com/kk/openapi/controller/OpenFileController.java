@@ -90,6 +90,14 @@ public class OpenFileController {
                 req.filename(), req.expiresIn());
     }
 
+    /** 批量删除本应用已完成上传的文件：整批预校验（400/404/409），通过后清理对象/上传记录/DB 节点 */
+    @PostMapping("/files/batch-delete")
+    @RateLimit(ip = true, capacity = 30, refillRate = 10)
+    public OpenFileService.BatchDeleteResult batchDelete(@RequestBody BatchDeleteReq req, Authentication auth) {
+        OpenApp app = currentApp(auth);
+        return openFileService.deleteFiles(app, req.fileIds());
+    }
+
     private OpenApp currentApp(Authentication auth) {
         if (auth == null || !(auth.getPrincipal() instanceof OpenAppPrincipal principal)) {
             throw new IllegalArgumentException("应用身份缺失");
@@ -113,4 +121,6 @@ public class OpenFileController {
     public record MultipartCompleteReq(String contentMd5, List<PartEtagDto> parts) {}
 
     public record DownloadLinkReq(Long fileId, String key, String source, String filename, Long expiresIn) {}
+
+    public record BatchDeleteReq(List<Long> fileIds) {}
 }

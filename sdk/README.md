@@ -1,6 +1,6 @@
 # content-center-sdk
 
-内容中心（k-File）开放 API 官方 Java SDK：**appToken 鉴权 + 预签名直传上传（简单 / 分片断点续传）+ 预签名下载链接**。
+内容中心（k-File）开放 API 官方 Java SDK：**appToken 鉴权 + 预签名直传上传（简单 / 分片断点续传）+ 预签名下载链接 + 按 fileId 批量删除**。
 
 - 零 Spring 依赖：HTTP 使用 JDK `java.net.http.HttpClient`，JSON 使用 Jackson，字节码目标 **Java 17**
 - 文件字节经预签名 URL **直传对象存储**，不经过内容中心服务端（上传流量不占服务端带宽）
@@ -60,7 +60,7 @@ SDK 发布在 GitHub Packages（私有，匿名不可访问）。在你的项目
 <dependency>
   <groupId>com.kk</groupId>
   <artifactId>content-center-sdk</artifactId>
-  <version>0.1.2</version>
+  <version>0.1.3</version>
 </dependency>
 ```
 
@@ -89,6 +89,10 @@ System.out.println("fileId=" + result.fileId() + " size=" + result.size());
 DownloadLink link = client.getDownloadLink(
         DownloadLinkRequest.ofFileId(result.fileId()).filename("报表.pdf").expiresIn(600));
 System.out.println(link.url());
+
+// 批量删除：按 fileId 清理不再需要的文件（整批预校验，支持单个或最多 100 个）
+DeleteFilesResult deleted = client.deleteFiles(java.util.List.of(result.fileId()));
+System.out.println("deleted=" + deleted.deletedFiles() + " failedObjects=" + deleted.failedObjects());
 ```
 
 ## 客户端构建（Builder）
@@ -181,6 +185,22 @@ DownloadLink getDownloadLink(DownloadLinkRequest.ofKey(String storageKey, String
 
 返回 `DownloadLink(url, expiresIn)`：URL 在有效期内可直接 GET 下载（可下发给浏览器/第三方，无需再带 appToken）。
 
+### 批量删除 `deleteFiles`
+
+```java
+// 删除一批文件（传上传返回的 fileId）；单个文件传单元素列表即可
+DeleteFilesResult result = client.deleteFiles(List.of(id1, id2));
+System.out.println("deleted=" + result.deletedFiles() + " failedObjects=" + result.failedObjects());
+```
+
+**请求限制**：单次 1–100 个互不重复的正数 `fileId`；超出返回 400。
+
+**全有或全无预校验**：服务端先校验整个批次——任一 ID 不存在、属于其他应用/管理员、是文件夹，整批返回 404（不删除任何文件）；本应用仍在上传中的文件返回 409。预校验通过后才开始删除。
+
+**返回计数**：`deletedFiles` = 已删除的文件记录数；`failedObjects` = 对象存储清理未成功的数量（服务端会继续删除该文件的记录并记录告警，`deletedFiles` 不代表全部物理对象已删除，`failedObjects > 0` 时可凭告警日志人工清理残留对象）。
+
+**可删除范围**：仅本应用已完成上传的 `FILE` 节点；不能删文件夹、不递归、不能取消进行中的上传。
+
 ## 完整示例（含异常处理）
 
 ```java
@@ -213,9 +233,10 @@ try {
 
 | 状态码 | 含义 | 建议 |
 |---|---|---|
-| 400 | 参数非法 / source 未启用 / 对象未上传即确认 / 分片校验失败 / path 含非法段 | 看 message 修参数 |
+| 400 | 参数非法 / source 未启用 / 对象未上传即确认 / 分片校验失败 / path 含非法段 / fileIds 空、重复、非正数或超过 100 | 看 message 修参数 |
 | 401 | appToken 缺失、无效、已轮换或应用被禁用 | 找管理员确认 token，勿重试 |
-| 404 | fileId/storageKey 不存在或不属于本应用 | 检查 id 是否来自本应用的上传结果 |
+| 404 | fileId/storageKey 不存在或不属于本应用（下载与批量删除同语义，不泄露存在性） | 检查 id 是否来自本应用的上传结果 |
+| 409 | 批量删除中包含本应用仍在上传中的文件 | 等 `complete` 后再删 |
 | 429 | 触发限流（IP 维度令牌桶；分片签名端点阈值更高） | 退避重试 |
 | 500 | 服务端错误（如管理员正在做 rootPath 迁移且失败） | 稍后重试或联系管理员 |
 
@@ -226,7 +247,8 @@ try {
 - **为什么分片上传只能 MinIO**：分片能力取决于服务端数据源，当前仅 MinIO 提供（OSS 走简单直传）。
 - **幂等性**：简单上传每次调用都会产生新文件（storageKey 含时间戳-uuid 防覆盖）；分片上传按整文件 MD5 幂等，同文件重试不会重复占空间。
 - **并发**：多个线程可同时用同一 client 实例；分片上传内部为串行逐片上传。
-- **数据归属**：应用只能下载/确认**自己上传**的文件（fileId 越权访问返回 404）。
+- **数据归属**：应用只能操作**自己上传**的文件（fileId 越权访问返回 404，不泄露存在性）。
+- **删除语义**：`deleteFiles` 整批预校验通过后才删除；对象存储清理为尽力而为，失败只计入 `failedObjects` 不阻断记录删除。
 
 ## 版本与发布
 
@@ -245,5 +267,6 @@ SDK 封装以下端点（均携带 `Authorization: Bearer <appToken>`，协议�
 | `uploadMultipart` | `POST /api/open/uploads/multipart/init` →（`/sign` + PUT）× N → `POST /api/open/uploads/multipart/complete` |
 | `initMultipartUpload` / `signMultipartPart` / `completeMultipartUpload` | 拆分调用分片端点，供浏览器直传 |
 | `getDownloadLink` | `POST /api/open/download-links` |
+| `deleteFiles` | `POST /api/open/files/batch-delete` |
 
 修改 SDK 契约需同步更新服务端 `docs/open-api.md` 与本文件。

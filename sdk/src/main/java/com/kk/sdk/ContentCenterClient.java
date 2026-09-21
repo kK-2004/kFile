@@ -297,6 +297,22 @@ public final class ContentCenterClient {
         return new DownloadLink(resp.url(), resp.expiresIn());
     }
 
+    // ===== 批量删除 =====
+
+    /** 批量删除结果：deletedFiles=已删除的文件记录数，failedObjects=对象存储清理未成功的数量 */
+    public record DeleteFilesResult(int deletedFiles, int failedObjects) {}
+
+    /**
+     * 按 fileId 批量删除本应用已完成上传的文件（单个文件传单元素列表即可）。
+     * 限制：1–100 个互不重复的正数 fileId；服务端整批预校验，任一 ID 无效、不属于本应用
+     * 或仍在上传中都会整体拒绝（400/404/409），不会部分删除。
+     */
+    public DeleteFilesResult deleteFiles(List<Long> fileIds) {
+        // null 归一为空列表交给服务端校验，得到统一的 400 而非本地 NPE
+        List<Long> ids = fileIds == null ? List.of() : fileIds;
+        return postJson("/api/open/files/batch-delete", Map.of("fileIds", ids), DeleteFilesResult.class);
+    }
+
     // ===== HTTP helpers =====
 
     private <T> T postJson(String path, Object body, Class<T> type) {
