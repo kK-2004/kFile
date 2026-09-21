@@ -1,11 +1,14 @@
 package com.kk.storage.repo;
 
 import com.kk.storage.entity.StoredFile;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,6 +46,11 @@ public interface StoredFileRepository extends JpaRepository<StoredFile, Long> {
 
     /** 按 storageKey 查最新记录（任意状态，开放 API 下载回传 key 时使用） */
     Optional<StoredFile> findFirstByStorageKeyOrderByIdDesc(String storageKey);
+
+    /** 按升序悲观锁定读取一组节点（开放 API 批量删除整批预校验用；固定升序加锁防并发批次死锁） */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select f from StoredFile f where f.id in :ids order by f.id")
+    List<StoredFile> findAllByIdInForUpdate(@org.springframework.data.repository.query.Param("ids") Collection<Long> ids);
 
     /** 某开放应用名下全部节点（迁移用） */
     List<StoredFile> findByOpenAppId(Long openAppId);

@@ -196,6 +196,63 @@ public class OpenFileService {
         return mp;
     }
 
+    // ===== 批量删除 =====
+
+    /** 单次批量删除允许的最大文件数 */
+    private static final int BATCH_DELETE_MAX_IDS = 100;
+
+    public record BatchDeleteResult(int deletedFiles, int failedObjects) {}
+
+    /**
+     * 按 fileId 批量删除本应用已完成上传的文件（仅 FILE，不递归文件夹）。
+     * 一个事务内按 ID 升序锁定整批并完成全部预校验：不存在/文件夹/非本应用统一 404（不泄露存在性），
+     * 本应用未完成上传（UPLOADING）返回 409；预校验失败不产生任何对象或 DB 删除副作用。
+     * 通过后复用 {@link StoredFileService#deleteLockedFiles} 清理：对象删除尽力而为，
+     * 失败计入 failedObjects 并继续删除 DB 记录（与管理端语义一致）。
+     */
+    @Transactional
+    public BatchDeleteResult deleteFiles(OpenApp app, List<Long> fileIds) {
+        List<Long> ids = validateBatchFileIds(fileIds);
+        List<StoredFile> batch = storedFileRepository.findAllByIdInForUpdate(ids);
+        if (batch.size() != ids.size()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文件不存在");
+        }
+        // 先统一做归属/类型校验（404），再做状态校验（409）：非本应用节点不得通过状态差异被探知
+        for (StoredFile f : batch) {
+            if (!StoredFile.TYPE_FILE.equals(f.getType()) || !app.getId().equals(f.getOpenAppId())) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文件不存在");
+            }
+        }
+        for (StoredFile f : batch) {
+            if (!StoredFile.STATUS_UPLOADED.equals(f.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "文件尚未完成上传，不能删除: " + f.getId());
+            }
+        }
+        StoredFileService.DeleteResult result = storedFileService.deleteLockedFiles(batch);
+        return new BatchDeleteResult(result.deletedDb(), result.failedObjects());
+    }
+
+    /** 批量删除参数校验：1–100 个互不重复的正数 ID，升序返回（IllegalArgument → 400） */
+    private List<Long> validateBatchFileIds(List<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            throw new IllegalArgumentException("fileIds 不能为空");
+        }
+        if (fileIds.size() > BATCH_DELETE_MAX_IDS) {
+            throw new IllegalArgumentException("单次最多删除 " + BATCH_DELETE_MAX_IDS + " 个文件");
+        }
+        java.util.TreeSet<Long> distinct = new java.util.TreeSet<>();
+        for (Long id : fileIds) {
+            if (id == null || id <= 0) {
+                throw new IllegalArgumentException("fileId 必须为正数");
+            }
+            if (!distinct.add(id)) {
+                throw new IllegalArgumentException("fileId 重复: " + id);
+            }
+        }
+        return new ArrayList<>(distinct);
+    }
+
     // ===== 下载链接 =====
 
     public record DownloadLinkResult(String url, long expiresIn) {}

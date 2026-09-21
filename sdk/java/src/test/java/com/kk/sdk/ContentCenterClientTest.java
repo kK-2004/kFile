@@ -264,4 +264,40 @@ class ContentCenterClientTest {
         assertThat(link.contentType()).isEqualTo("image/png");
         assertThat(capturedJson.get(0)).contains("\"fileId\":9").doesNotContain("expiresIn");
     }
+
+    @Test
+    void deleteFilesPostsBatchWithBearerAndParsesCounts() {
+        route("/api/open/files/batch-delete", ex -> json(ex, 200, "{\"deletedFiles\":2,\"failedObjects\":0}"));
+
+        var result = client().deleteFiles(List.of(9L, 3L));
+
+        assertThat(result.deletedFiles()).isEqualTo(2);
+        assertThat(result.failedObjects()).isZero();
+        assertThat(capturedAuth).isEqualTo("Bearer kapp_test");
+        assertThat(capturedJson.get(0)).contains("\"fileIds\":[9,3]");
+    }
+
+    @Test
+    void deleteSingleFileUsesSameBatchEndpoint() {
+        route("/api/open/files/batch-delete",
+                ex -> json(ex, 200, "{\"deletedFiles\":1,\"failedObjects\":1}"));
+
+        var result = client().deleteFiles(List.of(9L));
+
+        assertThat(result.deletedFiles()).isEqualTo(1);
+        assertThat(result.failedObjects()).isEqualTo(1);
+        assertThat(capturedJson.get(0)).contains("\"fileIds\":[9]");
+    }
+
+    @Test
+    void deleteFilesSurfacesNon2xxAsException() {
+        route("/api/open/files/batch-delete",
+                ex -> json(ex, 409, "{\"message\":\"文件尚未完成上传，不能删除: 5\"}"));
+
+        ContentCenterException e = (ContentCenterException) org.assertj.core.api.Assertions.catchThrowable(
+                () -> client().deleteFiles(List.of(5L)));
+
+        assertThat(e.getStatus()).isEqualTo(409);
+        assertThat(e.getMessage()).contains("文件尚未完成上传");
+    }
 }

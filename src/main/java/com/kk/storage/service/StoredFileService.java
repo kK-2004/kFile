@@ -214,21 +214,40 @@ public class StoredFileService {
             for (StoredFile c : children) {
                 deleteRecursive(c, counters);
             }
+            storedFileRepository.delete(node);
+            counters[0]++;
         } else {
-            // 文件：删对象
-            StorageBrowserService svc = resolveForSource(node.getStorageSource());
-            if (svc != null) {
-                try {
-                    svc.delete(node.getStorageKey());
-                } catch (Exception e) {
-                    counters[1]++;
-                    log.warn("删除对象失败（仍删除 DB 行）: source={}, key={}, msg={}",
-                            node.getStorageSource(), node.getStorageKey(), e.getMessage());
-                }
-            }
-            // 删关联的分片上传记录（避免孤儿）
-            uploadRepository.findByStoredFileId(node.getId()).ifPresent(uploadRepository::delete);
+            deleteFileNode(node, counters);
         }
+    }
+
+    /**
+     * 删除一批调用方已完成归属/类型/状态校验并锁定的 FILE 节点（开放 API 批量删除核心清理）。
+     * 单文件语义与管理端一致：先删对象（尽力而为，失败计数不阻断），再清理关联分片上传记录与 DB 行。
+     */
+    @Transactional
+    public DeleteResult deleteLockedFiles(List<StoredFile> files) {
+        int[] counters = {0, 0}; // {deletedDb, failedObject}
+        for (StoredFile f : files) {
+            deleteFileNode(f, counters);
+        }
+        return new DeleteResult(counters[0], counters[1]);
+    }
+
+    /** 删除单个 FILE 节点：对象（失败仅计数告警）→ 关联分片上传记录 → DB 行 */
+    private void deleteFileNode(StoredFile node, int[] counters) {
+        StorageBrowserService svc = resolveForSource(node.getStorageSource());
+        if (svc != null) {
+            try {
+                svc.delete(node.getStorageKey());
+            } catch (Exception e) {
+                counters[1]++;
+                log.warn("删除对象失败（仍删除 DB 行）: source={}, key={}, msg={}",
+                        node.getStorageSource(), node.getStorageKey(), e.getMessage());
+            }
+        }
+        // 删关联的分片上传记录（避免孤儿）
+        uploadRepository.findByStoredFileId(node.getId()).ifPresent(uploadRepository::delete);
         storedFileRepository.delete(node);
         counters[0]++;
     }
