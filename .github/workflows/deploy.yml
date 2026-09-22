@@ -5,9 +5,15 @@ on:
   push:
     branches:
       - test
-  # 手动触发：与 push 行为一致，只做应用部署。
+  # 手动触发：rollback_tag 留空时正常构建部署；填写历史标签时跳过构建并回滚。
   # SDK 发布已独立到 sdk-release.yml（手动勾选语言），不再经由本工作流分发。
   workflow_dispatch:
+    inputs:
+      rollback_tag:
+        description: "可选：要回滚的 ACR 历史标签，如 kfile-test-420；留空则正常构建部署"
+        required: false
+        default: ""
+        type: string
 
 # 同一时间只允许一个部署任务，避免并发互相覆盖
 concurrency:
@@ -53,7 +59,7 @@ jobs:
 
       # 国内服务器：配置 Docker 镜像加速（仅当配置了 DOCKER_MIRROR_URL）
       - name: Configure Docker registry mirror
-        if: ${{ env.NEED_DOCKER_MIRROR == 'true' }}
+        if: ${{ env.NEED_DOCKER_MIRROR == 'true' && (github.event_name != 'workflow_dispatch' || inputs.rollback_tag == '') }}
         env:
           DOCKER_MIRROR_URL: ${{ secrets.DOCKER_MIRROR_URL }}
         run: |
@@ -73,6 +79,7 @@ jobs:
       # 登录阿里云 ACR：Dockerfile 的基础镜像来自私有仓库 crpi-...aliyuncs.com/kk09
       # 缺少凭据会拉取失败。设置过则登录；未设置则在构建时给出明确报错。
       - name: Login to Aliyun ACR
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.rollback_tag == '' }}
         env:
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
@@ -88,6 +95,7 @@ jobs:
       # GITHUB_PACKAGES_TOKEN 用于拉取 kK-2004 私有制品（如 kmessage-sdk）；
       # 仅写入 builder 层（Stage 1），运行镜像（Stage 2）不含 token。
       - name: Build and push Docker image
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.rollback_tag == '' }}
         env:
           IMAGE_NAME: ${{ steps.ctx.outputs.image_name }}
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
@@ -133,6 +141,7 @@ jobs:
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          ROLLBACK_TAG: ${{ inputs.rollback_tag || '' }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           # SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME 写死默认值，
           # 仍可用同名 secret 覆盖（secrets 为空时取默认）
@@ -183,7 +192,20 @@ jobs:
 
           SSH_PORT="${SSH_PORT:-22}"
           ACR_IMAGE="${ACR_REGISTRY}/kk09/kfile"
-          ACR_BUILD_TAG="${IMAGE_NAME}-${BUILD_NUMBER}"
+          if [[ -n "$ROLLBACK_TAG" ]]; then
+            if [[ ! "$ROLLBACK_TAG" =~ ^${IMAGE_NAME}-[0-9]+$ ]]; then
+              echo "Invalid rollback_tag: $ROLLBACK_TAG" >&2
+              echo "Expected format: ${IMAGE_NAME}-<run_number>" >&2
+              exit 1
+            fi
+            ACR_BUILD_TAG="$ROLLBACK_TAG"
+            DEPLOY_BUILD_NUMBER="${ROLLBACK_TAG##*-}"
+            echo "Rollback mode: deploying ${ACR_IMAGE}:${ACR_BUILD_TAG} with current GitHub Secrets"
+          else
+            ACR_BUILD_TAG="${IMAGE_NAME}-${BUILD_NUMBER}"
+            DEPLOY_BUILD_NUMBER="$BUILD_NUMBER"
+            echo "Normal deploy mode: deploying ${ACR_IMAGE}:${ACR_BUILD_TAG}"
+          fi
 
           # 配置 SSH
           echo "=== [1/4] Configure SSH ==="
@@ -213,7 +235,7 @@ jobs:
           # 网络共用 common-net，与 deploy.sh 保持一致
           echo "=== [4/4] Run remote deployment ==="
           ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$BUILD_NUMBER' \
+            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$DEPLOY_BUILD_NUMBER' \
              ACR_REGISTRY='$ACR_REGISTRY' ACR_IMAGE='$ACR_IMAGE' ACR_BUILD_TAG='$ACR_BUILD_TAG' \
              CONTAINER_NAME='$CONTAINER_NAME' HOST_PORT='$HOST_PORT' \
              KEEP_VERSIONS='$KEEP_VERSIONS' \
