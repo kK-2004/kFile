@@ -172,23 +172,34 @@ jobs:
           SSH_PORT="${SSH_PORT:-22}"
 
           # 配置 SSH
+          echo "=== [1/4] Configure SSH ==="
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "Scanning SSH host key on port ${SSH_PORT}..."
           ssh-keyscan -p "$SSH_PORT" -t rsa,ecdsa,ed25519 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "SSH configuration completed"
 
           SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30"
 
           # 确保部署目录存在
+          echo "=== [2/4] Test SSH connection and prepare deploy directory ==="
           ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" "mkdir -p '$DEPLOY_PATH'"
+          echo "SSH connection succeeded; deploy directory is ready"
 
           # 上传镜像
+          echo "=== [3/4] Upload Docker image ==="
+          echo "Local image archive:"
+          ls -lh "$IMAGE_TAR"
+          echo "Uploading image archive to the server..."
           scp -P "$SSH_PORT" $SSH_OPTS "${IMAGE_TAR}" \
             "${SSH_USER}@${SSH_HOST}:$DEPLOY_PATH/${IMAGE_TAR}"
+          echo "Docker image upload completed"
 
           # 远程部署：加载镜像 → 停旧容器 → 起新容器 → 清理 → 重载 nginx
           # 容器名/端口按分支隔离（test=KFile-test/8082，正式=KFile-v2/8081），
           # 网络共用 common-net，与 deploy.sh 保持一致
+          echo "=== [4/4] Run remote deployment ==="
           ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
             "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_TAR='$IMAGE_TAR' \
              IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$BUILD_NUMBER' \
@@ -306,6 +317,7 @@ jobs:
           docker logs --tail 20 "$CONTAINER_NAME" || true
           echo "=== Deployment completed ==="
           REMOTE
+          echo "Remote deployment command completed"
 
       - name: Cleanup runner artifacts
         if: always()
