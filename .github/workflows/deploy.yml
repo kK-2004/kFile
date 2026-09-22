@@ -41,14 +41,12 @@ jobs:
             echo "image_name=kfile-test" >> "$GITHUB_OUTPUT"
             echo "container_name=KFile-test" >> "$GITHUB_OUTPUT"
             echo "host_port=8082" >> "$GITHUB_OUTPUT"
-            echo "image_tar=kfile-test.tar.gz" >> "$GITHUB_OUTPUT"
             echo "env_cors=https://test-file.ksite.xin" >> "$GITHUB_OUTPUT"
             echo "Deploy context: branch=test → kfile-test / KFile-test / 8082 / cors=test-file.ksite.xin"
           else
             echo "image_name=kfile-v2" >> "$GITHUB_OUTPUT"
             echo "container_name=KFile-v2" >> "$GITHUB_OUTPUT"
             echo "host_port=8081" >> "$GITHUB_OUTPUT"
-            echo "image_tar=kfile-v2.tar.gz" >> "$GITHUB_OUTPUT"
             echo "env_cors=" >> "$GITHUB_OUTPUT"
             echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081 / cors=default"
           fi
@@ -86,13 +84,13 @@ jobs:
           : "${ACR_PASSWORD:?请在 GitHub Action secret 中设置 ACR_PASSWORD}"
           echo "${ACR_PASSWORD}" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
 
-      # 构建镜像：双标签（latest 滚动 + run_number 历史），便于回滚
+      # 构建并推送到现有 ACR 仓库 kk09/kfile：环境 latest + run_number 历史标签
       # GITHUB_PACKAGES_TOKEN 用于拉取 kK-2004 私有制品（如 kmessage-sdk）；
       # 仅写入 builder 层（Stage 1），运行镜像（Stage 2）不含 token。
-      - name: Build Docker image
+      - name: Build and push Docker image
         env:
           IMAGE_NAME: ${{ steps.ctx.outputs.image_name }}
-          IMAGE_TAR: ${{ steps.ctx.outputs.image_tar }}
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
           # 注意：GitHub 保留 GITHUB_ 前缀，secret 名不能用 GITHUB_PACKAGES_*。
           # 这里用 PACKAGES_USER / PACKAGES_TOKEN，但下传给 Docker 的 build-arg 名
           # 仍为 GITHUB_PACKAGES_*（与 Dockerfile ARG 保持一致，无需改 Dockerfile）。
@@ -102,10 +100,16 @@ jobs:
           set -euo pipefail
           : "${GITHUB_PACKAGES_USER:=kK-2004}"
           : "${GITHUB_PACKAGES_TOKEN:?请在 GitHub Action secret 中设置 PACKAGES_TOKEN}"
-          echo "Building ${IMAGE_NAME}:latest (= build #${BUILD_NUMBER})"
+          : "${ACR_REGISTRY:?请在 GitHub Action secret 中设置 ACR_REGISTRY}"
+
+          ACR_IMAGE="${ACR_REGISTRY}/kk09/kfile"
+          ACR_BUILD_TAG="${IMAGE_NAME}-${BUILD_NUMBER}"
+          ACR_LATEST_TAG="${IMAGE_NAME}-latest"
+
+          echo "Building ${ACR_IMAGE}:${ACR_BUILD_TAG}"
           docker build --progress=plain \
-            -t "${IMAGE_NAME}:latest" \
-            -t "${IMAGE_NAME}:${BUILD_NUMBER}" \
+            -t "${ACR_IMAGE}:${ACR_BUILD_TAG}" \
+            -t "${ACR_IMAGE}:${ACR_LATEST_TAG}" \
             --build-arg MAVEN_PROFILE=prod \
             --build-arg SKIP_TESTS=true \
             --build-arg BUILD_NUMBER="${BUILD_NUMBER}" \
@@ -113,17 +117,22 @@ jobs:
             --build-arg GITHUB_PACKAGES_TOKEN="${GITHUB_PACKAGES_TOKEN}" \
             --build-arg MAVEN_CENTRAL_MIRROR=https://repo.maven.apache.org/maven2 \
             .
-          docker images "${IMAGE_NAME}"
-          echo "Saving image to ${IMAGE_TAR}"
-          docker save "${IMAGE_NAME}:latest" "${IMAGE_NAME}:${BUILD_NUMBER}" | gzip > "${IMAGE_TAR}"
-          ls -lh "${IMAGE_TAR}"
+          docker images "${ACR_IMAGE}"
+
+          echo "Pushing immutable build tag ${ACR_BUILD_TAG}..."
+          docker push "${ACR_IMAGE}:${ACR_BUILD_TAG}"
+          echo "Pushing rolling tag ${ACR_LATEST_TAG}..."
+          docker push "${ACR_IMAGE}:${ACR_LATEST_TAG}"
+          echo "Docker image published to Aliyun ACR"
 
       - name: Deploy to server
         env:
           IMAGE_NAME: ${{ steps.ctx.outputs.image_name }}
-          IMAGE_TAR: ${{ steps.ctx.outputs.image_tar }}
           CONTAINER_NAME: ${{ steps.ctx.outputs.container_name }}
           HOST_PORT: ${{ steps.ctx.outputs.host_port }}
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           # SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME 写死默认值，
           # 仍可用同名 secret 覆盖（secrets 为空时取默认）
@@ -162,6 +171,9 @@ jobs:
           # 注：SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME / MINIO_ENABLED 等已有默认值，无需校验
           : "${SSH_HOST:?missing SSH_HOST secret}"
           : "${SSH_KEY:?missing SSH_KEY secret}"
+          : "${ACR_REGISTRY:?missing ACR_REGISTRY secret}"
+          : "${ACR_USERNAME:?missing ACR_USERNAME secret}"
+          : "${ACR_PASSWORD:?missing ACR_PASSWORD secret}"
           : "${OSS_AK:?missing OSS_AK secret}"
           : "${OSS_SK:?missing OSS_SK secret}"
           : "${SPRING_DATASOURCE_PASSWORD:?missing SPRING_DATASOURCE_PASSWORD secret}"
@@ -170,6 +182,8 @@ jobs:
           : "${XXL_JOB_ACCESS_TOKEN:?missing XXL_JOB_ACCESS_TOKEN secret}"
 
           SSH_PORT="${SSH_PORT:-22}"
+          ACR_IMAGE="${ACR_REGISTRY}/kk09/kfile"
+          ACR_BUILD_TAG="${IMAGE_NAME}-${BUILD_NUMBER}"
 
           # 配置 SSH
           echo "=== [1/4] Configure SSH ==="
@@ -187,22 +201,20 @@ jobs:
           ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" "mkdir -p '$DEPLOY_PATH'"
           echo "SSH connection succeeded; deploy directory is ready"
 
-          # 上传镜像
-          echo "=== [3/4] Upload Docker image ==="
-          echo "Local image archive:"
-          ls -lh "$IMAGE_TAR"
-          echo "Uploading image archive to the server..."
-          scp -P "$SSH_PORT" $SSH_OPTS "${IMAGE_TAR}" \
-            "${SSH_USER}@${SSH_HOST}:$DEPLOY_PATH/${IMAGE_TAR}"
-          echo "Docker image upload completed"
+          # 服务器登录 ACR；密码通过 SSH 标准输入传递，不出现在远程命令参数中
+          echo "=== [3/4] Login server to Aliyun ACR ==="
+          printf '%s\n' "$ACR_PASSWORD" | ssh -p "$SSH_PORT" $SSH_OPTS \
+            "${SSH_USER}@${SSH_HOST}" \
+            "docker login '$ACR_REGISTRY' -u '$ACR_USERNAME' --password-stdin"
+          echo "Server logged in to Aliyun ACR"
 
-          # 远程部署：加载镜像 → 停旧容器 → 起新容器 → 清理 → 重载 nginx
+          # 远程部署：拉取 ACR 镜像 → 停旧容器 → 起新容器 → 清理 → 重载 nginx
           # 容器名/端口按分支隔离（test=KFile-test/8082，正式=KFile-v2/8081），
           # 网络共用 common-net，与 deploy.sh 保持一致
           echo "=== [4/4] Run remote deployment ==="
           ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_TAR='$IMAGE_TAR' \
-             IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$BUILD_NUMBER' \
+            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$BUILD_NUMBER' \
+             ACR_REGISTRY='$ACR_REGISTRY' ACR_IMAGE='$ACR_IMAGE' ACR_BUILD_TAG='$ACR_BUILD_TAG' \
              CONTAINER_NAME='$CONTAINER_NAME' HOST_PORT='$HOST_PORT' \
              KEEP_VERSIONS='$KEEP_VERSIONS' \
              SPRING_DATASOURCE_USERNAME='$SPRING_DATASOURCE_USERNAME' \
@@ -219,6 +231,7 @@ jobs:
              XXL_JOB_JOB_GROUP='$XXL_JOB_JOB_GROUP' \
              ENV_CORS='$ENV_CORS' bash -s" <<'REMOTE'
           set -euo pipefail
+          trap 'docker logout "$ACR_REGISTRY" >/dev/null 2>&1 || true' EXIT
           echo "=== Starting deployment ==="
           cd "$DEPLOY_PATH"
 
@@ -230,9 +243,11 @@ jobs:
           # 复用既有外部网络（MySQL 在其上），不重建数据库
           docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1 || docker network create "$DOCKER_NETWORK"
 
-          echo "Loading Docker image..."
-          docker load < "$IMAGE_TAR"
-          docker tag "${IMAGE_NAME}:${BUILD_NUMBER}" "${IMAGE_NAME}:latest"
+          echo "Pulling Docker image from Aliyun ACR..."
+          docker pull "${ACR_IMAGE}:${ACR_BUILD_TAG}"
+          docker tag "${ACR_IMAGE}:${ACR_BUILD_TAG}" "${IMAGE_NAME}:${BUILD_NUMBER}"
+          docker tag "${ACR_IMAGE}:${ACR_BUILD_TAG}" "${IMAGE_NAME}:latest"
+          docker rmi "${ACR_IMAGE}:${ACR_BUILD_TAG}" >/dev/null 2>&1 || true
 
           echo "Stopping old container..."
           docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
@@ -295,9 +310,8 @@ jobs:
             echo "WARN: nginx not detected, skip reload"
           fi
 
-          # 清理：删 tar + 保留最近 N 个构建号镜像（latest 永不删）
+          # 清理：保留最近 N 个本地构建号镜像（latest 永不删）
           echo "=== Cleanup ==="
-          rm -f "$IMAGE_TAR"
           KEEP="${KEEP_VERSIONS:-5}"
           docker image prune -f 2>/dev/null || true
           docker images "$IMAGE_NAME" --format '{{.Tag}} {{.ID}}' \
@@ -319,10 +333,11 @@ jobs:
           REMOTE
           echo "Remote deployment command completed"
 
-      - name: Cleanup runner artifacts
+      - name: Logout from Aliyun ACR
         if: always()
         env:
-          IMAGE_TAR: ${{ steps.ctx.outputs.image_tar }}
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
         run: |
-          rm -f "$IMAGE_TAR"
-          echo "Cleaned up local tarball"
+          if [[ -n "$ACR_REGISTRY" ]]; then
+            docker logout "$ACR_REGISTRY" || true
+          fi
