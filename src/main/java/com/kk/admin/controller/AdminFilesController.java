@@ -134,7 +134,8 @@ public class AdminFilesController {
                 "storageSource", init.storageSource(),
                 "putUrl", init.putUrl(),
                 "expireSeconds", init.expireSeconds(),
-                "storedFileId", init.storedFileId()
+                "storedFileId", init.storedFileId(),
+                "contentType", init.contentType()
         );
     }
 

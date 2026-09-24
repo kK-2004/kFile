@@ -28,6 +28,7 @@ class UploadInit:
     put_url: str
     expires_in: int
     file_id: int | None
+    content_type: str | None = None
 
 
 @dataclass(slots=True)

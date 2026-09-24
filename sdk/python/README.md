@@ -59,6 +59,7 @@ with ContentCenterClient(
 ```
 
 需要浏览器直传时，先调用 `init_upload`，让浏览器 PUT 到返回的 `put_url`，再调用 `complete_upload`。对已打开的二进制文件对象使用 `upload_fileobj`。
+浏览器 PUT 必须使用 `init_upload` 返回的 `content_type`。未传或传入 `application/octet-stream` 时，服务端会根据图片、音频、视频扩展名自动推断可预览类型。
 
 ## 分片断点续传
 

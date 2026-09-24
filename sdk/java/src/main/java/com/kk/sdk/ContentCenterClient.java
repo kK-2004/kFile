@@ -171,7 +171,10 @@ public final class ContentCenterClient {
         UploadOptions opt = options == null ? UploadOptions.defaults() : options;
         UploadInitResponse init = initUpload(filename, size, opt);
 
-        String contentType = opt.contentType() == null ? "application/octet-stream" : opt.contentType();
+        String contentType = init.contentType() != null && !init.contentType().isBlank()
+                ? init.contentType()
+                : (opt.contentType() == null || opt.contentType().isBlank()
+                        ? "application/octet-stream" : opt.contentType());
         HttpResponse<String> put = exchange(HttpRequest.newBuilder(URI.create(init.putUrl()))
                 .header("Content-Type", contentType)
                 .timeout(requestTimeout)

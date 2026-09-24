@@ -24,11 +24,12 @@ type MultipartOptions struct {
 }
 
 type UploadInit struct {
-	StorageKey string `json:"storageKey"`
-	Source     string `json:"source"`
-	PutURL     string `json:"putUrl"`
-	ExpiresIn  int64  `json:"expiresIn"`
-	FileID     int64  `json:"fileId"`
+	StorageKey  string `json:"storageKey"`
+	Source      string `json:"source"`
+	PutURL      string `json:"putUrl"`
+	ExpiresIn   int64  `json:"expiresIn"`
+	FileID      int64  `json:"fileId"`
+	ContentType string `json:"contentType"`
 }
 
 type UploadResult struct {

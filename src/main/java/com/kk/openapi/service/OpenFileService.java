@@ -6,6 +6,7 @@ import com.kk.openapi.entity.OpenApp;
 import com.kk.storage.StorageBrowserRegistry;
 import com.kk.storage.StorageBrowserService;
 import com.kk.storage.StorageKeys;
+import com.kk.storage.UploadContentTypeResolver;
 import com.kk.storage.entity.StoredFile;
 import com.kk.storage.repo.StoredFileRepository;
 import com.kk.storage.service.MultipartUploadService;
@@ -79,7 +80,8 @@ public class OpenFileService {
 
     // ===== 简单上传（预签名直传） =====
 
-    public record UploadInitResult(String storageKey, String source, String putUrl, long expiresIn, Long fileId) {}
+    public record UploadInitResult(String storageKey, String source, String putUrl, long expiresIn,
+                                   Long fileId, String contentType) {}
 
     public UploadInitResult initUpload(OpenApp app, String originalName, String contentType, String path, String source) {
         if (!StringUtils.hasText(originalName)) {
@@ -91,7 +93,8 @@ public class OpenFileService {
         String rootPrefix = rootPrefixFor(svc.sourceId());
         String folderPath = storedFileService.resolveFolderPath(parentId);
         String storageKey = StorageKeys.buildDirectUploadKey(rootPrefix, folderPath, originalName);
-        String putUrl = svc.presignedPutUrl(storageKey, DIRECT_EXPIRE_SECONDS, contentType);
+        String effectiveContentType = UploadContentTypeResolver.resolve(originalName, contentType);
+        String putUrl = svc.presignedPutUrl(storageKey, DIRECT_EXPIRE_SECONDS, effectiveContentType);
 
         StoredFile pre = new StoredFile();
         pre.setParentId(parentId);
@@ -101,11 +104,12 @@ public class OpenFileService {
         pre.setStorageSource(svc.sourceId());
         pre.setStorageKey(storageKey);
         pre.setOriginalName(originalName);
-        pre.setContentType(contentType);
+        pre.setContentType(effectiveContentType);
         pre.setSize(0);
         pre.setStatus(StoredFile.STATUS_UPLOADING);
         pre = storedFileRepository.save(pre);
-        return new UploadInitResult(storageKey, svc.sourceId(), putUrl, DIRECT_EXPIRE_SECONDS, pre.getId());
+        return new UploadInitResult(storageKey, svc.sourceId(), putUrl, DIRECT_EXPIRE_SECONDS,
+                pre.getId(), effectiveContentType);
     }
 
     public record UploadCompleteResult(Long fileId, String name, long size, String contentType) {}

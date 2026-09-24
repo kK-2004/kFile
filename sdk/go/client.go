@@ -159,7 +159,10 @@ func (c *Client) UploadReader(ctx context.Context, reader io.Reader, filename st
 	if err != nil {
 		return UploadResult{}, err
 	}
-	contentType := options.ContentType
+	contentType := init.ContentType
+	if contentType == "" {
+		contentType = options.ContentType
+	}
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}

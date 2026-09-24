@@ -6,6 +6,7 @@ import com.kk.share.service.ShareLinkService;
 import com.kk.storage.StorageBrowserRegistry;
 import com.kk.storage.StorageBrowserService;
 import com.kk.storage.StorageKeys;
+import com.kk.storage.UploadContentTypeResolver;
 import com.kk.storage.entity.StoredFile;
 import com.kk.storage.repo.StoredFileRepository;
 import lombok.RequiredArgsConstructor;
@@ -117,7 +118,8 @@ public class StoredFileService {
         String rootPrefix = svc.sourceId().equals("minio") ? minioProperties.getPrefix() : ossProperties.getPrefix();
         String folderPath = resolveFolderPath(parentId);
         String storageKey = StorageKeys.buildDirectUploadKey(rootPrefix, folderPath, originalName);
-        String putUrl = svc.presignedPutUrl(storageKey, DEFAULT_DIRECT_EXPIRE_SECONDS, contentType);
+        String effectiveContentType = UploadContentTypeResolver.resolve(originalName, contentType);
+        String putUrl = svc.presignedPutUrl(storageKey, DEFAULT_DIRECT_EXPIRE_SECONDS, effectiveContentType);
         // 预创建 StoredFile(UPLOADING)，让上传中的文件立即出现在列表里
         StoredFile pre = new StoredFile();
         pre.setParentId(parentId);
@@ -127,11 +129,12 @@ public class StoredFileService {
         pre.setStorageSource(svc.sourceId());
         pre.setStorageKey(storageKey);
         pre.setOriginalName(originalName);
-        pre.setContentType(contentType);
+        pre.setContentType(effectiveContentType);
         pre.setSize(0);
         pre.setStatus(StoredFile.STATUS_UPLOADING);
         pre = storedFileRepository.save(pre);
-        return new DirectUploadInit(storageKey, svc.sourceId(), putUrl, DEFAULT_DIRECT_EXPIRE_SECONDS, pre.getId());
+        return new DirectUploadInit(storageKey, svc.sourceId(), putUrl, DEFAULT_DIRECT_EXPIRE_SECONDS,
+                pre.getId(), effectiveContentType);
     }
 
     private DirectUploadInit initResumeUpload(String source, String originalName, String contentType,
@@ -158,14 +161,15 @@ public class StoredFileService {
         validateParentExists(existing.getParentId(), uploaderId);
         checkQuota(uploaderId, 0);
         StorageBrowserService svc = resolveUploadService(existing.getStorageSource());
-        String putUrl = svc.presignedPutUrl(existing.getStorageKey(), DEFAULT_DIRECT_EXPIRE_SECONDS, contentType);
+        String effectiveContentType = UploadContentTypeResolver.resolve(originalName, contentType);
+        String putUrl = svc.presignedPutUrl(existing.getStorageKey(), DEFAULT_DIRECT_EXPIRE_SECONDS, effectiveContentType);
 
         existing.setName(StorageKeys.baseName(originalName));
         existing.setOriginalName(originalName);
-        existing.setContentType(contentType);
+        existing.setContentType(effectiveContentType);
         storedFileRepository.save(existing);
         return new DirectUploadInit(existing.getStorageKey(), existing.getStorageSource(), putUrl,
-                DEFAULT_DIRECT_EXPIRE_SECONDS, existing.getId());
+                DEFAULT_DIRECT_EXPIRE_SECONDS, existing.getId(), effectiveContentType);
     }
 
     @Transactional
@@ -188,7 +192,9 @@ public class StoredFileService {
         f.setType(StoredFile.TYPE_FILE);
         f.setOriginalName(originalName);
         f.setSize(fileSize);
-        f.setContentType(contentType);
+        f.setContentType(UploadContentTypeResolver.resolve(originalName,
+                f.getContentType() != null && !f.getContentType().isBlank()
+                        ? f.getContentType() : contentType));
         f.setStatus(StoredFile.STATUS_UPLOADED);
         return storedFileRepository.save(f);
     }
@@ -417,7 +423,7 @@ public class StoredFileService {
 
     /** 浏览器直传初始化结果：预生成的 storageKey + 直传 PUT 直链 */
     public record DirectUploadInit(String storageKey, String storageSource, String putUrl,
-                                   long expireSeconds, Long storedFileId) {}
+                                   long expireSeconds, Long storedFileId, String contentType) {}
 
     /** 同名冲突（Controller 转 409） */
     public static class ConflictException extends RuntimeException {

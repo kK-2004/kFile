@@ -60,7 +60,7 @@ SDK 发布在 GitHub Packages（私有，匿名不可访问）。在你的项目
 <dependency>
   <groupId>com.kk</groupId>
   <artifactId>content-center-sdk</artifactId>
-  <version>0.1.4</version>
+  <version>0.1.5</version>
 </dependency>
 ```
 
@@ -81,7 +81,7 @@ UploadResult result = client.upload(Path.of("report.pdf"),
         UploadOptions.defaults()
                 .source("oss")                        // 可选，不传用该应用在后台配置的默认数据源（未配置兜底 oss）
                 .path("avatars/2026")                 // 可选，应用上传根路径下的子目录
-                .contentType("application/pdf"));     // 可选，建议填写
+                .contentType("application/pdf"));     // 可选；图片/音频/视频省略时按扩展名推断
 
 System.out.println("fileId=" + result.fileId() + " size=" + result.size());
 
@@ -134,7 +134,7 @@ UploadResult upload(InputStream in, String filename, Long size, UploadOptions op
 |---|---|---|
 | `source` | null | 数据源 sourceId（如 `oss` / `minio`）；null = 该应用在管理端「开放应用」配置的默认数据源（未配置兜底 `oss`） |
 | `path` | null | 应用上传根路径下的子目录（斜杠分隔，如 `avatars/2026`）；每段会被校验，含 `..` 直接 400 |
-| `contentType` | null | 文件 MIME 类型。**填写后 PUT 直传会携带一致的 Content-Type**（OSS 预签名要求二者一致）；不填按 `application/octet-stream` 上传 |
+| `contentType` | null | 文件 MIME 类型。显式值优先；图片/音频/视频未填或填 `application/octet-stream` 时由服务端按扩展名推断，无法识别才回退二进制类型 |
 
 **UploadResult 字段**：`fileId`（后续下载用，建议持久化）、`name`、`size`（服务端 stat 校验后的真实大小）、`contentType`、`storageKey`、`source`。
 
@@ -144,7 +144,8 @@ UploadResult upload(InputStream in, String filename, Long size, UploadOptions op
 
 ```java
 UploadInitResponse init = client.initUpload("report.pdf", size, options);
-// 将 init.putUrl() 返回给浏览器；浏览器 PUT 成功后：
+// 将 init.putUrl() 和 init.contentType() 返回给浏览器；PUT 必须使用 init.contentType() 请求头。
+// 浏览器 PUT 成功后：
 UploadResult result = client.completeUpload(init.storageKey(), init.source());
 ```
 

@@ -114,6 +114,22 @@ class ContentCenterClientTest {
     }
 
     @Test
+    void usesServerInferredContentTypeForPresignedPut() throws Exception {
+        route("/api/open/uploads", ex -> json(ex, 200,
+                "{\"storageKey\":\"k1\",\"source\":\"oss\",\"putUrl\":\"" + base
+                        + "/put\",\"expiresIn\":600,\"fileId\":1,\"contentType\":\"image/png\"}"));
+        route("/put", ex -> ex.sendResponseHeaders(200, -1));
+        route("/api/open/uploads/complete", ex -> json(ex, 200,
+                "{\"fileId\":1,\"name\":\"cover.png\",\"size\":3,\"contentType\":\"image/png\"}"));
+
+        client().upload(new java.io.ByteArrayInputStream(new byte[]{1, 2, 3}),
+                "cover.png", 3L, UploadOptions.defaults());
+
+        assertThat(capturedJson.get(0)).doesNotContain("contentType");
+        assertThat(capturedPutContentType).isEqualTo("image/png");
+    }
+
+    @Test
     void exposesSplitSimpleUploadForBrowserDirectPut() {
         route("/api/open/uploads", ex -> json(ex, 200,
                 "{\"storageKey\":\"k1\",\"source\":\"minio\",\"putUrl\":\"https://minio/put\","

@@ -153,6 +153,7 @@ class ContentCenterClient:
             put_url=str(data["putUrl"]),
             expires_in=int(data.get("expiresIn", 0)),
             file_id=int(data["fileId"]) if data.get("fileId") is not None else None,
+            content_type=str(data["contentType"]) if data.get("contentType") is not None else None,
         )
 
     def complete_upload(self, storage_key: str, source: str) -> UploadResult:
@@ -178,7 +179,11 @@ class ContentCenterClient:
     ) -> UploadResult:
         effective_options = options or UploadOptions()
         init = self.init_upload(filename, size, effective_options)
-        content_type = effective_options.content_type or "application/octet-stream"
+        content_type = (
+            init.content_type
+            or effective_options.content_type
+            or "application/octet-stream"
+        )
         self._put_presigned(init.put_url, fileobj, content_type)
         return self.complete_upload(init.storage_key, init.source)
 

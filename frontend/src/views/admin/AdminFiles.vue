@@ -639,9 +639,10 @@ const uploadSingle = async (file, item) => {
     resumeFileId: item.resumeFileId
   })
   item.fileId = init.storedFileId
+  const effectiveContentType = init.contentType || contentType
   // init 已写入 StoredFile(UPLOADING)，立即刷新列表让文件显示
   load()
-  await api.directPutObject(init.putUrl, file, contentType, (e) => {
+  await api.directPutObject(init.putUrl, file, effectiveContentType, (e) => {
     if (e.total) item.percent = Math.min(99, Math.round((e.loaded / e.total) * 100))
   })
   await api.adminFileUploadComplete({
@@ -649,7 +650,7 @@ const uploadSingle = async (file, item) => {
     storageSource: init.storageSource,
     storageKey: init.storageKey,
     originalName: file.name,
-    contentType,
+    contentType: effectiveContentType,
     size: file.size
   })
 }

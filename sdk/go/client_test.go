@@ -144,6 +144,39 @@ func TestUploadReaderRunsThreeStepsAndKeepsBearerOffPresignedPut(t *testing.T) {
 	}
 }
 
+func TestUploadReaderUsesServerInferredContentType(t *testing.T) {
+	var putContentType string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/open/uploads":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"storageKey":"k1","source":"oss","putUrl":"` + server.URL + `/put","expiresIn":600,"fileId":1,"contentType":"image/png"}`))
+		case "/put":
+			putContentType = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+		case "/api/open/uploads/complete":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"fileId":1,"name":"cover.png","size":3,"contentType":"image/png"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, AppToken: "kapp_test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	size := int64(3)
+	if _, err := client.UploadReader(context.Background(), strings.NewReader("png"), "cover.png", &size, UploadOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if putContentType != "image/png" {
+		t.Fatalf("unexpected inferred PUT Content-Type: %q", putContentType)
+	}
+}
+
 func TestUploadPutFailureDoesNotCallComplete(t *testing.T) {
 	completeCalls := 0
 	var server *httptest.Server

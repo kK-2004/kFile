@@ -3,7 +3,9 @@ package com.kk.storage.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -95,6 +97,23 @@ class StoredFileServiceDeleteTest {
         verify(ossSvc).delete("k5");
         verify(uploadRepository).delete(upload);
         verify(storedFileRepository).delete(f);
+    }
+
+    @Test
+    void fileManagerUploadUsesInferredPreviewableContentType() {
+        when(ossSvc.presignedPutUrl(anyString(), anyLong(), eq("image/png")))
+                .thenReturn("https://oss/put");
+        when(storedFileRepository.save(any(StoredFile.class))).thenAnswer(invocation -> {
+            StoredFile file = invocation.getArgument(0);
+            file.setId(8L);
+            return file;
+        });
+
+        StoredFileService.DirectUploadInit result =
+                service.initUpload(null, "oss", "cover.PNG", "application/octet-stream", null, null);
+
+        assertThat(result.contentType()).isEqualTo("image/png");
+        verify(ossSvc).presignedPutUrl(anyString(), anyLong(), eq("image/png"));
     }
 
     @Test

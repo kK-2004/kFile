@@ -29,6 +29,8 @@ Authorization: Bearer <appToken>
 
 预签名对象存储 PUT 请求不会携带 appToken，只发送必要的 `Content-Type` 和文件字节。非 2xx 响应解析服务端 `ApiError.message`；网络或传输层错误在各 SDK 中以状态 `-1` 表示。401 通常意味着 appToken 已失效、被轮换或对应应用已禁用。
 
+简单上传初始化会返回最终参与签名的 `contentType`。显式类型优先；图片、音频、视频未传类型或传入 `application/octet-stream` 时，服务端按扩展名推断。所有客户端必须使用该返回值作为预签名 PUT 的 `Content-Type` 请求头。
+
 ## 本地验证
 
 在仓库根目录执行：
@@ -46,7 +48,7 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -f sdk/java/pom.xml clean verify
 在 GitHub Actions 的 `SDK Release` 中选择对应模块：
 
 - `sdk-java`：沿用现有 Maven 发布流程，发布到 GitHub Packages。
-- `sdk-go`：输入版本号（如 `0.1.1`），通过 `sdk/go/v0.1.1` tag 发布 Go module。
+- `sdk-go`：输入未使用的新版本号（本次为 `0.1.2`），通过 `sdk/go/v0.1.2` tag 发布 Go module。
 - `sdk-py`：输入版本号（可留空），构建并发布 `content-center-sdk` 到 PyPI；需要配置 `PYPI_API_TOKEN` Secret。
 
 `Deploy to Server` 的手动触发也提供相同的三个 SDK 选项。Java 版本读取 `sdk/java/pom.xml`，Python 版本读取 `sdk/python/pyproject.toml`。

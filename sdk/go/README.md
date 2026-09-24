@@ -11,7 +11,7 @@ go get github.com/kK-2004/kFile/sdk/go
 发布时由 CI 创建 `sdk/go/vX.Y.Z` Git tag；消费方仍使用 `@vX.Y.Z` 获取对应版本：
 
 ```bash
-go get github.com/kK-2004/kFile/sdk/go@v0.1.1
+go get github.com/kK-2004/kFile/sdk/go@v0.1.2
 ```
 
 ## Simple upload
@@ -48,6 +48,7 @@ func main() {
 ```
 
 For browser or frontend direct upload, call `InitUpload`, let the browser PUT to the returned `PutURL`, then call `CompleteUpload`. For an `io.Reader`, use `UploadReader` and pass the optional size pointer.
+Use the `ContentType` returned by `InitUpload` for the PUT header. The server infers previewable image, audio, and video types from the filename when the option is empty or `application/octet-stream`.
 
 ## Multipart resume
 

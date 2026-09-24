@@ -140,6 +140,7 @@ class OpenFileServiceTest {
         assertThat(r.source()).isEqualTo("oss");
         assertThat(r.putUrl()).isEqualTo("https://oss/put");
         assertThat(r.fileId()).isEqualTo(99L);
+        assertThat(r.contentType()).isEqualTo("application/pdf");
         assertThat(r.storageKey()).startsWith("oss-prefix/开放应用/crm/avatars/").endsWith("/report.pdf");
         assertThat(savedRef.get()).isNotNull();
         assertThat(savedRef.get().getOpenAppId()).isEqualTo(7L);
@@ -147,12 +148,30 @@ class OpenFileServiceTest {
     }
 
     @Test
+    void initUploadInfersPreviewableContentTypeFromFilename() {
+        when(ossSvc.presignedPutUrl(anyString(), anyLong(), eq("image/png")))
+                .thenReturn("https://oss/put");
+        when(storedFileRepository.save(any())).thenAnswer(inv -> {
+            StoredFile f = inv.getArgument(0);
+            f.setId(100L);
+            return f;
+        });
+
+        OpenFileService.UploadInitResult result =
+                service.initUpload(app, "cover.PNG", "application/octet-stream", "avatars", "oss");
+
+        assertThat(result.contentType()).isEqualTo("image/png");
+        verify(ossSvc).presignedPutUrl(anyString(), anyLong(), eq("image/png"));
+    }
+
+    @Test
     void openApiDurationFieldsSerializeAsExpiresInForSdkContract() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
 
         assertThat(mapper.writeValueAsString(new OpenFileService.UploadInitResult(
-                "key", "minio", "https://put", 600, 1L)))
+                "key", "minio", "https://put", 600, 1L, "image/png")))
                 .contains("\"expiresIn\":600")
+                .contains("\"contentType\":\"image/png\"")
                 .doesNotContain("expireSeconds");
         assertThat(mapper.writeValueAsString(new OpenFileService.DownloadLinkResult("https://get", 300)))
                 .contains("\"expiresIn\":300")
