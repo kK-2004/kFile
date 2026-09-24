@@ -239,6 +239,9 @@ public class SecurityConfig {
                                         .permitAll()
                                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**")
                                         .permitAll()
+                                        // XXL-JOB 执行器通过内网 curl 触发，不依赖管理员 session。
+                                        .requestMatchers(HttpMethod.POST, "/api/internal/jobs/share-cleanup")
+                                        .permitAll()
                                         .anyRequest()
                                         .authenticated())
                 .authenticationProvider(authenticationProvider)

@@ -29,6 +29,25 @@ public interface ShareLinkRepository extends JpaRepository<ShareLink, Long> {
     @Query("select s from ShareLink s where s.expireAt is not null and s.expireAt < :now")
     java.util.List<ShareLink> findByExpireAtBefore(@Param("now") Instant now);
 
+    /**
+     * 已没有任何存活文件/文件夹来源的规范化文件分享。
+     * 历史 JSON 分享和提交分享无法通过 stored_file 判断，因此不在此处清理。
+     */
+    @Query(value = """
+            select sl.* from share_link sl
+            where sl.share_type in ('FOLDER_SYNC', 'FILE_SET')
+              and exists (
+                  select 1 from share_link_item i
+                  where i.share_link_id = sl.id and i.kind in ('FILE', 'FOLDER')
+              )
+              and not exists (
+                  select 1 from share_link_item i
+                  join stored_file f on f.id = i.ref_id
+                  where i.share_link_id = sl.id and i.kind in ('FILE', 'FOLDER')
+              )
+            """, nativeQuery = true)
+    List<ShareLink> findFileSharesWithoutExistingSource();
+
     /** 列出分享链接（SUPER: projectId 集合为全部；ADMIN: 仅自己有权限的 projectId）。支持按 projectId 过滤。 */
     @Query("select s from ShareLink s where (:projectId is null or s.projectId = :projectId) order by s.createdAt desc")
     Page<ShareLink> findAllByProjectId(@Param("projectId") Long projectId, Pageable pageable);

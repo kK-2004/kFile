@@ -81,12 +81,19 @@ public class AliOssBrowserService implements StorageBrowserService {
 
     @Override
     public String previewUrl(String storageKey, long expireSeconds, String displayName, String contentType) {
+        GeneratePresignedUrlRequest req = buildPreviewRequest(storageKey, expireSeconds, displayName);
+        return ossClient.generatePresignedUrl(req).toString();
+    }
+
+    GeneratePresignedUrlRequest buildPreviewRequest(String storageKey, long expireSeconds, String displayName) {
         Date expiration = new Date(System.currentTimeMillis() + Math.max(60, expireSeconds) * 1000);
         GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(properties.getBucket(), storageKey, HttpMethod.GET);
         req.setExpiration(expiration);
         req.addQueryParameter("response-content-disposition", StorageBrowserService.inlineDisposition(displayName));
-        req.addQueryParameter("response-content-type", contentType);
-        return ossClient.generatePresignedUrl(req).toString();
+        // 阿里 OSS 的 GET 签名不允许通过 response-content-type 覆写响应头
+        //（会返回 0017-00000902）；对象的 Content-Type 应在上传时写入元数据。
+        // MinIO/S3 支持该查询参数，但这里不能复用其预览签名参数。
+        return req;
     }
 
     @Override
