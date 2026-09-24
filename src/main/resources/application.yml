@@ -7,6 +7,8 @@ oss:
   sk: ${OSS_SK}
   bucket: oss-kk
   host: https://oss-kk.oss-cn-beijing.aliyuncs.com/
+  # 绑定到 OSS Bucket 的自定义 HTTPS 域名；文件流直接从 OSS 到浏览器。
+  preview-endpoint: ${OSS_PREVIEW_ENDPOINT:https://media.ksite.xin}
 
 # MinIO 数据源（可选，默认禁用；启用时通过 MINIO_* 环境变量注入）
 minio:

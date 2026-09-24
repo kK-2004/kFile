@@ -29,6 +29,7 @@ public class AliOssBrowserService implements StorageBrowserService {
 
     private final OssProperties properties;
     private OSS ossClient;
+    private OSS previewClient;
 
     @PostConstruct
     public void init() {
@@ -39,12 +40,26 @@ public class AliOssBrowserService implements StorageBrowserService {
         conf.setMaxConnections(128);
         conf.setRequestTimeout(120000);
         this.ossClient = new OSSClientBuilder().build(properties.getEndpoint(), properties.getAk(), properties.getSk(), conf);
+        if (StringUtils.hasText(properties.getPreviewEndpoint())) {
+            java.net.URI endpoint = java.net.URI.create(properties.getPreviewEndpoint().trim());
+            if (!"https".equalsIgnoreCase(endpoint.getScheme()) || endpoint.getHost() == null
+                    || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null
+                    || endpoint.getUserInfo() != null
+                    || (StringUtils.hasText(endpoint.getPath()) && !"/".equals(endpoint.getPath()))) {
+                throw new IllegalArgumentException("oss.preview-endpoint 必须是已绑定 OSS 的 HTTPS 域名，不含路径或参数");
+            }
+            com.aliyun.oss.ClientBuilderConfiguration previewConf = new com.aliyun.oss.ClientBuilderConfiguration();
+            previewConf.setSupportCname(true);
+            previewConf.setProtocol(com.aliyun.oss.common.comm.Protocol.HTTPS);
+            this.previewClient = new OSSClientBuilder().build(endpoint.toString(), properties.getAk(), properties.getSk(), previewConf);
+        }
         log.info("AliOssBrowserService initialized. endpoint={}, bucket={}", properties.getEndpoint(), properties.getBucket());
     }
 
     @PreDestroy
     public void destroy() {
         if (ossClient != null) ossClient.shutdown();
+        if (previewClient != null) previewClient.shutdown();
     }
 
     @Override
@@ -81,8 +96,11 @@ public class AliOssBrowserService implements StorageBrowserService {
 
     @Override
     public String previewUrl(String storageKey, long expireSeconds, String displayName, String contentType) {
+        if (previewClient == null) {
+            throw new IllegalArgumentException("OSS 预览需要配置 oss.preview-endpoint 为已绑定 Bucket 的自定义 HTTPS 域名");
+        }
         GeneratePresignedUrlRequest req = buildPreviewRequest(storageKey, expireSeconds, displayName);
-        return ossClient.generatePresignedUrl(req).toString();
+        return previewClient.generatePresignedUrl(req).toString();
     }
 
     GeneratePresignedUrlRequest buildPreviewRequest(String storageKey, long expireSeconds, String displayName) {
