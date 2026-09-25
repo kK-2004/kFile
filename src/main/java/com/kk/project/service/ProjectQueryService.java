@@ -62,6 +62,17 @@ public class ProjectQueryService {
             }
         }
         List<ProjectResponse> out = new ArrayList<>();
+        // 批量解析创建者用户名（ownerUserId → username），避免循环内逐条查库
+        java.util.Set<Long> ownerIds = new HashSet<>();
+        for (Project p : projects) {
+            if (p.getOwnerUserId() != null) ownerIds.add(p.getOwnerUserId());
+        }
+        java.util.Map<Long, String> creatorNames = new java.util.HashMap<>();
+        if (!ownerIds.isEmpty()) {
+            for (AdminUser u : userRepo.findAllById(ownerIds)) {
+                creatorNames.put(u.getId(), u.getUsername());
+            }
+        }
         for (Project p : projects) {
             ProjectResponse r = toResponse(p, true);
             if (isSuper) {
@@ -72,6 +83,7 @@ public class ProjectQueryService {
                 r.setCanEdit(pp != null && pp.isCanEdit());
                 r.setCanDelete(pp != null && pp.isCanDelete());
             }
+            r.setCreator(p.getOwnerUserId() == null ? null : creatorNames.get(p.getOwnerUserId()));
             out.add(r);
         }
         return out;

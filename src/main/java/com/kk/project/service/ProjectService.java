@@ -126,8 +126,8 @@ public class ProjectService {
         p.setUserSubmitStatusText(req.getUserSubmitStatusText());
         p.setQueryFieldKey(req.getQueryFieldKey());
         p.setTotalSubmitters(0);
-        // 记录项目所属 ADMIN（用于配额归属）；SUPER 创建为 null
-        if (isAdmin && !isSuper) {
+        // 记录项目所属（用于配额归属）；无认证上下文（系统内部创建）时不记录
+        if (authentication != null) {
             com.kk.security.entity.AdminUser creator = adminUserRepository.findByUsername(authentication.getName()).orElse(null);
             if (creator != null) p.setOwnerUserId(creator.getId());
         }
