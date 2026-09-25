@@ -98,41 +98,42 @@ MCP 服务端 SSE 传输与项目/提交相关的 @Tool 工具集。
 
 ### Requirement: 向用户提问选择工具
 
-系统 SHALL 通过 MCP 暴露一个向用户提问并让其从选项中选择结果的工具 `ask_user_choice`，供 agent 在需要用户做选择的场景调用。该工具 SHALL 接收一个提问标题/说明（prompt）与一组选项（options，每个选项含值 value 与展示标签 label），并返回用户所选的值（或用户取消/拒绝的明确结果）。该工具 SHALL 由 k-File MCP 服务端自包含提供，使任何接入该 MCP 的 agent 均可用，不依赖 agent 宿主的提问能力。该工具 SHALL 经 MCP OAuth access token 鉴权后可用。
+系统 SHALL 通过 MCP 暴露 `ask_user_choice`，接收 prompt 与 options（每项含 value、label），默认返回包含 kind=user_choice、prompt、options、note 的普通工具结果。工具 SHALL 明确说明该结果不是用户答案，不会展示界面、等待用户输入或发起 MCP elicitation。宿主或 agent SHALL 展示选项并收集真实回答；无选项界面时 SHALL 使用普通对话。
 
-#### Scenario: agent 用提问工具让用户选模板
-- **WHEN** agent 在 create_project 流程中需要用户选定模板，先调用 list_my_templates 获取模板列表，再调用 ask_user_choice 以这些模板作为选项向用户提问
-- **THEN** 工具 SHALL 向用户呈现选项，并返回用户所选模板的 value（templateId）
+#### Scenario: 生成问题后等待用户回答
+- **WHEN** agent 调用 ask_user_choice 获得 kind=user_choice
+- **THEN** 宿主或 agent SHALL 展示问题和选项，并等待真实用户回答
+- **AND** agent SHALL NOT 将该提示结果当作已选择或已确认，SHALL NOT 自动填充 _selected
 
-#### Scenario: agent 用提问工具让用户选项目
-- **WHEN** agent 需要对多个项目操作（如查询未提交者），先调用 list_my_projects 获取列表，再调用 ask_user_choice 以这些项目作为选项向用户提问
-- **THEN** 工具 SHALL 向用户呈现项目选项，并返回用户所选项目的 value（projectId）
-
-#### Scenario: 开关类字段用提问工具让用户选是/否
-- **WHEN** agent 在未选定模板（create_project 未提供 templateId）的情况下需要确定某开关字段（如 allowResubmit、allowMultiFiles、allowOverdue）取值，调用 ask_user_choice 以"是/否"作为选项向用户提问
-- **THEN** 工具 SHALL 向用户呈现是/否选项，并返回用户所选布尔值
-
-#### Scenario: 选定模板时开关字段继承模板值不再提问
-- **WHEN** agent 已在 create_project 中提供 templateId
-- **THEN** 开关字段（allowResubmit、allowMultiFiles、allowOverdue）SHALL 直接继承模板中的值
-- **AND** agent SHALL NOT 对这些已由模板确定的开关字段再调用 ask_user_choice 提问
+#### Scenario: 兼容宿主回填
+- **WHEN** 宿主已收集真实选择并在对应选项上回填 _selected=true
+- **THEN** 工具 SHALL 返回该选项的 selected 与 label
+- **AND** 该标记 SHALL NOT 被视为服务端已验证用户确认的证据
 
 #### Scenario: 用户取消选择
-- **WHEN** 用户对 ask_user_choice 的提问选择取消或拒绝
-- **THEN** 工具 SHALL 返回明确的"已取消"结果，agent SHALL NOT 继续后续依赖该选择的操作
+- **WHEN** 用户取消或拒绝选择
+- **THEN** 宿主或 agent SHALL 停止依赖该选择的后续操作
+- **AND** 默认工具结果 SHALL NOT 被描述为会自动返回 cancelled=true
 
-### Requirement: Agent 提示词优先使用提问工具
+### Requirement: Agent 按需提问
 
-k-File MCP 服务端在工具描述（tool description）与使用说明文档中 SHALL 向接入的 agent 声明如下规范：凡是需要用户在多个确定选项中做选择的场景（包括但不限于选定模板、选定项目、确定开关字段取值），agent SHALL 优先调用 `ask_user_choice` 工具向用户呈现选项让其选择，SHALL NOT 让用户在自由输入框中手动输入这些本可由选项确定的值。
+工具描述与使用说明 SHALL 引导 agent 复用用户已明确的选择，仅对尚未明确或有歧义的选项调用 ask_user_choice 生成提示，由宿主或 agent 收集回答。
 
-#### Scenario: 多模板可选时优先提问而非手输
-- **WHEN** 当前用户有多个可用模板，agent 需要确定 create_project 的 templateId
-- **THEN** agent SHALL 调用 ask_user_choice 让用户从可用模板中选择，SHALL NOT 要求用户手输 templateId
+#### Scenario: 项目已明确
+- **WHEN** 用户已提供 projectId 或项目名称唯一匹配
+- **THEN** agent SHALL 直接使用该项目，无需再次展示项目选择
 
-#### Scenario: 开关取值优先提问而非手输
-- **WHEN** agent 需要确定某开关字段取值，且该值未由已选模板确定
-- **THEN** agent SHALL 调用 ask_user_choice 以是/否选项让用户选择，SHALL NOT 要求用户手输 true/false
-- **AND** 当 create_project 已提供 templateId 时，开关字段 SHALL 继承模板值，agent SHALL NOT 对其提问
+#### Scenario: 模板或项目存在歧义
+- **WHEN** 无法从用户请求中唯一确定模板或项目
+- **THEN** agent SHALL 展示候选名称与对应 ID 供用户选择，等待真实回答
+
+#### Scenario: 手填项目缺少开关值
+- **WHEN** useTemplate=false 且用户尚未明确 allowResubmit、allowMultiFiles 或 allowOverdue
+- **THEN** agent SHALL 询问缺失的开关值，SHALL NOT 擅自使用默认值或重复询问已明确的值
+
+#### Scenario: 使用模板继承开关
+- **WHEN** useTemplate=true 且已选定 templateId
+- **THEN** 未显式覆盖的开关 SHALL 继承模板值，agent SHALL NOT 对这些值重复提问
 
 ### Requirement: 工具调用复用既有权限上下文
 

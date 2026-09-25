@@ -17,6 +17,8 @@ import com.kk.template.service.ProjectTemplateService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -39,9 +41,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 身份只来自 HTTP bearer 认证结果，不接受任何模型可控隐藏参数（见 McpToolRegistration）。
  *
  * Agent 提示词规范（见各工具 description）：
- * 凡需用户在确定选项中选择的场景（选模板/选项目/开关字段），优先调用 ask_user_choice 让用户选择，
- * 而非让用户在输入框手输。create_project 选了 templateId 时开关继承模板值不再提问；未选则每个开关
- * 用 ask_user_choice(是/否) 询问，不读默认值。
+ * 尚未明确的选项通过 ask_user_choice 生成提示，由宿主展示并等待真实回答；已有明确选择直接复用。
+ * create_project 选了 templateId 时开关继承模板值不再提问；未选时询问缺失的开关值，不读默认值。
  */
 @Component
 public class McpProjectTools {
@@ -55,6 +56,7 @@ public class McpProjectTools {
     private final AdminUserRepository userRepo;
     private final ArchiveTaskService archiveTaskService;
     private final ShareLinkService shareLinkService;
+    private final Environment env;
 
     @Value("${app.public-base-url:${env.cors:}}")
     private String publicBaseUrl;
@@ -65,7 +67,8 @@ public class McpProjectTools {
                            AdminPermissionService adminPermissionService,
                            AdminUserRepository userRepo,
                            ArchiveTaskService archiveTaskService,
-                           ShareLinkService shareLinkService) {
+                           ShareLinkService shareLinkService,
+                           Environment env) {
         this.templateService = templateService;
         this.projectService = projectService;
         this.projectQueryService = projectQueryService;
@@ -73,6 +76,7 @@ public class McpProjectTools {
         this.userRepo = userRepo;
         this.archiveTaskService = archiveTaskService;
         this.shareLinkService = shareLinkService;
+        this.env = env;
     }
 
     // ====================================================================
@@ -110,16 +114,16 @@ public class McpProjectTools {
     // create_project：选定模板回填 + 入参覆盖，ADMIN 和 SUPER 可创建
     // ====================================================================
     @Tool(name = "create_project", description =
-            "创建一个项目。开始创建前必须先用 ask_user_choice 询问用户“是否使用模板”，并把结果传入 useTemplate。" +
+            "创建一个项目。用户尚未明确是否使用模板时，先用 ask_user_choice 生成问题，由宿主展示并等待真实回答，将选择传入 useTemplate；已有明确选择时直接复用。" +
             "(1) useTemplate=true：必须再让用户从 list_my_templates 或本工具返回的 templates 中选择 templateId；以该模板的可复用字段为基底，入参显式提供的字段覆盖基底，未提供则保留模板值；" +
             "此时开关字段（allowResubmit/allowMultiFiles/allowOverdue）继承模板值，不要再向用户提问。" +
-            "(2) useTemplate=false：等价手填创建，开关字段需用 ask_user_choice(是/否) 向用户询问，不要读默认值。" +
+            "(2) useTemplate=false：等价手填创建，尚未由用户明确的开关字段需用 ask_user_choice(是/否) 生成问题并等待回答，不要读默认值或重复询问已明确的值。" +
             "项目特有字段（name 必填；startAt/endAt/fileSizeLimitBytes/allowedFileTypes 按需）始终取自入参，模板不含这些。" +
             "必须先以 confirmed=false 或不传 confirmed 获取预览，再用 ask_user_choice 让用户确认/修改；" +
             "只有用户确认后才允许以 confirmed=true 再次调用并真正创建。创建成功返回用户填写链接 submitUrl。ADMIN 和 SUPER 角色可创建。")
     public Map<String, Object> createProject(
             @ToolParam(description = "项目名称（必填）") String name,
-            @ToolParam(description = "是否使用模板。创建项目第一步必须先问用户，并传入 true/false。", required = false) Boolean useTemplate,
+            @ToolParam(description = "是否使用模板，取自用户明确选择；尚未明确时先询问，传入 true/false。", required = false) Boolean useTemplate,
             @ToolParam(description = "模板 ID。useTemplate=true 时必填，来自用户选择的模板。", required = false) Long templateId,
             @ToolParam(description = "开始时间 epoch 毫秒（可选）", required = false) Long startAt,
             @ToolParam(description = "截止时间 epoch 毫秒（可选）", required = false) Long endAt,
@@ -236,7 +240,7 @@ public class McpProjectTools {
     // ====================================================================
     @Tool(name = "list_my_projects", description =
             "列出当前登录用户有权限查看的项目。SUPER 返回全部；ADMIN 仅返回被分配给自己的项目，看不到别人的。" +
-            "用于后续操作（如查询未提交者）前选定 projectId。建议用 ask_user_choice 让用户从结果里选 projectId。" +
+            "用于项目未知或仅有名称时定位 projectId；名称唯一匹配时直接使用，有歧义才让用户选择。已有明确 projectId 时无需先调用本工具。" +
             "每项含 status 字段：已下线（offline=true，不可再提交）/ 已截止（未下线但已过截止日期）/ 进行中（未下线且在有效期内）——直接展示给用户，无需自行综合判断。")
     public List<Map<String, Object>> listMyProjects() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -250,7 +254,7 @@ public class McpProjectTools {
     // ====================================================================
     @Tool(name = "get_project_info", description =
             "获取某个项目的详情，并返回该项目的用户填写链接 submitUrl。需对该项目有管理权限。" +
-            "建议先用 list_my_projects 让用户选择 projectId。")
+            "已有明确 projectId 时直接调用；否则用 list_my_projects 定位，有歧义才询问用户。")
     public Map<String, Object> getProjectInfo(
             @ToolParam(description = "项目 ID") Long projectId
     ) {
@@ -270,7 +274,7 @@ public class McpProjectTools {
             "若项目未配置名单，本工具返回 {enabled:false, message:'未配置允许提交名单'}，此时无法判断未提交者。" +
             "【要看实际已提交情况（人数/名单/文件）请改用 list_project_submissions】，该工具不依赖名单配置、适用于所有项目。" +
             "需对该项目有管理权限（SUPER 或被分配该项目的 ADMIN），否则返回权限错误。" +
-            "建议先用 list_my_projects + ask_user_choice 让用户选定 projectId。")
+            "已有明确 projectId 时直接调用；否则用 list_my_projects 定位，有歧义才询问用户。")
     public Map<String, Object> listMissingSubmitters(
             @ToolParam(description = "项目 ID") Long projectId
     ) {
@@ -292,7 +296,7 @@ public class McpProjectTools {
             "list_missing_submitters 仅适用于已配置 allowedSubmitterKeys/List 名单的项目、用于查未提交者，未配置名单时该工具返回 enabled=false。" +
             "可选 fieldKey/fieldValue 按提交者字段前缀过滤。需对该项目有管理权限（SUPER 或被分配该项目的 ADMIN）。" +
             "注意：返回文件大小需逐个查询 OSS，提交人数多时较慢；不带下载链接，需打包下载请改用 create_archive_download_link。" +
-            "建议先用 list_my_projects + ask_user_choice 让用户选定 projectId。")
+            "人数使用返回的 totalSubmitters，不要用文件数量代替。已有明确 projectId 时直接调用；否则用 list_my_projects 定位，有歧义才询问用户。")
     public Map<String, Object> listProjectSubmissions(
             @ToolParam(description = "项目 ID") Long projectId,
             @ToolParam(description = "可选：按提交者字段过滤的字段 key（如 queryFieldKey）", required = false) String fieldKey,
@@ -345,7 +349,8 @@ public class McpProjectTools {
     @Tool(name = "create_archive_download_link", description =
             "为某项目生成打包下载链接。逻辑与后台提交列表页“生成打包分享链接/打包按钮”一致：" +
             "后端生成最新有效提交文件的预签名清单并创建 /share?s=... 下载页，用户访问该链接即可打包下载。" +
-            "可选 fieldKey/fieldValue 用于按提交者字段前缀过滤；expireSeconds 默认 3600 秒。需项目管理权限。")
+            "可选 fieldKey/fieldValue 用于按提交者字段前缀过滤；expireSeconds 默认 3600 秒。需项目管理权限。" +
+            "项目与筛选条件明确后可直接调用，无需先调用 list_project_submissions。返回下载页链接，并非已生成的 ZIP 文件。")
     public Map<String, Object> createArchiveDownloadLink(
             @ToolParam(description = "项目 ID") Long projectId,
             @ToolParam(description = "可选：按提交者字段过滤的字段 key", required = false) String fieldKey,
@@ -394,20 +399,22 @@ public class McpProjectTools {
     }
 
     // ====================================================================
-    // ask_user_choice：向用户提问让其选择（自包含工具）
+    // ask_user_choice：生成选择提示，由宿主展示并收集用户回答
     // ====================================================================
     @Tool(name = "ask_user_choice", description =
-            "向用户提问并让其从选项中选择，返回所选 value。" +
-            "凡需用户在确定选项中做选择的场景（选模板/选项目/开关字段是 否等），优先调用本工具，" +
-            "而非让用户在输入框手输这些可选项确定的值。用户取消时返回 {cancelled:true}。")
+            "生成结构化选择提示，默认返回 {kind:user_choice,prompt,options,note}，不是用户答案。" +
+            "服务端不会展示界面、等待用户输入或发起 MCP elicitation；宿主/agent 必须展示问题和选项，" +
+            "使用宿主提问能力或普通对话收集真实回答后，才能继续依赖该选择的操作。" +
+            "适用于尚未明确的模板、项目或是/否选项；已有明确回答时无需重复提问。" +
+            "兼容宿主在真实选择的选项上回填 _selected=true 后返回 selected/label，agent 不得自行伪造该标记。" +
+            "用户取消时由宿主/agent 停止依赖该选择的操作，本工具默认不产生 cancelled 结果。")
     public Map<String, Object> askUserChoice(
             @ToolParam(description = "提问说明/标题，向用户清晰呈现要选什么") String prompt,
             @ToolParam(description = "选项数组，每项 {value, label}；value 为返回值，label 为展示文本") List<Map<String, Object>> options
     ) {
-        // 该工具由 MCP 客户端/宿主代理实际向用户呈现选项并收集选择。
-        // 服务端按 MCP 协议返回"需要用户输入"的 elicitation 请求；这里返回结构化提示，
-        // 由宿主（如 ZCode 提问能力）承接呈现与收集，再把所选结果回填。
-        // 若宿主直接回填了 selected，则原样返回；否则返回 elicitation 元信息。
+        // 返回普通工具结果，不发送 MCP elicitation 请求，也不阻塞等待用户输入。
+        // 宿主/agent 负责展示选项、收集真实回答及处理取消；_selected 仅兼容宿主回填，
+        // 不能作为服务端已验证用户确认的证据。
         List<Map<String, Object>> opts = options == null ? List.of() : options;
         // 当 options 中存在已带 _selected 标记（宿主回填）时直接返回
         for (Map<String, Object> o : opts) {
@@ -421,7 +428,7 @@ public class McpProjectTools {
                 "kind", "user_choice",
                 "prompt", prompt == null ? "" : prompt,
                 "options", opts,
-                "note", "由接入的 agent 宿主向用户呈现选项并收集选择；用户可取消，取消时返回 cancelled=true"
+                "note", "这不是用户答案。由宿主或 agent 展示选项并等待真实回答；取消时停止后续操作，不要自行填充 _selected。"
         );
     }
 
@@ -499,7 +506,7 @@ public class McpProjectTools {
     }
 
     private String absoluteUrl(String path) {
-        String base = publicBaseUrl == null ? "" : publicBaseUrl.trim();
+        String base = env.acceptsProfiles(Profiles.of("dev")) ? env.getProperty("env.cors") : (publicBaseUrl == null ? "" : publicBaseUrl.trim()) ;
         if (base.isEmpty()) {
             return path;
         }
