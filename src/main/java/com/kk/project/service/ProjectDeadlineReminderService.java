@@ -1,6 +1,9 @@
 package com.kk.project.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.kk.project.entity.DeadlineReminderMessage;
+import com.kk.project.repo.DeadlineReminderMessageRepository;
 import com.kk.common.service.AppConfigService;
 import com.kk.config.KMessageProperties;
 import com.kk.project.entity.Project;
@@ -17,6 +20,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -66,6 +72,7 @@ public class ProjectDeadlineReminderService {
     private final XxlJobRefRepository xxlJobRefRepository;
     private final AppConfigService appConfigService;
     private final KMessageProperties kMessageProperties;
+    private final DeadlineReminderMessageRepository reminderMessageRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** 仅在 xxl.job 启用时才装配，故用 Object 容器接收，按需强转 */
@@ -191,6 +198,7 @@ public class ProjectDeadlineReminderService {
      * 实际发送提醒（由 XxlJob handler 触发）。
      * 二次校验 endAt，避免项目变更后旧任务仍发消息。
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void sendReminder(Long projectId) {
         if (kMessageClient == null) {
             log.debug("kmessage 未启用，跳过发送 projectId={}", projectId);
@@ -214,16 +222,33 @@ public class ProjectDeadlineReminderService {
                     hours, projectId, now, windowStart);
             return;
         }
-        String groupId = resolveGroupId();
-        if (groupId == null) {
-            log.warn("deadline remind skipped: groupId 未配置（请在 SUPER 后台配置 kMessage 接收群）projectId={}", projectId);
-            return;
-        }
-        Map<String, Object> card = buildFeishuCard(p, now, hours);
+        String key = idempotencyKey(projectId, hours, p.getEndAt());
         try {
-            kMessageClient.sendToGroup(groupId, CardMessage.of(card), idempotencyKey(projectId, hours, p.getEndAt()));
-            log.info("deadline remind sent projectId={} groupId={} hours={}", projectId, groupId, hours);
+            DeadlineReminderMessage request = reminderMessageRepository.findByIdempotencyKey(key).orElse(null);
+            if (request == null) {
+                String groupId = resolveGroupId();
+                if (groupId == null || groupId.isBlank()) {
+                    log.warn("deadline remind skipped: groupId 未配置（请在 SUPER 后台配置 kMessage 接收群）projectId={}", projectId);
+                    return;
+                }
+                request = new DeadlineReminderMessage();
+                request.setIdempotencyKey(key);
+                request.setGroupId(groupId);
+                request.setCardJson(objectMapper.writeValueAsString(buildFeishuCard(p, now, hours)));
+                try {
+                    // 此方法不能包在外层事务内：先提交快照，再发 HTTP 请求。
+                    request = reminderMessageRepository.saveAndFlush(request);
+                } catch (DataIntegrityViolationException conflict) {
+                    // 并发触发时使用唯一约束选出的首个快照，不能覆盖它。
+                    request = reminderMessageRepository.findByIdempotencyKey(key).orElseThrow(() -> conflict);
+                }
+            }
+            Map<String, Object> card = objectMapper.readValue(request.getCardJson(), new TypeReference<>() {});
+            var result = kMessageClient.sendToGroup(request.getGroupId(), CardMessage.of(card), key);
+            log.info("deadline remind accepted projectId={} groupId={} hours={} idempotencyKey={} result={}",
+                    projectId, request.getGroupId(), hours, key, result);
         } catch (Exception e) {
+            log.warn("deadline remind request failed projectId={} idempotencyKey={}", projectId, key, e);
             // 让 handler 看到失败以便 xxl-job 失败重试机制兜底
             throw new RuntimeException("发送截止提醒失败: " + e.getMessage(), e);
         }

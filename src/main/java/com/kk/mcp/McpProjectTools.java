@@ -6,6 +6,7 @@ import com.kk.admin.task.ArchiveTaskService;
 import com.kk.project.dto.CreateProjectRequest;
 import com.kk.project.dto.ProjectResponse;
 import com.kk.project.entity.Project;
+import com.kk.project.service.ProjectDeadlineReminderService;
 import com.kk.project.service.ProjectQueryService;
 import com.kk.project.service.ProjectService;
 import com.kk.security.entity.AdminUser;
@@ -118,7 +119,9 @@ public class McpProjectTools {
             "(1) useTemplate=true：必须再让用户从 list_my_templates 或本工具返回的 templates 中选择 templateId；以该模板的可复用字段为基底，入参显式提供的字段覆盖基底，未提供则保留模板值；" +
             "此时开关字段（allowResubmit/allowMultiFiles/allowOverdue）继承模板值，不要再向用户提问。" +
             "(2) useTemplate=false：等价手填创建，尚未由用户明确的开关字段需用 ask_user_choice(是/否) 生成问题并等待回答，不要读默认值或重复询问已明确的值。" +
-            "项目特有字段（name 必填；startAt/endAt/fileSizeLimitBytes/allowedFileTypes 按需）始终取自入参，模板不含这些。" +
+            "项目特有字段（name 必填；startAt/endAt/fileSizeLimitBytes/allowedFileTypes/deadlineNotifyEnabled/deadlineNotifyHours 按需）始终取自入参，模板不含这些。" +
+            "截止提醒与模板无关，无论是否用模板都取自用户：是否开启尚未明确时同样用 ask_user_choice(是/否) 询问；开启时必须已设置 endAt，" +
+            "deadlineNotifyHours 不传默认 12、范围 1-720，将在截止前 N 小时提醒未提交者。" +
             "必须先以 confirmed=false 或不传 confirmed 获取预览，再用 ask_user_choice 让用户确认/修改；" +
             "只有用户确认后才允许以 confirmed=true 再次调用并真正创建。创建成功返回用户填写链接 submitUrl。ADMIN 和 SUPER 角色可创建。")
     public Map<String, Object> createProject(
@@ -127,6 +130,8 @@ public class McpProjectTools {
             @ToolParam(description = "模板 ID。useTemplate=true 时必填，来自用户选择的模板。", required = false) Long templateId,
             @ToolParam(description = "开始时间 epoch 毫秒（可选）", required = false) Long startAt,
             @ToolParam(description = "截止时间 epoch 毫秒（可选）", required = false) Long endAt,
+            @ToolParam(description = "是否开启截止提醒（可选，默认否）。开启后在截止前 N 小时提醒未提交者，必须同时设置 endAt；模板不含此字段，始终取自用户选择。", required = false) Boolean deadlineNotifyEnabled,
+            @ToolParam(description = "截止提醒提前小时数（可选，默认 12，范围 1-720）。deadlineNotifyEnabled=true 时生效。", required = false) Integer deadlineNotifyHours,
             @ToolParam(description = "单文件大小上限字节（可选，null=不限）", required = false) Long fileSizeLimitBytes,
             @ToolParam(description = "允许的文件扩展名列表，如 [\"pdf\",\"zip\"]（可选，null=不限）", required = false) List<String> allowedFileTypes,
             // 可复用字段覆盖（可选；未提供且选了模板则继承模板值）
@@ -191,6 +196,22 @@ public class McpProjectTools {
         req.setEndAt(endAt);
         req.setFileSizeLimitBytes(fileSizeLimitBytes);
         req.setAllowedFileTypes(allowedFileTypes);
+        // 与后台创建表单同样的前置校验；开启但未传小时数时按表单默认 12 落库
+        if (Boolean.TRUE.equals(deadlineNotifyEnabled)) {
+            if (endAt == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "开启截止提醒需要先设置截止时间 endAt");
+            }
+            if (deadlineNotifyHours == null) {
+                deadlineNotifyHours = 12;
+            } else if (deadlineNotifyHours < ProjectDeadlineReminderService.NOTIFY_HOURS_MIN
+                    || deadlineNotifyHours > ProjectDeadlineReminderService.NOTIFY_HOURS_MAX) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "截止提醒提前小时数必须在 " + ProjectDeadlineReminderService.NOTIFY_HOURS_MIN + "-"
+                                + ProjectDeadlineReminderService.NOTIFY_HOURS_MAX + " 之间");
+            }
+        }
+        req.setDeadlineNotifyEnabled(deadlineNotifyEnabled);
+        req.setDeadlineNotifyHours(deadlineNotifyHours);
 
         // 模板基底 + 入参覆盖
         if (Boolean.TRUE.equals(useTemplate)) {
@@ -443,6 +464,8 @@ public class McpProjectTools {
         m.put("name", req.getName());
         m.put("startAt", req.getStartAt());
         m.put("endAt", req.getEndAt());
+        m.put("deadlineNotifyEnabled", Boolean.TRUE.equals(req.getDeadlineNotifyEnabled()));
+        m.put("deadlineNotifyHours", req.getDeadlineNotifyHours());
         m.put("fileSizeLimitBytes", req.getFileSizeLimitBytes());
         m.put("allowedFileTypes", req.getAllowedFileTypes());
         m.put("allowResubmit", req.getAllowResubmit());

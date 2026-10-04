@@ -1,98 +1,20 @@
-oss:
-  type: ali
-  prefix: k-File
-  endpoint: oss-cn-beijing.aliyuncs.com
-  internalEndpoint: oss-cn-beijing-internal.aliyuncs.com
-  ak: ${OSS_AK}
-  sk: ${OSS_SK}
-  bucket: oss-kk
-  host: https://oss-kk.oss-cn-beijing.aliyuncs.com/
-  # 绑定到 OSS Bucket 的自定义 HTTPS 域名；文件流直接从 OSS 到浏览器。
-  preview-endpoint: ${OSS_PREVIEW_ENDPOINT:https://media.ksite.xin}
-
-# MinIO 数据源（可选，默认禁用；启用时通过 MINIO_* 环境变量注入）
-minio:
-  enabled: ${MINIO_ENABLED:false}
-  endpoint: ${MINIO_ENDPOINT:}
-  accessKey: ${MINIO_ACCESS_KEY:}
-  secretKey: ${MINIO_SECRET_KEY:}
-  bucket: ${MINIO_BUCKET:k-file}
-  prefix: ${MINIO_PREFIX:}
-  presignedDirect: ${MINIO_PRESIGNED_DIRECT:true}
-# 压制 MCP Streamable HTTP SSE 长连接的正常断连噪音日志（客户端断开 / broken pipe / keep-alive ping 失败）
-logging:
-  level:
-    io.modelcontextprotocol.util.KeepAliveScheduler: ERROR
-    io.modelcontextprotocol.spec.McpStreamableServerSession: ERROR
-    io.modelcontextprotocol.server.transport: ERROR
-    org.springframework.web.context.request.async: ERROR
-
+# 本地仅保留 Nacos 接入配置；业务配置全部托管在 Nacos：
+#   dev  → Data ID kfile-dev.yaml（见 application-dev.yml）
+#   prod → Data ID kfile.yaml（见 application-prod.yml）
+# 配置内容的仓库备份见 docs/nacos/。
 spring:
+  application:
+    name: kfile
   profiles:
     active: dev
-  config:
-    import: application-${spring.profiles.active}.yml
-  ai:
-    mcp:
-      server:
-        name: kfile-mcp-server
-        version: 1.1.0
-        # Streamable HTTP 传输（Spring AI 1.1.x）：单一 /mcp 远程入口。
-        # 移除旧 SSE 双端点（/mcp/sse、/mcp/messages），由 OAuth bearer 在 HTTP 边界鉴权。
-        protocol: STREAMABLE
-        type: SYNC
-        streamable-http:
-          mcp-endpoint: /mcp
-          # GET SSE 长连接保活：agent（如 WorkBuddy stream-first）会先建立 GET 流监听服务端推送，
-          # 配 keep-alive 定期发 ping 保持连接，避免流被立即关闭（sse-body-terminated）。
-          keep-alive-interval: 30s
-
-geoip:
-  enabled: ${GEOIP_ENABLED:false}
-  mmdbPath: ${GEOIP_MMDB_PATH:}
-
-# MCP OAuth / 远程 MCP 入口配置
-app:
-  # 可信公共基址：用于生成 OAuth issuer、protected-resource/authorization-server metadata 与 MCP resource
-  # audience。服务端不信任任意 Host/转发头。生产必须 HTTPS（localhost 开发例外）。
-  # 由各 profile（application-dev.yml / application-prod.yml）按环境提供，不回退到 env.cors
-  # （env.cors 是前端 CORS 允许源，与对外可达的后端公共基址语义不同）。
-  # 可用 APP_PUBLIC_BASE_URL 环境变量覆盖。
-  public-base-url: ${APP_PUBLIC_BASE_URL:}
-  mcp:
-    oauth:
-      public-base-url: ${app.public-base-url}
-      # 规范化 MCP Streamable HTTP 单端点（相对基址）
-      mcp-endpoint: /mcp
-      scope: mcp:tools
-      # 短期令牌生命周期（Authorization Code + PKCE）
-      authorization-code-validity: 5m
-      access-token-validity: 15m
-      refresh-token-validity: 30d
-      # Dynamic Client Registration 限流（按 IP）
-      dcr-rate-limit: 10
-      dcr-rate-window: 1h
-      unused-client-validity: 30d
-  kmessage:
-    enabled: ${KMESSAGE_ENABLED:true}
-    endpoint: ${KMESSAGE_ENDPOINT:https://message.ksite.xin}
-    app-key: ${KMESSAGE_APP_KEY:app_SLeiC8yZdbX7KU2b}
-    app-secret: ${KMESSAGE_APP_SECRET:}
-
-xxl:
-  job:
-    enabled: ${XXL_JOB_ENABLED:true}
-    admin:
-      addresses: ${XXL_JOB_ADMIN_ADDR:http://127.0.0.1:8080/xxl-job-admin}
-      username: ${XXL_JOB_ADMIN_USER:admin}
-      password: ${XXL_JOB_ADMIN_PWD:}
-    accessToken: ${XXL_JOB_ACCESS_TOKEN:}
-    executor:
-      appname: ${XXL_JOB_APPNAME:kfile-executor}
-      address:
-      ip:
-      # 执行器端口：留空（默认）= 自动选可用端口，避免本机多实例/调试时端口冲突
-      port: ${XXL_JOB_EXECUTOR_PORT:}
-      logpath: ${XXL_JOB_LOGPATH:/data/applogs/xxl-job/jobhandler}
-      logretentiondays: 30
-      job-group: ${XXL_JOB_JOB_GROUP:2}
+  cloud:
+    nacos:
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        enabled: false

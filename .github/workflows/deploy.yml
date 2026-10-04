@@ -41,18 +41,23 @@ jobs:
       # 这样测试与正式环境在同一台服务器上可并存，互不覆盖（镜像名/容器名/端口都隔离）
       - name: Set deployment context
         id: ctx
+        env:
+          # 服务器部署目录，可用 secret 覆盖；test 分支自动加 -test 后缀，避免与正式环境共用
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/home/ubuntu/docker/k-file' }}
         run: |
           BRANCH="${GITHUB_REF_NAME:-}"
           if [[ "$BRANCH" == "test" ]]; then
             echo "image_name=kfile-test" >> "$GITHUB_OUTPUT"
             echo "container_name=KFile-test" >> "$GITHUB_OUTPUT"
             echo "host_port=8082" >> "$GITHUB_OUTPUT"
+            echo "deploy_path=${DEPLOY_PATH}-test" >> "$GITHUB_OUTPUT"
             echo "env_cors=https://test-file.ksite.xin" >> "$GITHUB_OUTPUT"
             echo "Deploy context: branch=test → kfile-test / KFile-test / 8082 / cors=test-file.ksite.xin"
           else
             echo "image_name=kfile-v2" >> "$GITHUB_OUTPUT"
             echo "container_name=KFile-v2" >> "$GITHUB_OUTPUT"
             echo "host_port=8081" >> "$GITHUB_OUTPUT"
+            echo "deploy_path=${DEPLOY_PATH}" >> "$GITHUB_OUTPUT"
             echo "env_cors=" >> "$GITHUB_OUTPUT"
             echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081 / cors=default"
           fi
@@ -138,57 +143,57 @@ jobs:
           IMAGE_NAME: ${{ steps.ctx.outputs.image_name }}
           CONTAINER_NAME: ${{ steps.ctx.outputs.container_name }}
           HOST_PORT: ${{ steps.ctx.outputs.host_port }}
+          # 宿主机部署目录；其下 logs/ 挂载到容器 /app/logs（应用/xxl-job 日志）
+          DEPLOY_PATH: ${{ steps.ctx.outputs.deploy_path }}
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
           ROLLBACK_TAG: ${{ inputs.rollback_tag || '' }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
-          # SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME 写死默认值，
-          # 仍可用同名 secret 覆盖（secrets 为空时取默认）
+          # SSH_USER 写死默认值，仍可用同名 secret 覆盖（secrets 为空时取默认）
           SSH_USER: ${{ secrets.SSH_USER || 'root' }}
           SSH_KEY: ${{ secrets.SSH_KEY }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/root/k-file' }}
-          # 应用运行配置（全部来自 secrets，不在服务器维护 .env）
-          SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME || 'kfile' }}
+          # 业务配置以 Nacos（kfile.yaml）为准；以下 secret 均为可选覆盖，仅非空时注入容器。
+          # 环境变量优先级高于 Nacos（MINIO_ENDPOINT ↔ minio.endpoint），注入空值会把 Nacos 的值覆盖掉。
+          SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
           SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
           OSS_AK: ${{ secrets.OSS_AK }}
           OSS_SK: ${{ secrets.OSS_SK }}
-          # MinIO：默认启用（test 环境用 MinIO），secret 可覆盖
-          MINIO_ENABLED: ${{ secrets.MINIO_ENABLED || 'true' }}
+          MINIO_ENABLED: ${{ secrets.MINIO_ENABLED }}
           MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
           MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          MINIO_BUCKET: ${{ secrets.MINIO_BUCKET || 'k-file' }}
-          # kMessage（飞书卡片提醒）：app-key 为公开值可直接写默认
-          KMESSAGE_ENABLED: ${{ secrets.KMESSAGE_ENABLED || 'true' }}
+          MINIO_BUCKET: ${{ secrets.MINIO_BUCKET }}
+          KMESSAGE_ENABLED: ${{ secrets.KMESSAGE_ENABLED }}
           KMESSAGE_ENDPOINT: ${{ secrets.KMESSAGE_ENDPOINT }}
-          KMESSAGE_APP_KEY: ${{ secrets.KMESSAGE_APP_KEY || 'app_SLeiC8yZdbX7KU2b' }}
+          KMESSAGE_APP_KEY: ${{ secrets.KMESSAGE_APP_KEY }}
           KMESSAGE_APP_SECRET: ${{ secrets.KMESSAGE_APP_SECRET }}
-          # XXL-Job（项目截止提醒调度）
-          XXL_JOB_ENABLED: ${{ secrets.XXL_JOB_ENABLED || 'true' }}
-          XXL_JOB_ADMIN_ADDR: ${{ secrets.XXL_JOB_ADMIN_ADDR || 'http://127.0.0.1:8080/xxl-job-admin' }}
-          XXL_JOB_ADMIN_USER: ${{ secrets.XXL_JOB_ADMIN_USER || 'admin' }}
+          XXL_JOB_ENABLED: ${{ secrets.XXL_JOB_ENABLED }}
+          XXL_JOB_ADMIN_ADDR: ${{ secrets.XXL_JOB_ADMIN_ADDR }}
+          XXL_JOB_ADMIN_USER: ${{ secrets.XXL_JOB_ADMIN_USER }}
           XXL_JOB_ADMIN_PWD: ${{ secrets.XXL_JOB_ADMIN_PWD }}
           XXL_JOB_ACCESS_TOKEN: ${{ secrets.XXL_JOB_ACCESS_TOKEN }}
           XXL_JOB_JOB_GROUP: ${{ secrets.XXL_JOB_JOB_GROUP }}
+          # Nacos 配置中心（业务配置全部在 Nacos，缺失则应用读到空配置无法启动）
+          NACOS_SERVER_ADDR: ${{ secrets.NACOS_SERVER_ADDR }}
+          NACOS_USERNAME: ${{ secrets.NACOS_USERNAME || 'nacos' }}
+          NACOS_PASSWORD: ${{ secrets.NACOS_PASSWORD }}
+          # 留空则使用 application-prod.yml 中的 prod 命名空间 ID
+          NACOS_NAMESPACE: ${{ secrets.NACOS_NAMESPACE }}
           ENV_CORS: ${{ steps.ctx.outputs.env_cors }}
-          KEEP_VERSIONS: "5"
+          KEEP_VERSIONS: "1"
         run: |
           set -euo pipefail
-          # 必填校验：缺一项立即报错，避免空值起库
-          # 注：SSH_USER / DEPLOY_PATH / SPRING_DATASOURCE_USERNAME / MINIO_ENABLED 等已有默认值，无需校验
+          # 必填校验：仅部署与 Nacos 接入所需；业务配置在 Nacos，不在此校验
           : "${SSH_HOST:?missing SSH_HOST secret}"
           : "${SSH_KEY:?missing SSH_KEY secret}"
           : "${ACR_REGISTRY:?missing ACR_REGISTRY secret}"
           : "${ACR_USERNAME:?missing ACR_USERNAME secret}"
           : "${ACR_PASSWORD:?missing ACR_PASSWORD secret}"
-          : "${OSS_AK:?missing OSS_AK secret}"
-          : "${OSS_SK:?missing OSS_SK secret}"
-          : "${SPRING_DATASOURCE_PASSWORD:?missing SPRING_DATASOURCE_PASSWORD secret}"
-          : "${KMESSAGE_APP_SECRET:?missing KMESSAGE_APP_SECRET secret}"
-          : "${XXL_JOB_ADMIN_PWD:?missing XXL_JOB_ADMIN_PWD secret}"
-          : "${XXL_JOB_ACCESS_TOKEN:?missing XXL_JOB_ACCESS_TOKEN secret}"
+          : "${NACOS_SERVER_ADDR:?missing NACOS_SERVER_ADDR secret}"
+          : "${NACOS_PASSWORD:?missing NACOS_PASSWORD secret}"
 
           SSH_PORT="${SSH_PORT:-22}"
           ACR_IMAGE="${ACR_REGISTRY}/kk09/kfile"
@@ -218,10 +223,10 @@ jobs:
 
           SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30"
 
-          # 确保部署目录存在
-          echo "=== [2/4] Test SSH connection and prepare deploy directory ==="
-          ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" "mkdir -p '$DEPLOY_PATH'"
-          echo "SSH connection succeeded; deploy directory is ready"
+          # 镜像走 ACR 拉取、配置走环境变量，服务器上无需部署目录；此处仅验证 SSH 连通
+          echo "=== [2/4] Test SSH connection ==="
+          ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" true
+          echo "SSH connection succeeded"
 
           # 服务器登录 ACR；密码通过 SSH 标准输入传递，不出现在远程命令参数中
           echo "=== [3/4] Login server to Aliyun ACR ==="
@@ -235,10 +240,11 @@ jobs:
           # 网络共用 common-net，与 deploy.sh 保持一致
           echo "=== [4/4] Run remote deployment ==="
           ssh -p "$SSH_PORT" $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$DEPLOY_BUILD_NUMBER' \
+            "IMAGE_NAME='$IMAGE_NAME' BUILD_NUMBER='$DEPLOY_BUILD_NUMBER' \
              ACR_REGISTRY='$ACR_REGISTRY' ACR_IMAGE='$ACR_IMAGE' ACR_BUILD_TAG='$ACR_BUILD_TAG' \
-             CONTAINER_NAME='$CONTAINER_NAME' HOST_PORT='$HOST_PORT' \
+             CONTAINER_NAME='$CONTAINER_NAME' HOST_PORT='$HOST_PORT' DEPLOY_PATH='$DEPLOY_PATH' \
              KEEP_VERSIONS='$KEEP_VERSIONS' \
+             SPRING_DATASOURCE_URL='$SPRING_DATASOURCE_URL' \
              SPRING_DATASOURCE_USERNAME='$SPRING_DATASOURCE_USERNAME' \
              SPRING_DATASOURCE_PASSWORD='$SPRING_DATASOURCE_PASSWORD' \
              OSS_AK='$OSS_AK' OSS_SK='$OSS_SK' \
@@ -251,16 +257,15 @@ jobs:
              XXL_JOB_ADMIN_USER='$XXL_JOB_ADMIN_USER' XXL_JOB_ADMIN_PWD='$XXL_JOB_ADMIN_PWD' \
              XXL_JOB_ACCESS_TOKEN='$XXL_JOB_ACCESS_TOKEN' \
              XXL_JOB_JOB_GROUP='$XXL_JOB_JOB_GROUP' \
+             NACOS_SERVER_ADDR='$NACOS_SERVER_ADDR' NACOS_USERNAME='$NACOS_USERNAME' \
+             NACOS_PASSWORD='$NACOS_PASSWORD' NACOS_NAMESPACE='$NACOS_NAMESPACE' \
              ENV_CORS='$ENV_CORS' bash -s" <<'REMOTE'
           set -euo pipefail
           trap 'docker logout "$ACR_REGISTRY" >/dev/null 2>&1 || true' EXIT
           echo "=== Starting deployment ==="
-          cd "$DEPLOY_PATH"
 
           CONTAINER_PORT="8081"
           DOCKER_NETWORK="common-net"
-          # 与 docker-compose.yml 保持一致的 MySQL 连接（DB 在 common-net 上，外部已有）
-          SPRING_DATASOURCE_URL="jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
 
           # 复用既有外部网络（MySQL 在其上），不重建数据库
           docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1 || docker network create "$DOCKER_NETWORK"
@@ -270,6 +275,12 @@ jobs:
           docker tag "${ACR_IMAGE}:${ACR_BUILD_TAG}" "${IMAGE_NAME}:${BUILD_NUMBER}"
           docker tag "${ACR_IMAGE}:${ACR_BUILD_TAG}" "${IMAGE_NAME}:latest"
           docker rmi "${ACR_IMAGE}:${ACR_BUILD_TAG}" >/dev/null 2>&1 || true
+
+          # 日志目录：容器内以 UID 1000（spring）写入
+          LOG_DIR="$DEPLOY_PATH/logs"
+          echo "Deploy path: $DEPLOY_PATH (logs → $LOG_DIR)"
+          mkdir -p "$LOG_DIR"
+          chown 1000:1000 "$LOG_DIR" 2>/dev/null || true
 
           echo "Stopping old container..."
           docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
@@ -282,36 +293,38 @@ jobs:
           else
             echo "ENV_CORS empty → use application-prod.yml default"
           fi
+          # 空字符串会覆盖 application-prod.yml 的命名空间默认值，故仅非空时注入；先去掉首尾空白
+          NACOS_NAMESPACE="$(printf '%s' "$NACOS_NAMESPACE" | tr -d '[:space:]')"
+          if [[ -n "$NACOS_NAMESPACE" ]]; then
+            EXTRA_ENV+=( -e "NACOS_NAMESPACE=$NACOS_NAMESPACE" )
+          fi
+          # 业务配置以 Nacos 为准：对应 secret 有值才覆盖，空值不注入
+          for name in SPRING_DATASOURCE_URL SPRING_DATASOURCE_USERNAME SPRING_DATASOURCE_PASSWORD \
+                      OSS_AK OSS_SK \
+                      MINIO_ENABLED MINIO_ENDPOINT MINIO_ACCESS_KEY MINIO_SECRET_KEY MINIO_BUCKET \
+                      KMESSAGE_ENABLED KMESSAGE_ENDPOINT KMESSAGE_APP_KEY KMESSAGE_APP_SECRET \
+                      XXL_JOB_ENABLED XXL_JOB_ADMIN_ADDR XXL_JOB_ADMIN_USER XXL_JOB_ADMIN_PWD \
+                      XXL_JOB_ACCESS_TOKEN XXL_JOB_JOB_GROUP; do
+            if [[ -n "${!name}" ]]; then
+              EXTRA_ENV+=( -e "$name=${!name}" )
+              echo "Override from secret: $name"
+            fi
+          done
 
           echo "Starting new container..."
           docker run -d --name "$CONTAINER_NAME" \
             -p "${HOST_PORT}:${CONTAINER_PORT}" \
             --restart always \
             --network "$DOCKER_NETWORK" \
+            -v "$LOG_DIR:/app/logs" \
+            --log-opt max-size=50m --log-opt max-file=3 \
             -e SPRING_PROFILES_ACTIVE=prod \
             -e BUILD_NUMBER="$BUILD_NUMBER" \
             -e TZ=Asia/Shanghai \
             -e LOG_PATH=/app/logs \
-            -e SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
-            -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
-            -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
-            -e OSS_AK="$OSS_AK" \
-            -e OSS_SK="$OSS_SK" \
-            -e MINIO_ENABLED="$MINIO_ENABLED" \
-            -e MINIO_ENDPOINT="$MINIO_ENDPOINT" \
-            -e MINIO_ACCESS_KEY="$MINIO_ACCESS_KEY" \
-            -e MINIO_SECRET_KEY="$MINIO_SECRET_KEY" \
-            -e MINIO_BUCKET="$MINIO_BUCKET" \
-            -e KMESSAGE_ENABLED="$KMESSAGE_ENABLED" \
-            -e KMESSAGE_ENDPOINT="$KMESSAGE_ENDPOINT" \
-            -e KMESSAGE_APP_KEY="$KMESSAGE_APP_KEY" \
-            -e KMESSAGE_APP_SECRET="$KMESSAGE_APP_SECRET" \
-            -e XXL_JOB_ENABLED="$XXL_JOB_ENABLED" \
-            -e XXL_JOB_ADMIN_ADDR="$XXL_JOB_ADMIN_ADDR" \
-            -e XXL_JOB_ADMIN_USER="$XXL_JOB_ADMIN_USER" \
-            -e XXL_JOB_ADMIN_PWD="$XXL_JOB_ADMIN_PWD" \
-            -e XXL_JOB_ACCESS_TOKEN="$XXL_JOB_ACCESS_TOKEN" \
-            -e XXL_JOB_JOB_GROUP="$XXL_JOB_JOB_GROUP" \
+            -e NACOS_SERVER_ADDR="$NACOS_SERVER_ADDR" \
+            -e NACOS_USERNAME="$NACOS_USERNAME" \
+            -e NACOS_PASSWORD="$NACOS_PASSWORD" \
             "${EXTRA_ENV[@]}" \
             "${IMAGE_NAME}:latest"
 

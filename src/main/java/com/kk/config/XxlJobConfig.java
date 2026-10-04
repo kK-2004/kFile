@@ -8,6 +8,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * XXL-JOB 执行器配置。
  *
@@ -49,14 +53,14 @@ public class XxlJobConfig {
         /** 执行器端口（留空则自动获取） */
         private Integer port;
         /** 日志路径 */
-        private String logpath = "/data/applogs/xxl-job/jobhandler";
+        private String logpath = "./logs/xxl-job/jobhandler";
         /** 日志保留天数 */
         private int logretentiondays = 30;
         /** admin 中执行器分组 id（动态创建任务时使用） */
         private int jobGroup;
     }
 
-    @Bean(initMethod = "start", destroyMethod = "destroy")
+    @Bean
     public XxlJobSpringExecutor xxlJobExecutor() {
         log.info("XXL-JOB executor initializing: admin={}, appname={}, port={}",
                 admin.getAddresses(), executor.getAppname(),
@@ -73,8 +77,35 @@ public class XxlJobConfig {
         int port = (executor.getPort() == null || executor.getPort() <= 0)
                 ? -1 : executor.getPort();
         e.setPort(port);
-        e.setLogPath(executor.getLogpath());
+        e.setLogPath(prepareLogDirectory(executor.getLogpath()).toString());
         e.setLogRetentionDays(executor.getLogretentiondays());
         return e;
+    }
+
+    static Path prepareLogDirectory(String configuredPath) {
+        if (configuredPath == null || configuredPath.isBlank()) {
+            throw new IllegalStateException("xxl.job.executor.logpath 不能为空");
+        }
+        Path directory = Path.of(configuredPath).toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(directory);
+            // 验证实际创建子目录、写文件及删除权限，覆盖容器 bind mount 的权限问题。
+            Path probeDirectory = Files.createTempDirectory(directory, ".write-check-");
+            try {
+                Path probe = probeDirectory.resolve("probe.log");
+                try {
+                    Files.writeString(probe, "xxl-job log write check");
+                } finally {
+                    Files.deleteIfExists(probe);
+                }
+            } finally {
+                Files.deleteIfExists(probeDirectory);
+            }
+            log.info("XXL-JOB log directory ready: path={}, user={}", directory, System.getProperty("user.name"));
+            return directory;
+        } catch (IOException | SecurityException e) {
+            throw new IllegalStateException("XXL-JOB 日志目录不可写: " + directory
+                    + "，请检查 XXL_JOB_LOGPATH 及容器运行用户对挂载目录的权限", e);
+        }
     }
 }
