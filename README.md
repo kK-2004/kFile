@@ -26,7 +26,7 @@
 
 <br />
 
-<img src="https://file.ksite.xin/file/cdn/ez--PT_uE-jUuV0WfYO7H48KYBl0V166o7_x545-yTQ" alt="kFile 首页" width="92%" />
+<img src="assets/home.jpg" alt="kFile 首页" width="92%" />
 
 </div>
 
@@ -56,9 +56,14 @@
   <tr>
     <td valign="top">创建收集项目并分享链接，成员按规范提交。支持截止时间、人员名单、文件格式校验、<b>自动命名</b>、实时查看未交名单、<b>一键打包下载</b>。</td>
     <td valign="top">统一管理所有上传文件，支持大文件<b>分片上传、断点续传</b>，生成限时<b>分享链接</b>，过期自动清理。</td>
-    <td valign="top">图片、音频、视频一键生成<b>稳定的 CDN 预览外链</b>，可直接嵌入网页、文档和 Markdown —— 本 README 的截图就是用它托管的。</td>
+    <td valign="top">图片、音频、视频一键生成<b>稳定的 CDN 预览外链</b>，可直接嵌入网页、文档和 Markdown。</td>
   </tr>
 </table>
+
+<p align="center">
+  <img src="assets/submit.png" alt="成员提交页" width="75%" />
+  <br /><sub>成员提交页：按项目要求校验文件类型与大小，拖拽即可上传</sub>
+</p>
 
 ## MCP：一句话管理文件收集
 
@@ -71,11 +76,11 @@ kFile 内置远程 MCP 服务，Claude、WorkBuddy 等 AI 客户端授权后即�
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="https://file.ksite.xin/file/cdn/4aFtxeLi9-HL3g4XHpS4JkoG3jRaga5WVWBOA8PAyuA" alt="Claude MCP 演示" />
+      <img src="assets/mcp-claude.jpg" alt="Claude MCP 演示" />
       <br /><sub><b>Claude</b> 中使用 kFile MCP</sub>
     </td>
     <td width="50%" align="center">
-      <img src="https://file.ksite.xin/file/cdn/REykSBUFXpYkg4FzoVkSTvWozCboW2yfQQ8KfA6xMTw" alt="WorkBuddy MCP 演示" />
+      <img src="assets/mcp-workbuddy.png" alt="WorkBuddy MCP 演示" />
       <br /><sub><b>WorkBuddy</b> 中使用 kFile MCP</sub>
     </td>
   </tr>
@@ -94,7 +99,7 @@ kFile 内置远程 MCP 服务，Claude、WorkBuddy 等 AI 客户端授权后即�
       <p>文件经<b>预签名 URL 直传</b>对象存储，不占用服务器带宽。</p>
     </td>
     <td width="60%">
-      <img src="https://file.ksite.xin/file/cdn/-DENoLnAVGo11-NTTz9mQUz1da6EtNChABob64eO4ng" alt="后台自定义对象存储源" />
+      <img src="assets/admin-storage.png" alt="后台自定义对象存储源" />
     </td>
   </tr>
 </table>
