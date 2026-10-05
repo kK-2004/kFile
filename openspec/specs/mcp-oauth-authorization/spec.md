@@ -30,7 +30,7 @@
 
 ### Requirement: OAuth client 自动注册与回调约束
 
-授权服务 SHALL 支持预注册 public client 和 Dynamic Client Registration。动态注册 SHALL 仅接受允许的 OAuth grant/response 类型及 `token_endpoint_auth_method=none`，SHALL 精确保存已注册 redirect URI；localhost redirect URI MAY 使用 HTTP，非 localhost redirect URI MUST 使用 HTTPS。授权请求中的 redirect URI SHALL 与注册值完全匹配，系统 SHALL NOT 使用字符串前缀匹配。
+授权服务 SHALL 支持预注册 public client 和 Dynamic Client Registration。动态注册 SHALL 仅接受允许的 OAuth grant/response 类型及 `token_endpoint_auth_method=none`，SHALL 精确保存已注册 redirect URI；localhost redirect URI MAY 使用 HTTP，非 localhost redirect URI MUST 使用 HTTPS。授权请求中的 redirect URI SHALL 与注册值完全匹配，系统 SHALL NOT 使用字符串前缀匹配；loopback redirect URI（http + localhost/127.0.0.1/[::1]）按 RFC 8252 忽略端口，scheme、host、path、query 仍须一致。同名动态注册仅在已注册 redirect URI 覆盖本次请求值时复用 client，系统 SHALL NOT 因重复注册改写已有 client 的 redirect URI，未覆盖时新建 client。
 
 #### Scenario: 未知 agent 自动注册 public client
 - **WHEN** 一个尚无 client id 的兼容 agent 提交合法的动态注册请求

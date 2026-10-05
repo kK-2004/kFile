@@ -12,12 +12,9 @@ public interface OAuthClientRegistrationRepository
 
     Optional<OAuthClientRegistration> findByClientId(String clientId);
 
-    /** 按 redirect URIs JSON 去重（相同注册）。 */
-    Optional<OAuthClientRegistration> findByRedirectUrisJsonAndDynamicTrue(
-            String redirectUrisJson);
-
-    /** 按 client_name 去重（agent 每次用相同名称，但 localhost 动态端口 redirect_uri 会变）。 */
-    Optional<OAuthClientRegistration> findByClientNameAndDynamicTrue(String clientName);
+    /** 按 client_name 查同名动态 client（去重候选；同名可能有多条）。 */
+    List<OAuthClientRegistration> findByClientNameAndDynamicTrueAndDisabledFalseOrderByIdAsc(
+            String clientName);
 
     /** 定时清理：过期且未使用的动态注册 client。 */
     @Query(

@@ -80,34 +80,16 @@ public class OAuthClientService {
 
         String redirectJson = toJsonArray(redirectUris);
 
-        // 去重：优先按 client_name 匹配已有动态 client（agent 如 WorkBuddy 每次用相同名称，
-        // 但 localhost 回调端口会变）。命中后更新 redirect_uri 为本次值，避免精确匹配失败。
-        Optional<OAuthClientRegistration> byName =
-                (clientName != null && !clientName.isBlank())
-                        ? clientRepo.findByClientNameAndDynamicTrue(clientName)
-                        : Optional.empty();
-        if (byName.isPresent() && !byName.get().isDisabled()) {
-            OAuthClientRegistration c = byName.get();
-            if (!redirectJson.equals(c.getRedirectUrisJson())) {
-                c.setRedirectUrisJson(redirectJson);
-                clientRepo.save(c);
+        // 去重：同名且已注册的 redirect URI 覆盖本次全部值（loopback 忽略端口）时复用已有 client。
+        // 不修改已注册的 redirect URI：多人并发授权时互不覆盖，冒用同名也无法改写他人 client 的回调。
+        // 回调不被覆盖（如换了 path 或 https 域名）则新建 client。
+        for (OAuthClientRegistration c :
+                clientRepo.findByClientNameAndDynamicTrueAndDisabledFalseOrderByIdAsc(clientName)) {
+            if (redirectUris.stream().allMatch(c::matchesRedirectUri)) {
                 log.info(
-                        "BIZ action=OAUTH_DCR_UPDATE_REDIRECT clientId={} clientIp={} oldClientName={}",
-                        c.getClientId(), clientIp, clientName);
+                        "BIZ action=OAUTH_DCR_DEDUP clientId={} clientIp={}", c.getClientId(), clientIp);
+                return toRegistrationResponse(c, redirectUris);
             }
-            log.info(
-                    "BIZ action=OAUTH_DCR_DEDUP clientId={} clientIp={}", c.getClientId(), clientIp);
-            return toRegistrationResponse(c, true);
-        }
-
-        // 兜底去重：相同 redirect URIs（无 client_name 时）
-        Optional<OAuthClientRegistration> dup =
-                clientRepo.findByRedirectUrisJsonAndDynamicTrue(redirectJson);
-        if (dup.isPresent() && !dup.get().isDisabled()) {
-            OAuthClientRegistration c = dup.get();
-            log.info(
-                    "BIZ action=OAUTH_DCR_DEDUP clientId={} clientIp={}", c.getClientId(), clientIp);
-            return toRegistrationResponse(c, true);
         }
 
         // 仅对真正的新建 client 限流（去重命中不算）
@@ -134,7 +116,7 @@ public class OAuthClientService {
         log.info(
                 "BIZ action=OAUTH_DCR_CREATE clientId={} clientName={} clientIp={} redirectUris={}",
                 clientId, clientName, clientIp, redirectUris);
-        return toRegistrationResponse(c, false);
+        return toRegistrationResponse(c, redirectUris);
     }
 
     /** 按 client_id 读取（授权请求校验用）。disabled 的返回空。 */
@@ -146,9 +128,9 @@ public class OAuthClientService {
         return clientRepo.findByClientId(clientId).filter(c -> !c.isDisabled());
     }
 
-    /** 授权请求校验 redirect_uri 精确匹配（不做前缀匹配）。 */
+    /** 授权请求校验 redirect_uri：精确匹配（不做前缀匹配），loopback 忽略端口（RFC 8252）。 */
     public void validateRedirectUriExact(OAuthClientRegistration client, String redirectUri) {
-        if (redirectUri == null || !client.redirectUriSet().contains(redirectUri)) {
+        if (!client.matchesRedirectUri(redirectUri)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "redirect_uri 与注册值不精确匹配");
         }
@@ -245,12 +227,13 @@ public class OAuthClientService {
         return "mcp_" + crypto.generateOpaqueToken().substring(0, 24);
     }
 
-    private Map<String, Object> toRegistrationResponse(OAuthClientRegistration c, boolean dedup) {
+    /** 注册响应：redirect_uris 回显本次请求值（复用 client 时已校验其被注册值覆盖）。 */
+    private Map<String, Object> toRegistrationResponse(OAuthClientRegistration c, List<String> redirectUris) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("client_id", c.getClientId());
         m.put("client_name", c.getClientName());
         m.put("client_id_issued_at", c.getCreatedAt() == null ? null : c.getCreatedAt().toEpochMilli());
-        m.put("redirect_uris", new ArrayList<>(c.redirectUriSet()));
+        m.put("redirect_uris", new ArrayList<>(redirectUris));
         m.put("grant_types", List.of("authorization_code"));
         m.put("response_types", List.of("code"));
         m.put("token_endpoint_auth_method", c.getTokenEndpointAuthMethod());
