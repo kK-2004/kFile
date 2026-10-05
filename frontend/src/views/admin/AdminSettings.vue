@@ -34,7 +34,7 @@
         <el-select v-model="mcpSchemes" multiple filterable allow-create default-first-option placeholder="如 workbuddy" style="width:100%">
           <el-option v-for="s in mcpSchemes" :key="s" :value="s" :label="s" />
         </el-select>
-        <div class="hint">http/https 始终允许。本地 Agent 的自定义回调协议（如 <code>workbuddy</code>）需在此添加，否则 DCR 注册会被拒绝。留空表示仅允许 http/https。</div>
+        <div class="hint">http/https 始终允许，Claude Code、Codex 等使用 <code>http://localhost:端口/callback</code> 回调的 Agent 无需配置。本地 Agent 的自定义回调协议（如 <code>workbuddy</code>）需在此添加，否则 DCR 注册会被拒绝。留空表示仅允许 http/https。</div>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
