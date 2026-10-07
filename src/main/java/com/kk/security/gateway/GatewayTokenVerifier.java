@@ -20,6 +20,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class GatewayTokenVerifier {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GatewayTokenVerifier.class);
+
     private final GatewayAuthProperties props;
     private final GatewayRevocationStore revocationStore;
     private volatile JwtDecoder decoder;
@@ -46,6 +48,8 @@ public class GatewayTokenVerifier {
         try {
             jwt = decoder().decode(token);
         } catch (JwtException e) {
+            // 只记原因不记 token：便于排查 aud/iss 配置不符、JWKS 拉取失败等
+            log.warn("网关 token 校验失败: {}", e.getMessage());
             return Optional.empty();
         }
         GatewayIdentity identity = new GatewayIdentity(jwt.getSubject(), jwt.getClaimAsString("username"),
