@@ -66,12 +66,22 @@ public class GatewayTokenVerifier {
         if (d == null) {
             synchronized (this) {
                 if (decoder == null) {
-                    decoder = build(NimbusJwtDecoder.withJwkSetUri(props.resolvedJwkSetUri()).build(), props);
+                    decoder = build(NimbusJwtDecoder.withJwkSetUri(props.resolvedJwkSetUri())
+                            .jwtProcessorCustomizer(GatewayTokenVerifier::acceptAccessTokenType).build(), props);
                 }
                 d = decoder;
             }
         }
         return d;
+    }
+
+    /**
+     * 网关 access token 头部 typ 为 RFC 9068 的 {@code at+jwt}（id_token 为 {@code JWT}）。
+     * Nimbus 默认只接受 JWT / 无 typ，须显式放行；只接受 at+jwt 同时在头部层面挡住 id_token。
+     */
+    static void acceptAccessTokenType(com.nimbusds.jwt.proc.ConfigurableJWTProcessor<com.nimbusds.jose.proc.SecurityContext> processor) {
+        processor.setJWSTypeVerifier(new com.nimbusds.jose.proc.DefaultJOSEObjectTypeVerifier<>(
+                new com.nimbusds.jose.JOSEObjectType("at+jwt")));
     }
 
     static NimbusJwtDecoder build(NimbusJwtDecoder nimbus, GatewayAuthProperties props) {
