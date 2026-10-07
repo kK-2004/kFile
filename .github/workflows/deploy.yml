@@ -52,14 +52,16 @@ jobs:
             echo "host_port=8082" >> "$GITHUB_OUTPUT"
             echo "deploy_path=${DEPLOY_PATH}-test" >> "$GITHUB_OUTPUT"
             echo "env_cors=https://test-file.ksite.xin" >> "$GITHUB_OUTPUT"
-            echo "Deploy context: branch=test → kfile-test / KFile-test / 8082 / cors=test-file.ksite.xin"
+            echo "nacos_data_id=kfile-test.yaml" >> "$GITHUB_OUTPUT"
+            echo "Deploy context: branch=test → kfile-test / KFile-test / 8082 / cors=test-file.ksite.xin / nacos=kfile-test.yaml"
           else
             echo "image_name=kfile-v2" >> "$GITHUB_OUTPUT"
             echo "container_name=KFile-v2" >> "$GITHUB_OUTPUT"
             echo "host_port=8081" >> "$GITHUB_OUTPUT"
             echo "deploy_path=${DEPLOY_PATH}" >> "$GITHUB_OUTPUT"
             echo "env_cors=" >> "$GITHUB_OUTPUT"
-            echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081 / cors=default"
+            echo "nacos_data_id=" >> "$GITHUB_OUTPUT"
+            echo "Deploy context: branch=$BRANCH → kfile-v2 / KFile-v2 / 8081 / cors=default / nacos=kfile.yaml"
           fi
 
       # 国内服务器：配置 Docker 镜像加速（仅当配置了 DOCKER_MIRROR_URL）
@@ -183,6 +185,7 @@ jobs:
           # 留空则使用 application-prod.yml 中的 prod 命名空间 ID
           NACOS_NAMESPACE: ${{ secrets.NACOS_NAMESPACE }}
           ENV_CORS: ${{ steps.ctx.outputs.env_cors }}
+          NACOS_DATA_ID: ${{ steps.ctx.outputs.nacos_data_id }}
           KEEP_VERSIONS: "1"
         run: |
           set -euo pipefail
@@ -259,7 +262,7 @@ jobs:
              XXL_JOB_JOB_GROUP='$XXL_JOB_JOB_GROUP' \
              NACOS_SERVER_ADDR='$NACOS_SERVER_ADDR' NACOS_USERNAME='$NACOS_USERNAME' \
              NACOS_PASSWORD='$NACOS_PASSWORD' NACOS_NAMESPACE='$NACOS_NAMESPACE' \
-             ENV_CORS='$ENV_CORS' bash -s" <<'REMOTE'
+             ENV_CORS='$ENV_CORS' NACOS_DATA_ID='$NACOS_DATA_ID' bash -s" <<'REMOTE'
           set -euo pipefail
           trap 'docker logout "$ACR_REGISTRY" >/dev/null 2>&1 || true' EXIT
           echo "=== Starting deployment ==="
@@ -292,6 +295,11 @@ jobs:
             echo "Injecting ENV_CORS=$ENV_CORS"
           else
             echo "ENV_CORS empty → use application-prod.yml default"
+          fi
+          # Nacos Data ID：test 分支读 kfile-test.yaml，其它分支用 application-prod.yml 默认 kfile.yaml
+          if [[ -n "$NACOS_DATA_ID" ]]; then
+            EXTRA_ENV+=( -e "NACOS_DATA_ID=$NACOS_DATA_ID" )
+            echo "Injecting NACOS_DATA_ID=$NACOS_DATA_ID"
           fi
           # 空字符串会覆盖 application-prod.yml 的命名空间默认值，故仅非空时注入；先去掉首尾空白
           NACOS_NAMESPACE="$(printf '%s' "$NACOS_NAMESPACE" | tr -d '[:space:]')"

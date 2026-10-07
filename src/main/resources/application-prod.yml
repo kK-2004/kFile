@@ -1,7 +1,8 @@
 spring:
   config:
     import:
-      - nacos:kfile.yaml
+      # Data ID 可由 NACOS_DATA_ID 覆盖：test 分支部署注入 kfile-test.yaml（同一 NACOS_NAMESPACE 下）
+      - nacos:${NACOS_DATA_ID:kfile.yaml}
   cloud:
     nacos:
       config:
