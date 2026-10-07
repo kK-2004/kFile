@@ -2,6 +2,7 @@ package com.kk.security.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
@@ -33,7 +34,8 @@ class GatewayTokenVerifierTest {
         props.setClientId("kfile");
         store = new GatewayRevocationStore();
         NimbusJwtDecoder decoder = GatewayTokenVerifier.build(
-                NimbusJwtDecoder.withPublicKey(key.toRSAPublicKey()).build(), props);
+                NimbusJwtDecoder.withPublicKey(key.toRSAPublicKey())
+                        .jwtProcessorCustomizer(GatewayTokenVerifier::acceptAccessTokenType).build(), props);
         verifier = new GatewayTokenVerifier(props, store, decoder);
     }
 
@@ -42,13 +44,20 @@ class GatewayTokenVerifierTest {
     }
 
     private String token(RSAKey signingKey, Consumer<JWTClaimsSet.Builder> customize) throws Exception {
+        return token(signingKey, new JOSEObjectType("at+jwt"), customize);
+    }
+
+    /** 与网关 JwtService 一致：access token 头部 typ=at+jwt，id_token 为 JWT。 */
+    private String token(RSAKey signingKey, JOSEObjectType typ, Consumer<JWTClaimsSet.Builder> customize)
+            throws Exception {
         Instant now = Instant.now();
         JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
                 .issuer(ISSUER).subject("7351234567890123456").audience("kfile")
                 .issueTime(Date.from(now.minusSeconds(5))).expirationTime(Date.from(now.plusSeconds(900)))
                 .claim("sid", "s1").claim("username", "alice").claim("token_use", "access");
         customize.accept(claims);
-        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("k1").build(), claims.build());
+        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).type(typ).keyID("k1").build(),
+                claims.build());
         jwt.sign(new RSASSASigner(signingKey));
         return jwt.serialize();
     }
@@ -67,6 +76,11 @@ class GatewayTokenVerifierTest {
         assertThat(verifier.verify(token(c -> c.issuer("https://evil.example")))).isEmpty();
         assertThat(verifier.verify(token(c -> c.claim("token_use", "id")))).isEmpty();
         assertThat(verifier.verify(token(c -> c.expirationTime(Date.from(Instant.now().minusSeconds(120)))))).isEmpty();
+    }
+
+    @Test
+    void rejectsIdTokenHeaderType() throws Exception {
+        assertThat(verifier.verify(token(key, JOSEObjectType.JWT, c -> { }))).isEmpty();
     }
 
     @Test
