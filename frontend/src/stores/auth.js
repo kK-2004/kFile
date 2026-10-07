@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import api from '../api'
-import { gatewayEnabled, hasTokens, logoutGateway, setLocalMode } from '../auth/oidc'
+import { clearTokens, gatewayEnabled, hasTokens, logoutGateway, setLocalMode } from '../auth/oidc'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -39,7 +39,9 @@ export const useAuthStore = defineStore('auth', {
         if (gatewayEnabled()) setLocalMode(false)
       } finally { this.loaded = true }
     },
+    // kFile 账号密码登录（/admin/local-login）：切到本地会话模式，丢弃网关 token
     async login(username, password) {
+      clearTokens()
       setLocalMode(true)
       await api.adminLogin(username, password)
       await this.loadMe()

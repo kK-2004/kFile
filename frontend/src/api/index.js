@@ -193,7 +193,7 @@ export default {
     })
   },
 
-  // 应急本地登录（仅未配置网关的本地开发登录页使用；生产登录页不提供入口）
+  // kFile 账号密码登录（/admin/local-login 页面，与网关登录并存）
   adminLogin(username, password) { return instance.post('/api/admin/auth/local-login', { username, password }) },
   adminMe() { return instance.get('/api/admin/auth/me') }
   ,adminCreateShare(projectId, payload) { return instance.post(`/api/admin/projects/${projectId}/share`, payload) }

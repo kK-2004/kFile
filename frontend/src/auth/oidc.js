@@ -1,7 +1,7 @@
 // 统一认证网关登录（OIDC 授权码 + PKCE，公共客户端）。
 // 生产：VITE_GATEWAY_ISSUER 指向网关（如 https://gw.ksite.xin），接口经 VITE_GATEWAY_API_BASE（如 https://gw.ksite.xin/kfile）
 // 由网关代理到 kFile，kFile 用网关 JWKS 自行验签。未配置 issuer 时退回旧的本地会话模式（本地开发）。
-// 应急：网关不可用时在 kFile 域名下调用 POST /api/admin/auth/local-login 获得本地会话，前端检测到会话即以本地模式工作。
+// 原有账号密码登录保留在 /admin/local-login（POST /api/admin/auth/local-login），登录后以本地会话模式工作（接口直连 kFile）。
 
 const env = import.meta.env || {}
 

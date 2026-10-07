@@ -2,10 +2,10 @@
   <div :class="['login-wrap', { 'login-dark': isDarkTheme }]">
     <el-card class="login-card">
       <template #header>
-        <h2 class="login-title">{{ gateway ? '统一认证登录' : '管理员登录' }}</h2>
+        <h2 class="login-title">{{ local ? '管理员登录' : '统一认证登录' }}</h2>
       </template>
-      <!-- 网关模式：不提供账号密码表单（应急本地登录仅走接口） -->
-      <div v-if="gateway" class="gateway-login">
+      <!-- /admin/login：统一认证网关登录；/admin/local-login：kFile 原有账号密码登录（与网关登录并存） -->
+      <div v-if="!local" class="gateway-login">
         <template v-if="store.accountError">
           <el-alert :title="store.accountError.message || '当前账号无法使用 kFile'" type="error" :closable="false" show-icon />
           <el-button size="large" class="login-button" type="primary" @click="switchAccount">切换账号</el-button>
@@ -45,6 +45,7 @@
             登录
           </el-button>
         </el-form-item>
+        <el-button v-if="gateway" class="login-secondary" text @click="goGateway">使用统一认证登录</el-button>
       </el-form>
     </el-card>
   </div>
@@ -56,7 +57,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage } from 'element-plus'
 import { useThemeStore } from '../../stores/theme'
-import { clearTokens, gatewayEnabled, login, logoutGateway } from '../../auth/oidc'
+import { gatewayEnabled, login, logoutGateway } from '../../auth/oidc'
 
 const route = useRoute()
 const router = useRouter()
@@ -66,6 +67,8 @@ const form = ref({ username: '', password: '' })
 const loading = ref(false)
 const isDarkTheme = computed(() => theme.effectiveDark)
 const gateway = gatewayEnabled()
+// 未配置网关时 /admin/login 也显示账号密码表单
+const local = computed(() => route.path === '/admin/local-login' || !gateway)
 
 const returnTo = () => {
   const raw = String(route.query.redirect || '/admin/projects')
@@ -75,14 +78,11 @@ const returnTo = () => {
 
 const goGateway = () => login(returnTo())
 
-// 账号未开通等：结束网关会话后可换另一个网关账号登录
-const switchAccount = () => {
-  clearTokens()
-  return logoutGateway()
-}
+// 账号未开通等：结束网关会话后可换另一个网关账号登录（logoutGateway 内部清本地 token，并带 id_token_hint）
+const switchAccount = () => logoutGateway()
 
 onMounted(() => {
-  if (gateway && !store.accountError) goGateway()
+  if (!local.value && !store.accountError) goGateway()
 })
 
 const onSubmit = async () => {
