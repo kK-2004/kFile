@@ -2,9 +2,21 @@
   <div :class="['login-wrap', { 'login-dark': isDarkTheme }]">
     <el-card class="login-card">
       <template #header>
-        <h2 class="login-title">管理员登录</h2>
+        <h2 class="login-title">{{ gateway ? '统一认证登录' : '管理员登录' }}</h2>
       </template>
-      <el-form :model="form" @keyup.enter="onSubmit" label-position="top">
+      <!-- 网关模式：不提供账号密码表单（应急本地登录仅走接口） -->
+      <div v-if="gateway" class="gateway-login">
+        <template v-if="store.accountError">
+          <el-alert :title="store.accountError.message || '当前账号无法使用 kFile'" type="error" :closable="false" show-icon />
+          <el-button size="large" class="login-button" type="primary" @click="switchAccount">切换账号</el-button>
+          <el-button size="large" class="login-secondary" text @click="router.replace('/')">返回首页</el-button>
+        </template>
+        <template v-else>
+          <p class="gateway-hint">正在跳转统一认证中心…</p>
+          <el-button size="large" class="login-button" type="primary" @click="goGateway">前往登录</el-button>
+        </template>
+      </div>
+      <el-form v-else :model="form" @keyup.enter="onSubmit" label-position="top">
         <el-form-item label="用户名" class="login-form-item">
           <el-input
             v-model="form.username"
@@ -39,11 +51,12 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { ElMessage } from 'element-plus'
 import { useThemeStore } from '../../stores/theme'
+import { clearTokens, gatewayEnabled, login, logoutGateway } from '../../auth/oidc'
 
 const route = useRoute()
 const router = useRouter()
@@ -52,6 +65,25 @@ const theme = useThemeStore()
 const form = ref({ username: '', password: '' })
 const loading = ref(false)
 const isDarkTheme = computed(() => theme.effectiveDark)
+const gateway = gatewayEnabled()
+
+const returnTo = () => {
+  const raw = String(route.query.redirect || '/admin/projects')
+  // 只接受站内路径，防止开放重定向
+  return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/admin/projects'
+}
+
+const goGateway = () => login(returnTo())
+
+// 账号未开通等：结束网关会话后可换另一个网关账号登录
+const switchAccount = () => {
+  clearTokens()
+  return logoutGateway()
+}
+
+onMounted(() => {
+  if (gateway && !store.accountError) goGateway()
+})
 
 const onSubmit = async () => {
   if (!form.value.username || !form.value.password) {
@@ -204,6 +236,23 @@ const onSubmit = async () => {
   color: var(--login-muted);
 }
 
+.gateway-login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gateway-hint {
+  margin: 0;
+  text-align: center;
+  color: var(--login-muted);
+}
+
+.login-secondary {
+  width: 100%;
+  margin-left: 0 !important;
+}
+
 .login-button {
   width: 100%;
   margin-top: 12px;
@@ -225,7 +274,24 @@ const onSubmit = async () => {
   box-shadow: 0 16px 30px color-mix(in srgb, var(--login-accent) 30%, transparent);
 }
 
-.login-dark .login-button {
+.login-dark .gateway-login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gateway-hint {
+  margin: 0;
+  text-align: center;
+  color: var(--login-muted);
+}
+
+.login-secondary {
+  width: 100%;
+  margin-left: 0 !important;
+}
+
+.login-button {
   color: #061817;
 }
 

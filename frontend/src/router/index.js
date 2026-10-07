@@ -18,6 +18,8 @@ import { useAuthStore } from '../stores/auth'
 const routes = [
   { path: '/', component: Hero },
   { path: '/share', component: () => import('../views/ShareDownload.vue') },
+  // 统一认证网关登录回调（OIDC redirect_uri / 登出后回跳）
+  { path: '/auth/callback', component: () => import('../views/AuthCallback.vue') },
   { path: '/admin', redirect: '/admin/projects' },
   { path: '/user/projects', component: UserProjects },
   { path: '/user/projects/:id', component: UserSubmit, props: true },
@@ -46,7 +48,7 @@ export default router
 router.beforeEach(async (to) => {
   const store = useAuthStore()
 
-  if (to.path === '/share') return true
+  if (to.path === '/share' || to.path === '/auth/callback') return true
 
   if (to.path !== '/admin/login') {
     try { if (!store.loaded) await store.loadMe() } catch {}
@@ -67,6 +69,8 @@ router.beforeEach(async (to) => {
 
   if (to.path.startsWith('/admin') && to.path !== '/admin/login') {
     if (store.user) return true
+    // 网关登录有效但 kFile 账号不可用：登录页展示原因（不带 redirect，避免反复跳网关）
+    if (store.accountError) return { path: '/admin/login' }
     return { path: '/admin/login', query: { redirect: to.fullPath } }
   }
   return true

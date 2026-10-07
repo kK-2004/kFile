@@ -1,5 +1,6 @@
 package com.kk.security;
 
+import com.kk.security.gateway.GatewayBearerAuthFilter;
 import com.kk.security.oauth.McpBearerAuthFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -19,6 +20,15 @@ public class FilterRegistrationConfig {
     public FilterRegistrationBean<McpBearerAuthFilter> mcpBearerAuthFilterRegistration(
             McpBearerAuthFilter filter) {
         FilterRegistrationBean<McpBearerAuthFilter> reg = new FilterRegistrationBean<>(filter);
+        reg.setEnabled(false);
+        return reg;
+    }
+
+    /** 网关 Bearer 过滤器同理：只挂在 web / OAuth 安全链上。 */
+    @Bean
+    public FilterRegistrationBean<GatewayBearerAuthFilter> gatewayBearerAuthFilterRegistration(
+            GatewayBearerAuthFilter filter) {
+        FilterRegistrationBean<GatewayBearerAuthFilter> reg = new FilterRegistrationBean<>(filter);
         reg.setEnabled(false);
         return reg;
     }
