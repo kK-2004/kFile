@@ -179,6 +179,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { copyText } from '../utils/clipboard'
+import { buildMcpPrompt } from '../utils/mcpPrompt'
 import api from '../api'
 
 const mcpDisplayUrl = computed(() => mcpUrl.value || (window.location.origin + '/mcp'))
@@ -213,10 +214,7 @@ const copied = ref(false)
 // MCP 配置提示词：mcpUrl 从后端取（含正确环境地址），fallback 用当前页面 origin
 const mcpUrl = ref('')
 const mcpPromptCopied = ref(false)
-const mcpPrompt = () => {
-  const url = mcpUrl.value || (window.location.origin + '/mcp')
-  return `添加一个远程 MCP server\n名称：k-File-MCP\nURL 配置：${url}`
-}
+const mcpPrompt = () => buildMcpPrompt(mcpUrl.value)
 const copyMcpPrompt = async () => {
   try {
     await copyText(mcpPrompt())

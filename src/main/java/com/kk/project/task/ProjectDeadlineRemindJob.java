@@ -41,7 +41,7 @@ public class ProjectDeadlineRemindJob {
         }
         try {
             reminderService.sendReminder(projectId);
-            XxlJobHelper.handleSuccess("sent");
+            XxlJobHelper.handleSuccess("reminder processed");
         } catch (Exception e) {
             log.warn("projectDeadlineRemindJob failed projectId={} reason={}", projectId, e.getMessage());
             XxlJobHelper.handleFail(e.getMessage());

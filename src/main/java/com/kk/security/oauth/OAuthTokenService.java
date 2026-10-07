@@ -212,7 +212,7 @@ public class OAuthTokenService {
         // 关键安全边界（client + code + verifier 三重绑定仍成立）。
         if (redirectUri != null && !redirectUri.isBlank() && !redirectUri.equals(code.getRedirectUri())) {
             OAuthClientRegistration reg = clientRegistrationRepo.findByClientId(clientId).orElse(null);
-            boolean belongsToClient = reg != null && reg.redirectUriSet().contains(redirectUri);
+            boolean belongsToClient = reg != null && reg.matchesRedirectUri(redirectUri);
             if (!belongsToClient) {
                 boolean dynamicClient = reg != null && reg.isDynamic();
                 if (!dynamicClient) {

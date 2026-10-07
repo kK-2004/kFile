@@ -42,6 +42,9 @@ public class ProjectResponse {
     private Boolean canEdit;
     private Boolean canDelete;
 
+    // 创建者用户名（ownerUserId 对应的 AdminUser；无归属/历史数据为 null）
+    private String creator;
+
     public static ProjectResponse from(Project p, List<String> types, Object expected) {
         return from(p, types, expected, true);
     }

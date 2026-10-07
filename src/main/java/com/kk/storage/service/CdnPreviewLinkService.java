@@ -115,7 +115,7 @@ public class CdnPreviewLinkService {
 
     private StoredFile findPreviewableFile(Long fileId) {
         StoredFile file = storedFileRepository.findById(fileId)
-                .orElseThrow(() -> new IllegalArgumentException("文件不存在: " + fileId));
+                .orElseThrow(() -> new IllegalArgumentException("文件不存在"));
         if (!StoredFile.TYPE_FILE.equals(file.getType())) {
             throw new IllegalArgumentException("文件夹不支持 CDN 预览");
         }

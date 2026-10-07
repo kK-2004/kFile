@@ -34,7 +34,8 @@ public class AdminTaskController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         var d = deleteTaskService.get(taskId);
         if (d != null) {
-            if (!adminPermissionService.canManageProject(auth, d.getProjectId())) {
+            if(!(auth.getAuthorities().stream().anyMatch(a ->
+                    a.getAuthority().equals("ROLE_SUPER")) || auth.getName().equals(d.getActor()) )) {
                 throw new AccessDeniedException("Access denied");
             }
             return java.util.Map.of(

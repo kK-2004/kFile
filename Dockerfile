@@ -99,7 +99,8 @@ RUN sed -ri 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g'
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r spring && useradd -r -g spring spring && \
+# 固定 UID/GID=1000，与宿主机 ubuntu 用户一致，挂载日志目录时无需额外授权
+RUN groupadd -r -o -g 1000 spring && useradd -r -o -u 1000 -g spring spring && \
     mkdir -p /app/logs /app/config && chown -R spring:spring /app
 
 COPY --from=builder --chown=spring:spring /app.jar /app/app.jar
@@ -116,4 +117,5 @@ EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:8081/actuator/health || exit 1
 
-ENTRYPOINT ["sh", "-c", "java -Djava.security.egd=file:/dev/./urandom $JAVA_OPTS -jar /app/app.jar $PARAMS"]
+# 关闭 Nacos 客户端自带的日志配置，其日志统一交给应用 logback（级别/轮转见 logback.xml）
+ENTRYPOINT ["sh", "-c", "java -Djava.security.egd=file:/dev/./urandom -Dnacos.logging.default.config.enabled=false $JAVA_OPTS -jar /app/app.jar $PARAMS"]

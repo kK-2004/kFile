@@ -34,7 +34,7 @@
         <el-select v-model="mcpSchemes" multiple filterable allow-create default-first-option placeholder="如 workbuddy" style="width:100%">
           <el-option v-for="s in mcpSchemes" :key="s" :value="s" :label="s" />
         </el-select>
-        <div class="hint">http/https 始终允许。本地 Agent 的自定义回调协议（如 <code>workbuddy</code>）需在此添加，否则 DCR 注册会被拒绝。留空表示仅允许 http/https。</div>
+        <div class="hint">http/https 始终允许，Claude Code、Codex 等使用 <code>http://localhost:端口/callback</code> 回调的 Agent 无需配置。本地 Agent 的自定义回调协议（如 <code>workbuddy</code>）需在此添加，否则 DCR 注册会被拒绝。留空表示仅允许 http/https。</div>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save" :loading="saving">保存</el-button>
@@ -135,6 +135,7 @@ import { ref, onMounted, computed } from 'vue'
 import api from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { copyText } from '../../utils/clipboard'
+import { buildMcpPrompt } from '../../utils/mcpPrompt'
 
 const form = ref({ monthlyLimitUser: null, userTotalQuotaBytes: null, allowedFileTypes: [] })
 const quotaGB = ref(null)
@@ -147,10 +148,7 @@ const saving = ref(false)
 // MCP 接入提示词：mcpUrl 从 /api/hero 取（含正确环境的公共基址）
 const mcpUrl = ref('')
 const mcpPromptCopied = ref(false)
-const mcpPrompt = () => {
-  const url = mcpUrl.value || (window.location.origin + '/mcp')
-  return `添加一个远程 MCP server\n名称：k-File-MCP\nURL 配置：${url}`
-}
+const mcpPrompt = () => buildMcpPrompt(mcpUrl.value)
 const copyMcpPrompt = async () => {
   try {
     await copyText(mcpPrompt())

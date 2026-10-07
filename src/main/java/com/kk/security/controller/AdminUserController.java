@@ -2,6 +2,7 @@ package com.kk.security.controller;
 
 import com.kk.project.entity.Project;
 import com.kk.project.repo.ProjectRepository;
+import com.kk.security.dto.AdminUserView;
 import com.kk.security.entity.AdminUser;
 import com.kk.security.entity.ProjectPermission;
 import com.kk.security.repo.AdminUserRepository;
@@ -38,11 +39,11 @@ public class AdminUserController {
 
     @GetMapping
     @PreAuthorize("hasRole('SUPER')")
-    public List<AdminUser> list() { return userRepo.findAll(); }
+    public List<AdminUserView> list() { return userRepo.findAll().stream().map(AdminUserView::of).toList(); }
 
     @PostMapping
     @PreAuthorize("hasRole('SUPER')")
-    public AdminUser create(@RequestBody Map<String, Object> req) {
+    public AdminUserView create(@RequestBody Map<String, Object> req) {
         String username = (String) req.get("username");
         String password = (String) req.get("password");
         String role = (String) req.getOrDefault("role", "ADMIN");
@@ -54,7 +55,7 @@ public class AdminUserController {
         // 可选：创建时设配额（字节）；前端传 GB 会转字节
         Object quota = req.get("quotaBytes");
         if (quota instanceof Number n) u.setQuotaBytes(n.longValue());
-        return userRepo.save(u);
+        return AdminUserView.of(userRepo.save(u));
     }
 
     /** 更新用户配额（SUPER 可设；传 null=用全局默认，0=不限） */

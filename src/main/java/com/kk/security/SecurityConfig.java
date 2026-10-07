@@ -3,6 +3,7 @@ package com.kk.security;
 import com.kk.config.McpOAuthProperties;
 import com.kk.security.handler.RestAccessDeniedHandler;
 import com.kk.security.handler.RestAuthenticationEntryPoint;
+import com.kk.security.gateway.GatewayBearerAuthFilter;
 import com.kk.security.oauth.McpBearerAuthFilter;
 import com.kk.security.oauth.McpBearerAuthenticationEntryPoint;
 import com.kk.security.service.AdminUserDetailsService;
@@ -22,6 +23,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.www.BasicAuthenticationEntryPoint;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -138,7 +140,8 @@ public class SecurityConfig {
     @Bean
     @Order(3)
     public SecurityFilterChain oauthFilterChain(
-            HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
+            HttpSecurity http, AuthenticationProvider authenticationProvider,
+            GatewayBearerAuthFilter gatewayBearerAuthFilter) throws Exception {
         http
                 .securityMatcher("/oauth2/**", "/.well-known/**")
                 .cors(Customizer.withDefaults())
@@ -174,6 +177,8 @@ public class SecurityConfig {
                                         .authenticated())
                 .authenticationProvider(authenticationProvider)
                 .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
+                // MCP 授权确认页经网关登录时以 Bearer 身份提交 consent
+                .addFilterBefore(gatewayBearerAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable());
         return http.build();
@@ -184,7 +189,8 @@ public class SecurityConfig {
     @Bean
     @Order(4)
     public SecurityFilterChain webFilterChain(
-            HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
+            HttpSecurity http, AuthenticationProvider authenticationProvider,
+            GatewayBearerAuthFilter gatewayBearerAuthFilter) throws Exception {
         http
                 .securityMatcher("/**")
                 .cors(Customizer.withDefaults())
@@ -200,6 +206,9 @@ public class SecurityConfig {
                         reg ->
                                 reg
                                         .requestMatchers("/api/admin/auth/**")
+                                        .permitAll()
+                                        // 网关踢下线回调：HMAC 验签在控制器内完成
+                                        .requestMatchers(HttpMethod.POST, "/api/gateway/callback")
                                         .permitAll()
                                         // OAuth / MCP 元数据发现（已在链 2 放行，此处兜底）
                                         .requestMatchers(
@@ -239,9 +248,14 @@ public class SecurityConfig {
                                         .permitAll()
                                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**")
                                         .permitAll()
+                                        // XXL-JOB 执行器通过内网 curl 触发，不依赖管理员 session。
+                                        .requestMatchers(HttpMethod.POST, "/api/internal/jobs/share-cleanup")
+                                        .permitAll()
                                         .anyRequest()
                                         .authenticated())
                 .authenticationProvider(authenticationProvider)
+                // 网关 Bearer（经网关登录）优先；无 Bearer 时沿用本地会话（应急登录）
+                .addFilterBefore(gatewayBearerAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .logout(

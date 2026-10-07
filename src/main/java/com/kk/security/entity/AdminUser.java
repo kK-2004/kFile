@@ -1,5 +1,8 @@
 package com.kk.security.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -19,6 +22,7 @@ public class AdminUser {
     @Column(nullable = false, length = 64)
     private String username;
 
+    @JsonIgnore // 哈希永不出参；实体本身不作为入参反序列化
     @Column(nullable = false, length = 100)
     private String password; // BCrypt
 
@@ -31,6 +35,11 @@ public class AdminUser {
     private Long quotaBytes;
 
     private Boolean enabled = true;
+
+    /** 统一认证网关用户全局 ID（token sub）；首次经网关登录时按用户名绑定，未经网关登录过为 null。 */
+    @Column(unique = true)
+    @JsonSerialize(using = ToStringSerializer.class) // 雪花 long 超出 JS 安全整数，JSON 一律字符串
+    private Long guid;
 
     @CreationTimestamp
     private Instant createdAt;

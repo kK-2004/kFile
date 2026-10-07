@@ -24,11 +24,12 @@ type MultipartOptions struct {
 }
 
 type UploadInit struct {
-	StorageKey string `json:"storageKey"`
-	Source     string `json:"source"`
-	PutURL     string `json:"putUrl"`
-	ExpiresIn  int64  `json:"expiresIn"`
-	FileID     int64  `json:"fileId"`
+	StorageKey  string `json:"storageKey"`
+	Source      string `json:"source"`
+	PutURL      string `json:"putUrl"`
+	ExpiresIn   int64  `json:"expiresIn"`
+	FileID      int64  `json:"fileId"`
+	ContentType string `json:"contentType"`
 }
 
 type UploadResult struct {
@@ -101,4 +102,9 @@ type CDNLink struct {
 	ExpiresIn   int64  `json:"expiresIn"`
 	Permanent   bool   `json:"permanent"`
 	ContentType string `json:"contentType"`
+}
+
+type DeleteFilesResult struct {
+	DeletedFiles  int `json:"deletedFiles"`
+	FailedObjects int `json:"failedObjects"`
 }

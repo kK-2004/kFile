@@ -167,7 +167,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import JSZip from 'jszip'
-import api from '../api'
+import api, { apiUrl } from '../api'
 import FolderNode from '../components/FolderNode.vue'
 
 const shareData = ref(null)
@@ -340,7 +340,7 @@ const recordDownload = async (entryIndexes) => {
     ? (itemIds.length === 1 ? { itemId: itemIds[0] } : { itemIds })
     : (validIndexes.length === 1 ? { entryIndex: validIndexes[0] } : { entryIndexes: validIndexes })
   try {
-    await fetch(`/api/share/${shareCode.value}/download`, {
+    await fetch(apiUrl(`/api/share/${shareCode.value}/download`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)

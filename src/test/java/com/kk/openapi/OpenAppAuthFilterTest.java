@@ -131,4 +131,22 @@ class OpenAppAuthFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         verify(openAppRepository, never()).save(any());
     }
+
+    @Test
+    void batchDeleteEndpointCoveredBySameTokenFilter() throws Exception {
+        // /api/open/files/batch-delete 与其他开放端点共用本过滤器与 /api/open/** 安全链：
+        // 有效 token 建立身份；缺失 token 不建立身份（真实链路随后 401）
+        OpenApp app = enabledApp();
+        when(openAppRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(app));
+        filter.doFilter(request("/api/open/files/batch-delete", "Bearer " + rawToken),
+                new MockHttpServletResponse(), chain);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(((OpenAppPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal())
+                .getId()).isEqualTo(7L);
+
+        SecurityContextHolder.clearContext();
+        filter.doFilter(request("/api/open/files/batch-delete", null),
+                new MockHttpServletResponse(), chain);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
 }

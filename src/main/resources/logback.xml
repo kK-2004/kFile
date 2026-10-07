@@ -26,6 +26,14 @@
         </encoder>
     </appender>
 
+    <!-- 中间件只记录 WARN 及以上，应用自身保持 INFO -->
+    <logger name="com.alibaba.nacos" level="WARN"/>
+    <logger name="com.alibaba.cloud.nacos" level="WARN"/>
+    <logger name="com.xxl.job" level="WARN"/>
+    <!-- 未挂载快照目录（容器无 home），Nacos 写本地配置快照必然失败，属预期，不输出 -->
+    <logger name="com.alibaba.nacos.client.config.impl.LocalConfigInfoProcessor" level="OFF"/>
+    <logger name="com.alibaba.nacos.client.config.impl.LocalEncryptedDataKeyProcessor" level="OFF"/>
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>

@@ -110,6 +110,42 @@ def test_upload_fileobj_runs_three_steps_and_keeps_bearer_off_put() -> None:
     }
 
 
+def test_upload_fileobj_uses_server_inferred_content_type() -> None:
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/open/uploads":
+            return httpx.Response(
+                200,
+                json={
+                    "storageKey": "k1",
+                    "source": "oss",
+                    "putUrl": "https://storage.example/put",
+                    "expiresIn": 600,
+                    "fileId": 1,
+                    "contentType": "image/png",
+                },
+                request=request,
+            )
+        if request.url.path == "/put":
+            captured["content_type"] = request.headers["Content-Type"]
+            return httpx.Response(200, request=request)
+        if request.url.path == "/api/open/uploads/complete":
+            return httpx.Response(
+                200,
+                json={"fileId": 1, "name": "cover.png", "size": 3, "contentType": "image/png"},
+                request=request,
+            )
+        return httpx.Response(404, request=request)
+
+    with ContentCenterClient(
+        "https://file.example", "kapp_test", transport=httpx.MockTransport(handler)
+    ) as client:
+        client.upload_fileobj(BytesIO(b"png"), "cover.png", 3)
+
+    assert captured["content_type"] == "image/png"
+
+
 def test_upload_put_failure_does_not_call_complete() -> None:
     complete_calls = 0
 
@@ -291,3 +327,28 @@ def test_get_download_and_cdn_links_preserve_server_urls() -> None:
         "expiresIn": 300,
     }
     assert captured["cdn"] == {"fileId": 9}
+
+
+def test_delete_files_posts_batch_and_parses_counts() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["authorization"] = request.headers["Authorization"]
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"deletedFiles": 2, "failedObjects": 0},
+            request=request,
+        )
+
+    with ContentCenterClient(
+        "https://file.example", "kapp_test", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = client.delete_files([9, 3])
+
+    assert result.deleted_files == 2
+    assert result.failed_objects == 0
+    assert captured == {
+        "authorization": "Bearer kapp_test",
+        "body": {"fileIds": [9, 3]},
+    }

@@ -14,7 +14,8 @@ import com.kk.geoip.GeoIpProperties;
 @SpringBootApplication
 @EnableScheduling
 @EnableAsync
-@EnableConfigurationProperties({OssProperties.class, MinioProperties.class, GeoIpProperties.class, KMessageProperties.class, McpOAuthProperties.class})
+@EnableConfigurationProperties({OssProperties.class, MinioProperties.class, GeoIpProperties.class, KMessageProperties.class, McpOAuthProperties.class,
+        com.kk.security.gateway.GatewayAuthProperties.class})
 public class KFileApplication {
 
     public static void main(String[] args) {

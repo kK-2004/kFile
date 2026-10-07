@@ -55,12 +55,14 @@
           <el-tag :type="statusOf(row).type">{{ statusOf(row).text }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="用户页链接" min-width="240">
+      <el-table-column label="用户页链接" width="110">
         <template #default="{row}">
-          <div style="display:flex; align-items:center; gap:8px; max-width: 100%;">
-            <span class="nowrap-ellipsis" style="max-width:320px; display:inline-block;">{{ row._userLink }}</span>
-            <el-button size="small" @click="copy(row._userLink)">复制</el-button>
-          </div>
+          <el-button size="small" :title="row._userLink" @click="copy(row._userLink)">复制</el-button>
+        </template>
+      </el-table-column>
+      <el-table-column label="创建者" width="140">
+        <template #default="{row}">
+          <span>{{ row.creator || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="420">

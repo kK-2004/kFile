@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { gatewayConfig, gatewayEnabled, getAccessToken, isLocalMode, refresh, clearTokens, login } from '../auth/oidc'
 
 const apiBase = (typeof import.meta.env.VITE_API_BASE !== 'undefined')
   ? import.meta.env.VITE_API_BASE
@@ -8,6 +9,46 @@ const instance = axios.create({
   baseURL: apiBase,
   timeout: 20000,
   withCredentials: true
+})
+
+// /oauth2/*（MCP 授权确认）是 kFile 自身的授权服务器端点，始终直连 kFile
+const isDirectPath = (url) => /^\/oauth2(\/|$)/.test(String(url || ''))
+
+/** 当前模式下接口的完整地址（供 fetch / 直链使用）。 */
+export function apiUrl(path) {
+  if (!isLocalMode() && !isDirectPath(path)) return gatewayConfig.apiBase + path
+  return (apiBase || '').replace(/\/+$/, '') + path
+}
+
+// 网关模式：接口经网关代理（Bearer，不带 Cookie）；本地模式（应急登录/本地开发）：直连 kFile 带会话 Cookie
+instance.interceptors.request.use(async (config) => {
+  const direct = isDirectPath(config.url)
+  if (!isLocalMode() && !direct) {
+    config.baseURL = gatewayConfig.apiBase
+    config.withCredentials = false
+  }
+  if (!isLocalMode()) {
+    const token = await getAccessToken()
+    if (token) config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// 网关 token 失效（过期/被踢下线）：续期一次后重放；续期失败在管理页跳网关重新登录
+instance.interceptors.response.use(null, async (error) => {
+  const resp = error?.response
+  const config = error?.config
+  if (gatewayEnabled() && !isLocalMode() && resp?.status === 401
+      && resp?.data?.code === 'GATEWAY_TOKEN_INVALID' && config && !config._retried) {
+    config._retried = true
+    const token = await refresh()
+    if (token) return instance(config)
+    clearTokens()
+    if (window.location.pathname.startsWith('/admin')) {
+      return login(window.location.pathname + window.location.search)
+    }
+  }
+  return Promise.reject(error)
 })
 
 instance.interceptors.response.use(
@@ -152,7 +193,8 @@ export default {
     })
   },
 
-  adminLogin(username, password) { return instance.post('/api/admin/auth/login', { username, password }) },
+  // kFile 账号密码登录（/admin/local-login 页面，与网关登录并存）
+  adminLogin(username, password) { return instance.post('/api/admin/auth/local-login', { username, password }) },
   adminMe() { return instance.get('/api/admin/auth/me') }
   ,adminCreateShare(projectId, payload) { return instance.post(`/api/admin/projects/${projectId}/share`, payload) }
   ,getShare(code) { return instance.get(`/api/share/${code}`) }

@@ -1,6 +1,7 @@
 package com.kk.security.oauth;
 
 import jakarta.persistence.*;
+import java.net.URI;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -101,5 +102,45 @@ public class OAuthClientRegistration {
             }
         }
         return set;
+    }
+
+    /** 请求的 redirect URI 是否与任一已注册值匹配，规则见 {@link #redirectUriMatches}。 */
+    public boolean matchesRedirectUri(String requested) {
+        if (requested == null) {
+            return false;
+        }
+        return redirectUriSet().stream().anyMatch(r -> redirectUriMatches(r, requested));
+    }
+
+    /**
+     * redirect URI 匹配：默认精确匹配；loopback（http + localhost/127.0.0.1/[::1]）按 RFC 8252 §7.3
+     * 忽略端口，scheme、host、path、query 仍须一致。本地 agent 每次用随机端口回调，端口不参与匹配。
+     */
+    static boolean redirectUriMatches(String registered, String requested) {
+        if (registered.equals(requested)) {
+            return true;
+        }
+        try {
+            URI a = URI.create(registered);
+            URI b = URI.create(requested);
+            return isLoopbackHttp(a)
+                    && isLoopbackHttp(b)
+                    && a.getHost().equalsIgnoreCase(b.getHost())
+                    && java.util.Objects.equals(a.getRawPath(), b.getRawPath())
+                    && java.util.Objects.equals(a.getRawQuery(), b.getRawQuery())
+                    && a.getRawFragment() == null
+                    && b.getRawFragment() == null
+                    && a.getRawUserInfo() == null
+                    && b.getRawUserInfo() == null;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private static boolean isLoopbackHttp(URI uri) {
+        String host = uri.getHost();
+        return "http".equalsIgnoreCase(uri.getScheme())
+                && host != null
+                && ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "[::1]".equals(host));
     }
 }

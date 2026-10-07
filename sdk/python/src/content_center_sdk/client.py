@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import hashlib
-from collections.abc import Mapping
+import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, BinaryIO
 
@@ -12,6 +13,7 @@ from .errors import ContentCenterError
 from .models import (
     CdnLink,
     CdnLinkRequest,
+    DeleteFilesResult,
     DownloadLink,
     DownloadLinkRequest,
     MultipartComplete,
@@ -77,8 +79,20 @@ class ContentCenterClient:
             )
         except httpx.HTTPError as exc:
             raise ContentCenterError(-1, f"presigned PUT failed: {exc}", exc) from exc
+        if response.is_error:
+            suffix = self._storage_error_code_suffix(response.text)
+            if suffix:
+                raise ContentCenterError(
+                    response.status_code,
+                    f"presigned PUT failed (HTTP {response.status_code}{suffix})",
+                )
         self._raise_for_error(response)
         return response.headers.get("ETag", "").strip('"')
+
+    @staticmethod
+    def _storage_error_code_suffix(body: str) -> str:
+        match = re.search(r"<Code>\s*([^<\s]+)\s*</Code>", body or "")
+        return f", {match.group(1)}" if match else ""
 
     @staticmethod
     def _parse_response(response: httpx.Response) -> dict[str, Any]:
@@ -87,7 +101,7 @@ class ContentCenterClient:
         try:
             data = response.json()
         except (json.JSONDecodeError, ValueError) as exc:
-            raise ContentCenterError(-1, f"failed to decode response: {exc}", exc) from exc
+            raise ContentCenterError(response.status_code, f"failed to decode response: {exc}", exc) from exc
         if not isinstance(data, dict):
             raise ContentCenterError(-1, "response JSON must be an object")
         return data
@@ -139,6 +153,7 @@ class ContentCenterClient:
             put_url=str(data["putUrl"]),
             expires_in=int(data.get("expiresIn", 0)),
             file_id=int(data["fileId"]) if data.get("fileId") is not None else None,
+            content_type=str(data["contentType"]) if data.get("contentType") is not None else None,
         )
 
     def complete_upload(self, storage_key: str, source: str) -> UploadResult:
@@ -164,7 +179,11 @@ class ContentCenterClient:
     ) -> UploadResult:
         effective_options = options or UploadOptions()
         init = self.init_upload(filename, size, effective_options)
-        content_type = effective_options.content_type or "application/octet-stream"
+        content_type = (
+            init.content_type
+            or effective_options.content_type
+            or "application/octet-stream"
+        )
         self._put_presigned(init.put_url, fileobj, content_type)
         return self.complete_upload(init.storage_key, init.source)
 
@@ -331,4 +350,15 @@ class ContentCenterClient:
             expires_in=int(data["expiresIn"]),
             permanent=bool(data["permanent"]),
             content_type=str(data["contentType"]) if data.get("contentType") is not None else None,
+        )
+
+    def delete_files(self, file_ids: Sequence[int] | None = None) -> DeleteFilesResult:
+        """Delete completed files belonging to the current app in one batch."""
+        data = self._post_json(
+            "/api/open/files/batch-delete",
+            {"fileIds": list(file_ids) if file_ids is not None else []},
+        )
+        return DeleteFilesResult(
+            deleted_files=int(data["deletedFiles"]),
+            failed_objects=int(data["failedObjects"]),
         )

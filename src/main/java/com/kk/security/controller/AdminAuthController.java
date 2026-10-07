@@ -28,7 +28,11 @@ public class AdminAuthController {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @PostMapping("/login")
+    /**
+     * 应急本地登录（网关不可用时使用）：SUPER / ADMIN 均可，前端登录页不提供入口。
+     * 在 kFile 域名下调用后获得本地会话，前端检测到会话即以本地模式工作。
+     */
+    @PostMapping("/local-login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> payload,
                                    HttpServletRequest request,
                                    HttpServletResponse response) {
@@ -64,6 +68,7 @@ public class AdminAuthController {
         resp.put("username", auth.getName());
         resp.put("role", role);
         resp.put("quotaBytes", quota);
+        resp.put("guid", user != null && user.getGuid() != null ? String.valueOf(user.getGuid()) : null);
         return ResponseEntity.ok(resp);
     }
 

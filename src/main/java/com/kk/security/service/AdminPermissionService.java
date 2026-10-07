@@ -39,12 +39,12 @@ public class AdminPermissionService {
         String username = authentication.getName();
         AdminUser user = userRepo.findByUsername(username).orElse(null);
         if (user == null || Boolean.FALSE.equals(user.getEnabled())) return false;
-        if ("SUPER".equalsIgnoreCase(user.getRole())) return true;
+        if (isSuperOrOwner(user, p)) return true;
         ProjectPermission perm = permRepo.findByUserAndProject(user, p).orElse(null);
         return perm != null;
     }
 
-    /** 是否允许编辑项目（SUPER 全 true；ADMIN 需 ProjectPermission.canEdit） */
+    /** 是否允许编辑项目（SUPER/创建者全 true；ADMIN 需 ProjectPermission.canEdit） */
     public boolean canEditProject(Authentication authentication, Long projectId) {
         if (authentication == null || !authentication.isAuthenticated()) return false;
         for (GrantedAuthority ga : authentication.getAuthorities()) {
@@ -54,12 +54,12 @@ public class AdminPermissionService {
         if (p == null) return false;
         AdminUser user = userRepo.findByUsername(authentication.getName()).orElse(null);
         if (user == null || Boolean.FALSE.equals(user.getEnabled())) return false;
-        if ("SUPER".equalsIgnoreCase(user.getRole())) return true;
+        if (isSuperOrOwner(user, p)) return true;
         ProjectPermission perm = permRepo.findByUserAndProject(user, p).orElse(null);
         return perm != null && perm.isCanEdit();
     }
 
-    /** 是否允许删除项目（SUPER 全 true；ADMIN 需 ProjectPermission.canDelete） */
+    /** 是否允许删除项目（SUPER/创建者全 true；ADMIN 需 ProjectPermission.canDelete） */
     public boolean canDeleteProject(Authentication authentication, Long projectId) {
         if (authentication == null || !authentication.isAuthenticated()) return false;
         for (GrantedAuthority ga : authentication.getAuthorities()) {
@@ -69,8 +69,14 @@ public class AdminPermissionService {
         if (p == null) return false;
         AdminUser user = userRepo.findByUsername(authentication.getName()).orElse(null);
         if (user == null || Boolean.FALSE.equals(user.getEnabled())) return false;
-        if ("SUPER".equalsIgnoreCase(user.getRole())) return true;
+        if (isSuperOrOwner(user, p)) return true;
         ProjectPermission perm = permRepo.findByUserAndProject(user, p).orElse(null);
         return perm != null && perm.isCanDelete();
+    }
+
+    /** SUPER 或项目创建者（ownerUserId，仅 ADMIN 创建时有值）直接全权；调用方需保证 user 非空 */
+    private boolean isSuperOrOwner(AdminUser user, Project p) {
+        return "SUPER".equalsIgnoreCase(user.getRole())
+                || user.getId().equals(p.getOwnerUserId());
     }
 }

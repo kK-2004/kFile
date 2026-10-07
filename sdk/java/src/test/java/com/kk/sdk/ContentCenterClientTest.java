@@ -114,6 +114,22 @@ class ContentCenterClientTest {
     }
 
     @Test
+    void usesServerInferredContentTypeForPresignedPut() throws Exception {
+        route("/api/open/uploads", ex -> json(ex, 200,
+                "{\"storageKey\":\"k1\",\"source\":\"oss\",\"putUrl\":\"" + base
+                        + "/put\",\"expiresIn\":600,\"fileId\":1,\"contentType\":\"image/png\"}"));
+        route("/put", ex -> ex.sendResponseHeaders(200, -1));
+        route("/api/open/uploads/complete", ex -> json(ex, 200,
+                "{\"fileId\":1,\"name\":\"cover.png\",\"size\":3,\"contentType\":\"image/png\"}"));
+
+        client().upload(new java.io.ByteArrayInputStream(new byte[]{1, 2, 3}),
+                "cover.png", 3L, UploadOptions.defaults());
+
+        assertThat(capturedJson.get(0)).doesNotContain("contentType");
+        assertThat(capturedPutContentType).isEqualTo("image/png");
+    }
+
+    @Test
     void exposesSplitSimpleUploadForBrowserDirectPut() {
         route("/api/open/uploads", ex -> json(ex, 200,
                 "{\"storageKey\":\"k1\",\"source\":\"minio\",\"putUrl\":\"https://minio/put\","
@@ -263,5 +279,41 @@ class ContentCenterClientTest {
         assertThat(link.permanent()).isTrue();
         assertThat(link.contentType()).isEqualTo("image/png");
         assertThat(capturedJson.get(0)).contains("\"fileId\":9").doesNotContain("expiresIn");
+    }
+
+    @Test
+    void deleteFilesPostsBatchWithBearerAndParsesCounts() {
+        route("/api/open/files/batch-delete", ex -> json(ex, 200, "{\"deletedFiles\":2,\"failedObjects\":0}"));
+
+        var result = client().deleteFiles(List.of(9L, 3L));
+
+        assertThat(result.deletedFiles()).isEqualTo(2);
+        assertThat(result.failedObjects()).isZero();
+        assertThat(capturedAuth).isEqualTo("Bearer kapp_test");
+        assertThat(capturedJson.get(0)).contains("\"fileIds\":[9,3]");
+    }
+
+    @Test
+    void deleteSingleFileUsesSameBatchEndpoint() {
+        route("/api/open/files/batch-delete",
+                ex -> json(ex, 200, "{\"deletedFiles\":1,\"failedObjects\":1}"));
+
+        var result = client().deleteFiles(List.of(9L));
+
+        assertThat(result.deletedFiles()).isEqualTo(1);
+        assertThat(result.failedObjects()).isEqualTo(1);
+        assertThat(capturedJson.get(0)).contains("\"fileIds\":[9]");
+    }
+
+    @Test
+    void deleteFilesSurfacesNon2xxAsException() {
+        route("/api/open/files/batch-delete",
+                ex -> json(ex, 409, "{\"message\":\"文件尚未完成上传，不能删除: 5\"}"));
+
+        ContentCenterException e = (ContentCenterException) org.assertj.core.api.Assertions.catchThrowable(
+                () -> client().deleteFiles(List.of(5L)));
+
+        assertThat(e.getStatus()).isEqualTo(409);
+        assertThat(e.getMessage()).contains("文件尚未完成上传");
     }
 }

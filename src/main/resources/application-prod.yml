@@ -1,45 +1,9 @@
-env:
-  name: prod
-  # 支持环境变量覆盖：test 环境由 CI 注入 ENV_CORS=https://test-file.ksite.xin
-  cors: ${ENV_CORS:https://file.ksite.xin}
-
 spring:
-  datasource:
-    url: jdbc:mysql://mysql:3306/k_file?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
-        jdbc:
-          time_zone: UTC
-    open-in-view: false
-  servlet:
-    multipart:
-      enabled: true
-      max-file-size: 2048MB
-      max-request-size: 2048MB
-
-server:
-  tomcat:
-    max-swallow-size: -1
-    max-http-form-post-size: -1
-  port: 8081
-
-app:
-  # MCP OAuth 公共基址：生产对外可达的公共域（反向代理后）。必须 HTTPS。
-  public-base-url: ${ENV_PUBLIC_BASE_URL:${env.cors}}
-  project:
-    monthly-limit:
-      user: 3
-
-geoip:
-  enabled: ${GEOIP_ENABLED:false}
-  mmdbPath: ${GEOIP_MMDB_PATH:}
-
-minio:
-  enabled: ${MINIO_ENABLED:true}
+  config:
+    import:
+      - nacos:kfile.yaml
+  cloud:
+    nacos:
+      config:
+        # Nacos 命名空间「prod」的 ID
+        namespace: ${NACOS_NAMESPACE:30eb3c10-4c1e-4762-ab58-be0a24bea5c2}
