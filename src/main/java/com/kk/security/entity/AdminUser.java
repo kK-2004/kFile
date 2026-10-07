@@ -1,5 +1,6 @@
 package com.kk.security.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.persistence.*;
@@ -21,6 +22,7 @@ public class AdminUser {
     @Column(nullable = false, length = 64)
     private String username;
 
+    @JsonIgnore // 哈希永不出参；实体本身不作为入参反序列化
     @Column(nullable = false, length = 100)
     private String password; // BCrypt
 
