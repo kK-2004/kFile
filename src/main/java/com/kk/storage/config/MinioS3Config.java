@@ -46,10 +46,11 @@ public class MinioS3Config {
         return client;
     }
 
+    /** 分片 PUT 直链签发给浏览器，使用对外端点（未配置 minio.public-endpoint 时同 endpoint）。 */
     @Bean
     public S3Presigner minioS3Presigner() {
         return S3Presigner.builder()
-                .endpointOverride(URI.create(properties.getEndpoint()))
+                .endpointOverride(URI.create(properties.effectivePublicEndpoint()))
                 .region(MINIO_REGION)
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(properties.getAccessKey(), properties.getSecretKey())))

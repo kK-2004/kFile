@@ -20,6 +20,9 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnProperty(value = "minio.enabled", havingValue = "true")
 public class MinioConfig {
 
+    /** MinIO 未显式配置 region 时的默认值；签名中的 region 必须与服务端一致 */
+    static final String PRESIGN_REGION = "us-east-1";
+
     private final MinioProperties properties;
 
     @Bean
@@ -31,6 +34,19 @@ public class MinioConfig {
         ensureBucket(client, properties.getBucket());
         log.info("MinioClient initialized. endpoint={}, bucket={}", properties.getEndpoint(), properties.getBucket());
         return client;
+    }
+
+    /** 预签名专用客户端：对外端点 + 固定 region（MinIO 默认 us-east-1），避免签名前探测 region。 */
+    @Bean
+    public MinioPresignClient minioPresignClient() {
+        String publicEndpoint = properties.effectivePublicEndpoint();
+        MinioClient client = MinioClient.builder()
+                .endpoint(publicEndpoint)
+                .region(PRESIGN_REGION)
+                .credentials(properties.getAccessKey(), properties.getSecretKey())
+                .build();
+        log.info("MinIO presign client initialized. publicEndpoint={}", publicEndpoint);
+        return new MinioPresignClient(client);
     }
 
     private void ensureBucket(MinioClient client, String bucket) {

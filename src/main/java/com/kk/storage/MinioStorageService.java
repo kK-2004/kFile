@@ -1,5 +1,7 @@
 package com.kk.storage;
 
+import com.kk.storage.config.MinioPresignClient;
+
 import com.kk.config.MinioProperties;
 import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
@@ -35,6 +37,8 @@ public class MinioStorageService implements StorageBrowserService {
 
     private final MinioClient minioClient;
     private final MinioProperties properties;
+    /** 预签名直链（直传、下载、预览）用对外端点签发；服务端 stat/读/删 仍走 minioClient 的内网端点 */
+    private final MinioPresignClient presignClient;
 
     @Override
     public String sourceId() { return SOURCE_ID; }
@@ -74,7 +78,7 @@ public class MinioStorageService implements StorageBrowserService {
                 String dispo = "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded;
                 b.extraQueryParams(Map.of("response-content-disposition", dispo));
             }
-            return minioClient.getPresignedObjectUrl(b.build());
+            return presignClient.client().getPresignedObjectUrl(b.build());
         } catch (Exception e) {
             throw new IllegalStateException("生成 MinIO 下载直链失败", e);
         }
@@ -94,7 +98,7 @@ public class MinioStorageService implements StorageBrowserService {
                     .extraQueryParams(Map.of(
                             "response-content-disposition", StorageBrowserService.inlineDisposition(displayName),
                             "response-content-type", contentType));
-            return minioClient.getPresignedObjectUrl(b.build());
+            return presignClient.client().getPresignedObjectUrl(b.build());
         } catch (Exception e) {
             throw new IllegalStateException("生成 MinIO 预览直链失败", e);
         }
@@ -112,7 +116,7 @@ public class MinioStorageService implements StorageBrowserService {
                     .method(Method.PUT)
                     .expiry((int) Math.max(60, expireSeconds), TimeUnit.SECONDS);
             // MinIO 预签名 URL 不需要把 Content-Type 写进签名参数；浏览器 PUT 时带对应 header 即可
-            return minioClient.getPresignedObjectUrl(b.build());
+            return presignClient.client().getPresignedObjectUrl(b.build());
         } catch (Exception e) {
             throw new IllegalStateException("生成 MinIO 直传直链失败", e);
         }

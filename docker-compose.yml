@@ -15,6 +15,8 @@ services:
       # MinIO 数据源（可选，默认禁用；启用时注入实际值）
       - MINIO_ENABLED=${MINIO_ENABLED:-false}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-}
+      # 可选：对外地址，只用于签发给浏览器的预签名直链；服务端走上面的 MINIO_ENDPOINT（建议内网地址）
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-}
       - MINIO_BUCKET=${MINIO_BUCKET:-k-file}

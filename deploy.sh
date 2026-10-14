@@ -29,6 +29,8 @@ GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN:-}
 # MinIO 配置（可选；未提供时默认禁用）
 MINIO_ENABLED=${MINIO_ENABLED:-false}
 MINIO_ENDPOINT=${MINIO_ENDPOINT:-}
+# 可选：对外地址，只用于签发预签名直链；为空时不注入，以免覆盖 Nacos 中的 minio.public-endpoint
+MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-}
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-}
 MINIO_BUCKET=${MINIO_BUCKET:-k-file}
@@ -227,6 +229,7 @@ run_args=(
   -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY}"
   -e MINIO_BUCKET="${MINIO_BUCKET}"
 )
+[[ -n "${MINIO_PUBLIC_ENDPOINT}" ]] && run_args+=(-e MINIO_PUBLIC_ENDPOINT="${MINIO_PUBLIC_ENDPOINT}")
 [[ -n "${DOCKER_NETWORK}" ]] && run_args+=(--network "${DOCKER_NETWORK}")
 
 docker run "${run_args[@]}" "${IMAGE_NAME}:${BUILD_NUMBER}"
